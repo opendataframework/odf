@@ -1,0 +1,76 @@
+site_name: ODF
+site_description: CLI, UI, MCP server, and chat for Open Data Framework (ODF) projects built on opendataframework.
+repo_url: https://github.com/opendataframework/odf
+repo_name: opendataframework/odf
+
+docs_dir: docs
+
+nav:
+  - Home: index.md
+  - CLI:
+      - cli.md
+      - Templates:
+          - default: init-templates/default.md
+          - data-analytics: init-templates/data-analytics.md
+          - data-science: init-templates/data-science.md
+          - data-engineering: init-templates/data-engineering.md
+          - research: init-templates/research.md
+  - Server: server.md
+  - Examples: examples.md
+  - Chat: chat.md
+  - opendataframework (core): https://opendataframework.github.io/opendataframework/
+
+theme:
+  name: material
+  logo: images/logo.svg
+  favicon: images/logo.svg
+  font: false
+  palette:
+    - media: "(prefers-color-scheme: light)"
+      scheme: default
+      primary: custom
+      accent: custom
+      toggle:
+        icon: material/brightness-7
+        name: Switch to dark mode
+    - media: "(prefers-color-scheme: dark)"
+      scheme: slate
+      primary: custom
+      accent: custom
+      toggle:
+        icon: material/brightness-4
+        name: Switch to light mode
+  features:
+    - navigation.sections
+    - navigation.indexes
+    - navigation.top
+    - navigation.footer
+    - content.code.copy
+    - content.code.annotate
+    - toc.follow
+
+markdown_extensions:
+  - admonition
+  - attr_list
+  - md_in_html
+  - tables
+  - pymdownx.details
+  - pymdownx.superfences
+  - pymdownx.tabbed:
+      alternate_style: true
+  - pymdownx.highlight:
+      anchor_linenums: true
+  - pymdownx.inlinehilite
+  - pymdownx.snippets
+  - toc:
+      permalink: true
+
+plugins:
+  - search
+  - termynal
+
+extra_css:
+  - stylesheets/extra.css
+
+extra_javascript:
+  - javascripts/topology-theme-sync.js

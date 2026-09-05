@@ -1,0 +1,8 @@
+[project]
+name = "data-analytics-example"
+
+[sqlite]
+path = "app.db"
+
+[summarize-readings]
+report-path = "reports/summary.json"

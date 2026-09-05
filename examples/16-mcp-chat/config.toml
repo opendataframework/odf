@@ -1,0 +1,9 @@
+[project]
+name = "mcp-chat-example"
+
+[watchdog]
+interval = 1.0
+
+[project.chat]
+model = "gpt-oss:20b"
+ollama-host = "http://localhost:11434"

@@ -1,0 +1,12 @@
+[project]
+name = "custom-icon-example"
+
+[ui]
+icon-scripts = ["icons/lighthouse.js"]
+favicon = "favicon.svg"
+logo = "logo.svg"
+brand = "Beacon Watch"
+
+[ui.colors]
+lighthouse-amber = "#f2c14e"
+lighthouse-red = "#c94f3d"

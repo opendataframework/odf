@@ -1,0 +1,5 @@
+[project]
+name = "streaming-video-view-example"
+
+[webcam]
+device = 0

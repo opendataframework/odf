@@ -1,0 +1,5 @@
+[project]
+name = "data-engineering-example"
+
+[sqlite]
+path = "app.db"
