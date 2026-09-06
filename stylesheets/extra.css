@@ -1,0 +1,247 @@
+/* Cold light/dark theme matching the topology UI's own instrument-panel
+   palette (see src/odf/ui/static/index.html's :root block) — a minimal,
+   neutral gray-blue look with system/mono fonts instead of a web font,
+   thin hairline borders instead of hard offset pixel shadows. */
+
+/* --- Fonts (no web fonts — matches the topology UI's own stacks) ------- */
+
+:root {
+  --md-text-font: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  --md-code-font: 'SF Mono', 'IBM Plex Mono', 'JetBrains Mono', Consolas, 'Courier New', monospace;
+}
+
+/* Repo version pill in the header reads as a data/label, not prose — keep
+   it in the mono stack, matching the topology UI's convention for chrome
+   labels (--md-source doesn't inherit --md-code-font-family on its own,
+   since that's only composed onto actual code/pre/kbd elements). */
+.md-source {
+  font-family: var(--md-code-font-family);
+}
+
+/* --- Palette: light -------------------------------------------------- */
+
+[data-md-color-scheme="default"] {
+  --md-default-bg-color: #f2f3f4;
+  --md-default-bg-color--light: #ffffff;
+  --md-default-bg-color--lighter: #eef0f2;
+  --md-default-bg-color--lightest: #d7dade;
+
+  --md-default-fg-color: #14161a;
+  --md-default-fg-color--light: #5a6069;
+  --md-default-fg-color--lighter: #8b9098;
+  --md-default-fg-color--lightest: rgba(20, 22, 26, 0.12);
+
+  --md-code-fg-color: #14161a;
+  --md-code-bg-color: #ffffff;
+  --md-code-bg-color--light: #eef0f2;
+  --md-code-bg-color--lighter: #d7dade;
+
+  --panel-border: #d7dade;
+  --panel-border-strong: #b9bec4;
+
+  --md-footer-bg-color: #ffffff;
+  --md-footer-bg-color--dark: #e8eaec;
+  --md-footer-fg-color: #14161a;
+  --md-footer-fg-color--light: #5a6069;
+  --md-footer-fg-color--lighter: #8b9098;
+
+  --md-primary-fg-color: #ffffff;
+  --md-primary-fg-color--light: #eef0f2;
+  --md-primary-fg-color--dark: #e8eaec;
+  --md-primary-bg-color: #14161a;
+  --md-primary-bg-color--light: #5a6069;
+
+  --md-accent-fg-color: #2d7658;
+  --md-accent-fg-color--transparent: color-mix(in srgb, #2d7658 10%, transparent);
+  --md-accent-bg-color: #14161a;
+  --md-typeset-a-color: #2d7658;
+
+  --panel-inset-highlight: inset 0 1px 0 rgba(15, 16, 20, 0.02);
+  --panel-elevated-shadow: 0 8px 20px rgba(0, 0, 0, 0.12);
+}
+
+/* --- Palette: dark ----------------------------------------------------- */
+
+[data-md-color-scheme="slate"] {
+  --md-default-bg-color: #050506;
+  --md-default-bg-color--light: #08090a;
+  --md-default-bg-color--lighter: #101215;
+  --md-default-bg-color--lightest: #1c1f23;
+
+  --md-default-fg-color: #d8dade;
+  --md-default-fg-color--light: #7d838c;
+  --md-default-fg-color--lighter: #4a4f57;
+  --md-default-fg-color--lightest: rgba(216, 218, 222, 0.12);
+
+  --md-code-fg-color: #d8dade;
+  --md-code-bg-color: #08090a;
+  --md-code-bg-color--light: #101215;
+  --md-code-bg-color--lighter: #1c1f23;
+
+  --panel-border: #1c1f23;
+  --panel-border-strong: #2c3138;
+
+  --md-footer-bg-color: #08090a;
+  --md-footer-bg-color--dark: #030304;
+  --md-footer-fg-color: #d8dade;
+  --md-footer-fg-color--light: #7d838c;
+  --md-footer-fg-color--lighter: #4a4f57;
+
+  --md-primary-fg-color: #08090a;
+  --md-primary-fg-color--light: #101215;
+  --md-primary-fg-color--dark: #030304;
+  --md-primary-bg-color: #d8dade;
+  --md-primary-bg-color--light: #7d838c;
+
+  --md-accent-fg-color: #9e64c4;
+  --md-accent-fg-color--transparent: color-mix(in srgb, #9e64c4 10%, transparent);
+  --md-accent-bg-color: #d8dade;
+  --md-typeset-a-color: #9e64c4;
+
+  --panel-inset-highlight: inset 0 1px 0 rgba(255, 255, 255, 0.02);
+  --panel-elevated-shadow: 0 8px 20px rgba(0, 0, 0, 0.3);
+}
+
+/* --- Inline code inside links ------------------------------------------ */
+
+.md-typeset a code {
+  padding: 0.1em 0.4em;
+  border-radius: 2px;
+  background-color: var(--md-accent-fg-color--transparent);
+  color: var(--md-accent-fg-color);
+}
+
+/* --- Logo ---------------------------------------------------------------
+   The logo itself stays pixel-art (out of scope) but its frame border
+   needs to track the scheme's own border color, not a fixed dark hex,
+   or it reads as a heavy black square against a white light-mode header. */
+.md-header__button.md-logo img,
+.md-header__button.md-logo svg {
+  border: 1px solid var(--panel-border-strong);
+  border-radius: 0;
+}
+
+/* --- Flat surfaces -------------------------------------------------------
+   Thin hairline border + small radius + a barely-visible inset highlight,
+   matching the topology UI's own ".panel" surface — no offset drop-shadow. */
+
+.md-typeset code,
+.md-typeset kbd,
+.md-typeset table:not([class]),
+.md-content__inner > pre code,
+.md-typeset .admonition,
+.md-typeset details,
+.md-typeset .tabbed-set,
+.md-typeset .tabbed-labels > label,
+.md-typeset .grid.cards > ul > li,
+.md-typeset .grid.cards > ol > li,
+.md-typeset .grid > .card,
+.md-typeset .md-tag,
+.md-typeset .highlight,
+[data-termynal] {
+  border: 1px solid var(--panel-border);
+  border-radius: 2px;
+  box-shadow: var(--panel-inset-highlight);
+}
+
+/* --- Elevated surfaces -----------------------------------------------
+   Popovers/overlays get a stronger border plus a real (soft) shadow —
+   the same flat-vs-elevated split the topology UI uses for its own
+   popovers, instead of treating every box identically. */
+
+.md-dialog,
+.md-select__inner,
+.md-select__list,
+.md-tooltip,
+.md-tooltip2__inner,
+.md-version__list,
+.md-search__form {
+  border: 1px solid var(--panel-border-strong);
+  border-radius: 2px;
+  box-shadow: var(--panel-inset-highlight), var(--panel-elevated-shadow);
+}
+
+/* --- Buttons -------------------------------------------------------------
+   Transparent fill with a hairline border, matching the topology UI's own
+   button recipe (theme toggle, zoom controls, etc.) instead of a filled
+   pixel-shadow block. */
+
+.md-typeset .md-button {
+  background: transparent;
+  border: 1px solid var(--panel-border);
+  border-radius: 2px;
+  color: var(--md-default-fg-color--light);
+  box-shadow: none;
+  transition: background 0.12s, color 0.12s, border-color 0.12s;
+}
+
+.md-typeset .md-button:hover,
+.md-typeset .md-button:active {
+  background: var(--md-default-bg-color--lighter);
+  color: var(--md-accent-fg-color);
+  border-color: var(--panel-border-strong);
+  transform: none;
+}
+
+/* --- Topology demo embed -------------------------------------------------
+   The live UI embed on the home page (docs/assets/topology-demo/) — same
+   elevated-surface recipe as .md-dialog/.md-tooltip above. The embedded
+   copy hides its own header/sidebar (see that file's docs-embed-only
+   trim), leaving just the topology grid, so this can be shorter than a
+   full dev-UI screenshot would need. */
+
+.topology-demo-frame {
+  display: block;
+  width: 100%;
+  height: 440px;
+  border: 1px solid var(--panel-border-strong);
+  border-radius: 2px;
+  box-shadow: var(--panel-inset-highlight), var(--panel-elevated-shadow);
+}
+
+/* --- Section heading accent bar ----------------------------------------
+   A hairline accent bar (not a chunky pixel block) using the muted accent
+   tier — --md-primary-fg-color is now a chrome background color, not a
+   usable bar color, so this must source from --md-accent-fg-color instead. */
+
+.md-typeset h2,
+.md-typeset h3 {
+  border-left: 2px solid var(--md-accent-fg-color);
+  padding-left: 0.6rem;
+}
+
+/* Active nav item gets the same hairline accent-bar treatment as headings
+   above — the "you are here" marker in the sidebar/TOC. */
+
+.md-nav__item .md-nav__link--active {
+  border-left: 2px solid var(--md-accent-fg-color);
+  padding-left: 0.4rem;
+  background-color: var(--md-accent-fg-color--transparent);
+}
+
+/* --- Termynal -------------------------------------------------------------
+   termynal.css ships its own hardcoded, scheme-independent :root vars and
+   defaults its "macos" traffic-light dots on with no "none" option — both
+   need overriding here so termynal blocks read as the same surface as
+   regular fenced code blocks instead of a third, permanently-dark palette
+   with decorative dots the rest of the page no longer has. */
+
+[data-termynal]:before {
+  content: none;
+}
+
+[data-termynal] {
+  padding-top: 2.25rem !important;
+}
+
+[data-md-color-scheme="default"] [data-termynal] {
+  --color-bg: #ffffff;
+  --color-text: #14161a;
+  --color-text-subtle: #5a6069;
+}
+
+[data-md-color-scheme="slate"] [data-termynal] {
+  --color-bg: #08090a;
+  --color-text: #d8dade;
+  --color-text-subtle: #7d838c;
+}
