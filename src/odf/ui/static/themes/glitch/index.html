@@ -46,7 +46,14 @@
   --vignette-rgb: 5,5,6;
   --vignette-alpha: 0.6;
 
-  --panel-shadow: inset 0 1px 0 rgba(255,255,255,.03);
+  /* Chromatic-split "signal glitch" channel colors — glitch-theme-local,
+     not part of the cross-theme variable contract. Reused throughout for
+     a thin RGB-misregistration fringe on shadows/rings/text instead of
+     neo's thick-border brutalism. */
+  --split-a: #00b7c2;
+  --split-b: #e91e8c;
+
+  --panel-shadow: 1px 0 0 color-mix(in srgb, var(--split-a) 28%, transparent), -1px 0 0 color-mix(in srgb, var(--split-b) 22%, transparent), inset 0 1px 0 rgba(255,255,255,.03);
   --ok: #00ad03;
 }
 
@@ -87,14 +94,17 @@
   --vignette-rgb: 20,20,24;
   --vignette-alpha: 0.05;
 
-  --panel-shadow: inset 0 1px 0 rgba(0,0,0,.03);
+  --split-a: #007a82;
+  --split-b: #b0106a;
+
+  --panel-shadow: 1px 0 0 color-mix(in srgb, var(--split-a) 22%, transparent), -1px 0 0 color-mix(in srgb, var(--split-b) 18%, transparent), inset 0 1px 0 rgba(0,0,0,.03);
   --ok: #027a03;
 }
 
 *{scrollbar-width:thin;scrollbar-color:var(--border-strong) transparent}
 *::-webkit-scrollbar{width:8px;height:8px}
 *::-webkit-scrollbar-track{background:transparent}
-*::-webkit-scrollbar-thumb{background:var(--border-strong)}
+*::-webkit-scrollbar-thumb{background:linear-gradient(180deg, var(--split-a), var(--split-b))}
 
 html,body{background:var(--bg)}
 
@@ -110,6 +120,13 @@ body{
 
 #shell{flex:1;min-height:0;display:flex;flex-direction:column;gap:8px;padding:8px}
 
+/* Faint static scanline texture over the whole app — one insertion point
+   instead of repeating it per panel; below every popup/drawer's z-index
+   (6+) so it never obscures them, and pointer-events:none so it can't
+   intercept clicks. Static (no animation), so it's unaffected by
+   prefers-reduced-motion. */
+#shell::after{content:"";position:fixed;inset:0;z-index:1;pointer-events:none;background-image:repeating-linear-gradient(0deg, rgba(0,0,0,.045) 0, rgba(0,0,0,.045) 1px, transparent 1px, transparent 3px)}
+
 .panel{background:var(--panel);border:1px solid var(--border);border-radius:2px;box-shadow:var(--panel-shadow)}
 
 #hdr{padding:0 16px;height:46px;display:flex;align-items:center;gap:0;flex-shrink:0}
@@ -119,7 +136,7 @@ body{
 .brand-mark.has-logo{border:none;transform:none}
 .brand-mark.has-logo::after{content:none}
 .brand-mark img{width:100%;height:100%;object-fit:contain;display:block}
-.hdr-title{font-family:Inter,'Segoe UI',Roboto,-apple-system,BlinkMacSystemFont,Helvetica,Arial,sans-serif;color:var(--text);font-size:13px;font-weight:600;letter-spacing:.04em}
+.hdr-title{font-family:Inter,'Segoe UI',Roboto,-apple-system,BlinkMacSystemFont,Helvetica,Arial,sans-serif;color:var(--text);font-size:13px;font-weight:600;letter-spacing:.04em;text-shadow:1px 0 color-mix(in srgb, var(--split-a) 50%, transparent),-1px 0 color-mix(in srgb, var(--split-b) 50%, transparent)}
 .hdr-title small{display:block;color:var(--text-dim);font-size:9.5px;font-weight:500;letter-spacing:.09em;text-transform:uppercase;margin-top:2px}
 
 .hdr-stats{display:flex;align-items:center;gap:0;height:100%}
@@ -129,12 +146,12 @@ body{
 .hdr-stat .v{font-family:Inter,'Segoe UI',Roboto,-apple-system,BlinkMacSystemFont,Helvetica,Arial,sans-serif;font-size:13px;font-weight:600;font-variant-numeric:tabular-nums}
 
 .hdr-status{display:flex;align-items:center;gap:7px;margin-left:auto;padding:0 16px;font-family:Inter,'Segoe UI',Roboto,-apple-system,BlinkMacSystemFont,Helvetica,Arial,sans-serif;font-size:10px;letter-spacing:.08em;text-transform:uppercase;color:var(--text-muted)}
-.hdr-status .dot{width:6px;height:6px;background:var(--ok);box-shadow:0 0 0 2px color-mix(in srgb, var(--ok) 20%, transparent);animation:pulse-dot 2.4s ease-in-out infinite}
+.hdr-status .dot{width:6px;height:6px;background:var(--ok);box-shadow:0 0 0 2px color-mix(in srgb, var(--ok) 20%, transparent),1px 0 0 color-mix(in srgb, var(--split-a) 55%, transparent),-1px 0 0 color-mix(in srgb, var(--split-b) 55%, transparent);animation:pulse-dot 2.4s ease-in-out infinite}
 .hdr-clock{font-family:Inter,'Segoe UI',Roboto,-apple-system,BlinkMacSystemFont,Helvetica,Arial,sans-serif;font-size:11px;color:var(--text-dim);font-variant-numeric:tabular-nums;padding:0 16px;border-left:1px solid var(--border)}
 @keyframes pulse-dot{0%,100%{opacity:1}50%{opacity:.35}}
 
 .theme-toggle{background:transparent;border:1px solid var(--border);color:var(--text-muted);font-family:Inter,'Segoe UI',Roboto,-apple-system,BlinkMacSystemFont,Helvetica,Arial,sans-serif;font-size:10px;font-weight:600;letter-spacing:.06em;text-transform:uppercase;padding:6px 11px;border-radius:2px;cursor:pointer;display:flex;align-items:center;gap:6px;transition:background .12s,color .12s,border-color .12s}
-.theme-toggle:hover{background:var(--hover-bg);color:var(--title-accent);border-color:var(--border-strong)}
+.theme-toggle:hover{background:var(--hover-bg);color:var(--title-accent);border-color:var(--border-strong);box-shadow:0 0 0 1px var(--split-a),0 0 0 2px color-mix(in srgb, var(--split-b) 60%, transparent)}
 .theme-toggle .glyph{font-size:12px}
 
 #body{display:flex;flex:1;min-height:0;gap:8px}
@@ -179,7 +196,7 @@ canvas{display:block;cursor:grab}
 
 #zoom-controls{position:absolute;right:14px;bottom:14px;display:flex;flex-direction:column;gap:3px;z-index:2}
 #zoom-controls button{width:28px;height:28px;background:rgba(var(--panel-rgb),0.9);border:1px solid var(--border);color:var(--text-muted);font-family:Inter,'Segoe UI',Roboto,-apple-system,BlinkMacSystemFont,Helvetica,Arial,sans-serif;font-size:14px;line-height:1;border-radius:2px;cursor:pointer;display:flex;align-items:center;justify-content:center;transition:background .12s,color .12s,border-color .12s}
-#zoom-controls button:hover{background:var(--hover-bg);color:var(--title-accent);border-color:var(--border-strong)}
+#zoom-controls button:hover{background:var(--hover-bg);color:var(--title-accent);border-color:var(--border-strong);box-shadow:0 0 0 1px var(--split-a),0 0 0 2px color-mix(in srgb, var(--split-b) 60%, transparent)}
 #zoom-controls button:active{background:var(--border)}
 #zoom-controls .zc-sep{height:1px;background:var(--border);margin:2px 3px}
 
@@ -188,7 +205,7 @@ canvas{display:block;cursor:grab}
    zoom-controls, same footprint/style. */
 #grid-controls{position:absolute;right:50px;bottom:14px;display:grid;grid-template-columns:repeat(2,28px);grid-template-rows:repeat(2,28px);gap:3px;z-index:2}
 #grid-controls button{background:rgba(var(--panel-rgb),0.9);border:1px solid var(--border);color:var(--text-muted);font-family:Inter,'Segoe UI',Roboto,-apple-system,BlinkMacSystemFont,Helvetica,Arial,sans-serif;font-size:13px;line-height:1;border-radius:2px;cursor:pointer;display:flex;align-items:center;justify-content:center;transition:background .12s,color .12s,border-color .12s}
-#grid-controls button:hover{background:var(--hover-bg);color:var(--title-accent);border-color:var(--border-strong)}
+#grid-controls button:hover{background:var(--hover-bg);color:var(--title-accent);border-color:var(--border-strong);box-shadow:0 0 0 1px var(--split-a),0 0 0 2px color-mix(in srgb, var(--split-b) 60%, transparent)}
 #grid-controls button:active{background:var(--border)}
 
 /* Object-type legend — floats over the topology grid like a chart legend,
@@ -200,7 +217,7 @@ canvas{display:block;cursor:grab}
 .panel-heading{color:var(--text-dim);font-family:Inter,'Segoe UI',Roboto,-apple-system,BlinkMacSystemFont,Helvetica,Arial,sans-serif;font-size:9.5px;font-weight:600;letter-spacing:.1em;text-transform:uppercase;margin-bottom:9px}
 
 .detail-empty{font-size:12px;color:var(--text-dim);font-family:Inter,'Segoe UI',Roboto,-apple-system,BlinkMacSystemFont,Helvetica,Arial,sans-serif}
-.detail-title{font-family:Inter,'Segoe UI',Roboto,-apple-system,BlinkMacSystemFont,Helvetica,Arial,sans-serif;font-size:14px;font-weight:700;letter-spacing:.01em;margin-bottom:6px}
+.detail-title{font-family:Inter,'Segoe UI',Roboto,-apple-system,BlinkMacSystemFont,Helvetica,Arial,sans-serif;font-size:14px;font-weight:700;letter-spacing:.01em;margin-bottom:6px;text-shadow:1px 0 color-mix(in srgb, var(--split-a) 50%, transparent),-1px 0 color-mix(in srgb, var(--split-b) 50%, transparent)}
 .detail-meta{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:8px}
 .detail-meta .deco{font-family:Inter,'Segoe UI',Roboto,-apple-system,BlinkMacSystemFont,Helvetica,Arial,sans-serif;font-size:10.5px;color:var(--text-muted)}
 .detail-meta .file{font-family:'SF Mono','Fira Code',Consolas,'Courier New',monospace;font-size:10.5px;color:var(--text-dim);background:var(--hover-bg);border:1px solid var(--border);padding:2px 6px;border-radius:1px}
@@ -239,20 +256,20 @@ canvas{display:block;cursor:grab}
 .layer-color-popover{position:fixed;z-index:8}
 .icon-picker-grid,.color-picker-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:4px}
 .icon-swatch{width:44px;height:44px;border:1px solid var(--border);border-radius:2px;background:transparent;cursor:pointer;display:flex;align-items:center;justify-content:center;padding:0}
-.icon-swatch:hover{background:var(--hover-bg);border-color:var(--border-strong)}
-.icon-swatch.selected{border-color:var(--title-accent)}
+.icon-swatch:hover{background:var(--hover-bg);border-color:var(--border-strong);box-shadow:0 0 0 1px var(--split-a),0 0 0 2px color-mix(in srgb, var(--split-b) 60%, transparent)}
+.icon-swatch.selected{border-color:var(--title-accent);box-shadow:0 0 0 1px var(--split-a),0 0 0 2px color-mix(in srgb, var(--split-b) 60%, transparent)}
 .icon-swatch.reset{grid-column:1/-1;display:flex;gap:6px;font-size:10px;color:var(--text-muted);font-family:Inter,'Segoe UI',Roboto,-apple-system,BlinkMacSystemFont,Helvetica,Arial,sans-serif;height:22px}
 .color-swatch{width:32px;height:32px;border:1px solid var(--border);border-radius:2px;cursor:pointer;padding:0}
-.color-swatch:hover{border-color:var(--border-strong)}
-.color-swatch.selected{border-color:var(--title-accent);box-shadow:0 0 0 1px var(--title-accent)}
+.color-swatch:hover{border-color:var(--border-strong);box-shadow:0 0 0 1px var(--split-a),0 0 0 2px color-mix(in srgb, var(--split-b) 60%, transparent)}
+.color-swatch.selected{border-color:var(--title-accent);box-shadow:0 0 0 1px var(--split-a),0 0 0 2px color-mix(in srgb, var(--split-b) 60%, transparent)}
 .color-swatch.reset{grid-column:1/-1;display:flex;align-items:center;gap:6px;font-size:10px;color:var(--text-muted);font-family:Inter,'Segoe UI',Roboto,-apple-system,BlinkMacSystemFont,Helvetica,Arial,sans-serif;height:22px;width:auto;background:transparent}
 
 /* Activity toggle + drawer — global (not tied to topology mode), floats
    above the map-panel-view so it's reachable from Data/Stream/Logs too. */
 .activity-toggle{position:absolute;top:12px;right:14px;z-index:8;background:rgba(var(--panel-rgb),0.9);border:1px solid var(--border);color:var(--text-muted);font-family:Inter,'Segoe UI',Roboto,-apple-system,BlinkMacSystemFont,Helvetica,Arial,sans-serif;font-size:10px;font-weight:600;letter-spacing:.05em;text-transform:uppercase;padding:6px 10px;border-radius:2px;cursor:pointer;transition:background .12s,color .12s,border-color .12s}
-.activity-toggle:hover{background:var(--hover-bg);color:var(--title-accent);border-color:var(--border-strong)}
+.activity-toggle:hover{background:var(--hover-bg);color:var(--title-accent);border-color:var(--border-strong);box-shadow:0 0 0 1px var(--split-a),0 0 0 2px color-mix(in srgb, var(--split-b) 60%, transparent)}
 
-#activity-drawer{position:absolute;top:0;right:0;bottom:0;width:300px;max-width:80%;z-index:9;background:var(--panel);border-left:1px solid var(--border-strong);box-shadow:-8px 0 20px rgba(0,0,0,.25);transform:translateX(100%);transition:transform .18s ease;display:flex;flex-direction:column}
+#activity-drawer{position:absolute;top:0;right:0;bottom:0;width:300px;max-width:80%;z-index:9;background:var(--panel);border-left:1px solid var(--border-strong);box-shadow:-1px 0 0 color-mix(in srgb, var(--split-a) 35%, transparent),-2px 0 0 color-mix(in srgb, var(--split-b) 25%, transparent),-8px 0 20px rgba(0,0,0,.25);transform:translateX(100%);transition:transform .18s ease;display:flex;flex-direction:column}
 #activity-drawer.open{transform:translateX(0)}
 .activity-drawer-hdr{display:flex;align-items:center;justify-content:space-between;padding:12px 16px;border-bottom:1px solid var(--border);flex-shrink:0}
 .activity-drawer-hdr .panel-heading{margin-bottom:0}
@@ -265,7 +282,7 @@ canvas{display:block;cursor:grab}
 #chat-toggle.visible{display:inline-flex}
 
 /* Chat drawer — same slide-in-from-right treatment as #activity-drawer. */
-#chat-drawer{position:absolute;top:0;right:0;bottom:0;width:360px;max-width:88%;z-index:9;background:var(--panel);border-left:1px solid var(--border-strong);box-shadow:-8px 0 20px rgba(0,0,0,.25);transform:translateX(100%);transition:transform .18s ease;display:flex;flex-direction:column}
+#chat-drawer{position:absolute;top:0;right:0;bottom:0;width:360px;max-width:88%;z-index:9;background:var(--panel);border-left:1px solid var(--border-strong);box-shadow:-1px 0 0 color-mix(in srgb, var(--split-a) 35%, transparent),-2px 0 0 color-mix(in srgb, var(--split-b) 25%, transparent),-8px 0 20px rgba(0,0,0,.25);transform:translateX(100%);transition:transform .18s ease;display:flex;flex-direction:column}
 #chat-drawer.open{transform:translateX(0)}
 #chat-messages{flex:1;overflow-y:auto;display:flex;flex-direction:column;gap:10px;padding:12px 16px;font-family:Inter,'Segoe UI',Roboto,-apple-system,BlinkMacSystemFont,Helvetica,Arial,sans-serif;font-size:11.5px}
 .chat-msg{max-width:92%;padding:7px 10px;border-radius:3px;line-height:1.4;white-space:pre-wrap;word-break:break-word}
@@ -275,12 +292,12 @@ canvas{display:block;cursor:grab}
 .chat-msg.error{align-self:flex-start;background:color-mix(in srgb, var(--accent-alert) 14%, transparent);border:1px solid var(--accent-alert);color:var(--accent-alert)}
 #chat-footer{display:flex;gap:8px;padding:12px 16px;border-top:1px solid var(--border);flex-shrink:0}
 #chat-input{flex:1;resize:none;height:38px;background:var(--hover-bg);border:1px solid var(--border-strong);color:var(--text);font-family:inherit;font-size:11.5px;padding:8px 10px;border-radius:2px}
-#chat-input:focus{outline:none;border-color:var(--title-accent)}
+#chat-input:focus{outline:none;border-color:var(--title-accent);box-shadow:0 0 0 1px var(--split-a),0 0 0 2px color-mix(in srgb, var(--split-b) 60%, transparent)}
 #chat-send{flex-shrink:0}
 
 .data-btn{background:transparent;border:1px solid var(--border);color:var(--text-muted);font-family:Inter,'Segoe UI',Roboto,-apple-system,BlinkMacSystemFont,Helvetica,Arial,sans-serif;font-size:10px;font-weight:600;letter-spacing:.03em;padding:3px 8px;border-radius:2px;cursor:pointer;margin-left:4px;transition:background .12s,color .12s,border-color .12s}
 .data-btn:first-child{margin-left:0}
-.data-btn:hover{background:var(--hover-bg);color:var(--text)}
+.data-btn:hover{background:var(--hover-bg);color:var(--text);box-shadow:0 0 0 1px var(--split-a),0 0 0 2px color-mix(in srgb, var(--split-b) 60%, transparent)}
 .data-btn.primary{color:var(--title-accent);border-color:var(--title-accent)}
 .data-btn.danger{color:var(--accent-alert);border-color:var(--accent-alert)}
 .data-btn.block{display:block;margin:10px 0 0}
@@ -314,12 +331,12 @@ canvas{display:block;cursor:grab}
 #map:not(.mode-topology) #type-legend{display:none}
 
 .map-panel-hdr{display:flex;align-items:center;gap:12px;padding:12px 100px 12px 16px;border-bottom:1px solid var(--border);flex-shrink:0}
-#map-panel-title{font-family:Inter,'Segoe UI',Roboto,-apple-system,BlinkMacSystemFont,Helvetica,Arial,sans-serif;font-size:12.5px;font-weight:700;letter-spacing:.02em;color:var(--title-accent);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+#map-panel-title{font-family:Inter,'Segoe UI',Roboto,-apple-system,BlinkMacSystemFont,Helvetica,Arial,sans-serif;font-size:12.5px;font-weight:700;letter-spacing:.02em;color:var(--title-accent);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;text-shadow:1px 0 color-mix(in srgb, var(--split-a) 50%, transparent),-1px 0 color-mix(in srgb, var(--split-b) 50%, transparent)}
 .map-back-btn{background:transparent;border:1px solid var(--border);color:var(--text-muted);font-family:Inter,'Segoe UI',Roboto,-apple-system,BlinkMacSystemFont,Helvetica,Arial,sans-serif;font-size:10.5px;font-weight:600;letter-spacing:.03em;padding:5px 10px;border-radius:2px;cursor:pointer;transition:background .12s,color .12s,border-color .12s}
-.map-back-btn:hover{background:var(--hover-bg);color:var(--title-accent);border-color:var(--border-strong)}
+.map-back-btn:hover{background:var(--hover-bg);color:var(--title-accent);border-color:var(--border-strong);box-shadow:0 0 0 1px var(--split-a),0 0 0 2px color-mix(in srgb, var(--split-b) 60%, transparent)}
 #map-panel-hdr-extra{margin-left:auto;display:flex;align-items:center;gap:8px}
 .view-mode-select{background:transparent;border:1px solid var(--border);color:var(--text-muted);font-family:Inter,'Segoe UI',Roboto,-apple-system,BlinkMacSystemFont,Helvetica,Arial,sans-serif;font-size:10px;font-weight:600;letter-spacing:.05em;text-transform:uppercase;padding:5px 8px;border-radius:2px;cursor:pointer}
-.view-mode-select:hover{border-color:var(--border-strong);color:var(--title-accent)}
+.view-mode-select:hover{border-color:var(--border-strong);color:var(--title-accent);box-shadow:0 0 0 1px var(--split-a),0 0 0 2px color-mix(in srgb, var(--split-b) 60%, transparent)}
 
 #map-panel-body{flex:1;overflow-y:auto;padding:12px 16px}
 #map.mode-stream #map-panel-body{padding:0;display:flex;align-items:center;justify-content:center;background:#000}
@@ -329,7 +346,7 @@ canvas{display:block;cursor:grab}
 #chart-frame{width:100%;height:100%;border:0;display:block}
 .stream-placeholder{padding:32px;color:var(--text-dim);font-family:Inter,'Segoe UI',Roboto,-apple-system,BlinkMacSystemFont,Helvetica,Arial,sans-serif;font-size:11.5px}
 .stream-audio-bar{display:flex;align-items:center;gap:10px;padding:20px 28px;font-family:Inter,'Segoe UI',Roboto,-apple-system,BlinkMacSystemFont,Helvetica,Arial,sans-serif}
-.stream-live-dot{flex:none;width:7px;height:7px;border-radius:50%;background:var(--accent-alert);box-shadow:0 0 0 3px color-mix(in srgb, var(--accent-alert) 25%, transparent);animation:pulse-dot 1.4s ease-in-out infinite}
+.stream-live-dot{flex:none;width:7px;height:7px;border-radius:50%;background:var(--accent-alert);box-shadow:0 0 0 3px color-mix(in srgb, var(--accent-alert) 25%, transparent),1px 0 0 color-mix(in srgb, var(--split-a) 55%, transparent),-1px 0 0 color-mix(in srgb, var(--split-b) 55%, transparent);animation:pulse-dot 1.4s ease-in-out infinite}
 .stream-live-dot.buffering{background:#6a6d72;box-shadow:none;animation:none}
 .stream-live-label{color:#e8e6e3;font-size:11px;font-weight:700;letter-spacing:.1em}
 .stream-audio-bar .data-btn{color:#c7c9cc;border-color:#3a3d42}
@@ -397,6 +414,29 @@ canvas{display:block;cursor:grab}
 .ts-legend-item.hidden{opacity:.4;text-decoration:line-through}
 .ts-swatch{width:9px;height:9px;border-radius:1px;display:inline-block}
 .timeseries-chart{width:100%;height:calc(100% - 30px)}
+
+/* One-shot hover jitter — the only motion this theme adds beyond the
+   shared pulse-dot animation. Gated behind prefers-reduced-motion so a
+   reduced-motion viewer still gets the static chromatic hover ring
+   defined above, just without the movement. */
+@keyframes glitch-jitter{
+  0%{transform:translateX(0)}
+  25%{transform:translateX(-1px)}
+  50%{transform:translateX(1px)}
+  75%{transform:translateX(-1px)}
+  100%{transform:translateX(0)}
+}
+@media (prefers-reduced-motion: no-preference){
+  .theme-toggle:hover,
+  .data-btn:hover,
+  #zoom-controls button:hover,
+  #grid-controls button:hover,
+  .map-back-btn:hover,
+  .activity-toggle:hover,
+  .view-mode-select:hover{
+    animation:glitch-jitter .16s steps(2,end) 1;
+  }
+}
 </style>
 </head>
 <body>
@@ -600,6 +640,7 @@ function resize() {
 let BG_CANVAS, TILE_FILL, TILE_STROKE, WIRE, WIRE_GLOW;
 let LABEL_BG_RGB, LABEL_BG_ALPHA, VIGNETTE_RGB, VIGNETTE_ALPHA;
 let TEXT_MUTED, TITLE_ACCENT;
+let SPLIT_A, SPLIT_B;
 
 function readTheme() {
   const s = getComputedStyle(document.documentElement);
@@ -619,6 +660,8 @@ function readTheme() {
   VIGNETTE_ALPHA = v('--vignette-alpha');
   TEXT_MUTED     = v('--text-muted');
   TITLE_ACCENT   = v('--title-accent');
+  SPLIT_A        = v('--split-a');
+  SPLIT_B        = v('--split-b');
 }
 
 function updateThemeButton(theme) {
@@ -678,7 +721,7 @@ function layerLabel(name) {
 function layerBadgeHtml(name) {
   if (!name) return '';
   const c = layerColor(name);
-  return `<span class="layer-badge" style="background:color-mix(in srgb, ${c} 16%, transparent);color:${c};border:1px solid color-mix(in srgb, ${c} 45%, transparent)">${layerLabel(name)}</span>`;
+  return `<span class="layer-badge" style="background:color-mix(in srgb, ${c} 16%, transparent);color:${c};border:1px solid color-mix(in srgb, ${c} 45%, transparent);box-shadow:1px 0 0 color-mix(in srgb, var(--split-a) 50%, transparent),-1px 0 0 color-mix(in srgb, var(--split-b) 50%, transparent)">${layerLabel(name)}</span>`;
 }
 
 // Persists a layer color override to /api/layout, alongside node positions
@@ -840,6 +883,21 @@ function tilePath(sx, sy) {
   ctx.closePath();
 }
 
+// Chromatic-split fringe stroke — rebuilds `buildPath`'s path offset by
+// dx/dy (via a transform, since an already-recorded path can't be
+// re-offset after the fact) and strokes it in one channel color. Used on
+// "lit" shapes to give the canvas the same RGB-misregistration fringe as
+// the CSS chrome, instead of neo's hard offset drop-shadow.
+function fringeStroke(buildPath, dx, dy, color, alpha, width) {
+  ctx.save();
+  ctx.translate(dx, dy);
+  buildPath();
+  ctx.strokeStyle = rgba(color, alpha);
+  ctx.lineWidth = width;
+  ctx.stroke();
+  ctx.restore();
+}
+
 function drawEmptyTile(sx, sy) {
   tilePath(sx, sy);
   ctx.fillStyle   = TILE_FILL;
@@ -854,9 +912,15 @@ function drawEmptyTile(sx, sy) {
 }
 
 function drawOccupiedTile(sx, sy, accent, lit) {
-  tilePath(sx, sy);
+  const path = () => tilePath(sx, sy);
+  path();
   ctx.fillStyle = rgba(accent, lit ? 0.09 : 0.04);
   ctx.fill();
+  if (lit) {
+    fringeStroke(path, 1, 0, SPLIT_A, 0.45, 1);
+    fringeStroke(path, -1, 0, SPLIT_B, 0.45, 1);
+  }
+  path();
   ctx.strokeStyle = rgba(accent, lit ? 0.75 : 0.35);
   ctx.lineWidth = lit ? 1.1 : 0.8;
   if (lit) { ctx.shadowColor = accent; ctx.shadowBlur = 7; }
@@ -877,14 +941,22 @@ function isoBox(sx, sy, w2, h2, bh, accent, lit, opts = {}) {
   const sMul = opts.strokeAlpha ?? 1;
 
   // ── Right face ──
-  ctx.beginPath();
-  ctx.moveTo(sx + w2, sy - bh);
-  ctx.lineTo(sx + w2, sy);
-  ctx.lineTo(sx,      sy + h2);
-  ctx.lineTo(sx,      sy + h2 - bh);
-  ctx.closePath();
+  const rightFace = () => {
+    ctx.beginPath();
+    ctx.moveTo(sx + w2, sy - bh);
+    ctx.lineTo(sx + w2, sy);
+    ctx.lineTo(sx,      sy + h2);
+    ctx.lineTo(sx,      sy + h2 - bh);
+    ctx.closePath();
+  };
+  rightFace();
   ctx.fillStyle   = rgba(accent, 0.05 * fMul);
   ctx.fill();
+  if (lit) {
+    fringeStroke(rightFace, 1, 0, SPLIT_A, 0.35 * sMul, 0.8);
+    fringeStroke(rightFace, -1, 0, SPLIT_B, 0.35 * sMul, 0.8);
+  }
+  rightFace();
   ctx.strokeStyle = rgba(accent, (lit ? 0.55 : 0.35) * sMul);
   ctx.lineWidth   = 0.8;
   if (glow) { ctx.shadowColor = accent; ctx.shadowBlur = glow; }
@@ -892,14 +964,22 @@ function isoBox(sx, sy, w2, h2, bh, accent, lit, opts = {}) {
   ctx.shadowBlur = 0;
 
   // ── Left face ──
-  ctx.beginPath();
-  ctx.moveTo(sx - w2, sy - bh);
-  ctx.lineTo(sx - w2, sy);
-  ctx.lineTo(sx,      sy + h2);
-  ctx.lineTo(sx,      sy + h2 - bh);
-  ctx.closePath();
+  const leftFace = () => {
+    ctx.beginPath();
+    ctx.moveTo(sx - w2, sy - bh);
+    ctx.lineTo(sx - w2, sy);
+    ctx.lineTo(sx,      sy + h2);
+    ctx.lineTo(sx,      sy + h2 - bh);
+    ctx.closePath();
+  };
+  leftFace();
   ctx.fillStyle   = rgba(accent, 0.08 * fMul);
   ctx.fill();
+  if (lit) {
+    fringeStroke(leftFace, 1, 0, SPLIT_A, 0.35 * sMul, 0.8);
+    fringeStroke(leftFace, -1, 0, SPLIT_B, 0.35 * sMul, 0.8);
+  }
+  leftFace();
   ctx.strokeStyle = rgba(accent, (lit ? 0.65 : 0.4) * sMul);
   ctx.lineWidth   = 0.8;
   if (glow) { ctx.shadowColor = accent; ctx.shadowBlur = glow; }
@@ -907,14 +987,22 @@ function isoBox(sx, sy, w2, h2, bh, accent, lit, opts = {}) {
   ctx.shadowBlur = 0;
 
   // ── Top face ──
-  ctx.beginPath();
-  ctx.moveTo(sx,      sy - h2 - bh);
-  ctx.lineTo(sx + w2, sy      - bh);
-  ctx.lineTo(sx,      sy + h2 - bh);
-  ctx.lineTo(sx - w2, sy      - bh);
-  ctx.closePath();
+  const topFace = () => {
+    ctx.beginPath();
+    ctx.moveTo(sx,      sy - h2 - bh);
+    ctx.lineTo(sx + w2, sy      - bh);
+    ctx.lineTo(sx,      sy + h2 - bh);
+    ctx.lineTo(sx - w2, sy      - bh);
+    ctx.closePath();
+  };
+  topFace();
   ctx.fillStyle   = rgba(accent, (lit ? 0.16 : 0.1) * fMul);
   ctx.fill();
+  if (lit) {
+    fringeStroke(topFace, 1, 0, SPLIT_A, 0.4 * sMul, lit ? 1.3 : 1);
+    fringeStroke(topFace, -1, 0, SPLIT_B, 0.4 * sMul, lit ? 1.3 : 1);
+  }
+  topFace();
   ctx.strokeStyle = rgba(accent, (lit ? 1.0 : 0.6) * sMul);
   ctx.lineWidth   = lit ? 1.3 : 1;
   if (glow) { ctx.shadowColor = accent; ctx.shadowBlur = glow * 1.4; }
@@ -2287,7 +2375,7 @@ function buildNodeItem(node) {
   item.dataset.id = node.id;
   item.style.setProperty('--row-accent', cVar);
   item.innerHTML  =
-    `<span class="node-tag" style="background:color-mix(in srgb, ${cVar} 14%, transparent);color:${cVar};border:1px solid color-mix(in srgb, ${cVar} 40%, transparent)">${lbl.replace('@','')}</span>` +
+    `<span class="node-tag" style="background:color-mix(in srgb, ${cVar} 14%, transparent);color:${cVar};border:1px solid color-mix(in srgb, ${cVar} 40%, transparent);box-shadow:1px 0 0 color-mix(in srgb, var(--split-a) 50%, transparent),-1px 0 0 color-mix(in srgb, var(--split-b) 50%, transparent)">${lbl.replace('@','')}</span>` +
     `<span class="node-lbl">${node.label}</span>`;
   item.addEventListener('click', () => selectFromSidebar(node.id));
   return item;
