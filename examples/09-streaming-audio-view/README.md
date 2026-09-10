@@ -107,7 +107,7 @@ it starts cleanly at a zero-crossing, matching the rest's own silence.
 tune keeps moving through `_PHRASE` on a loop instead of restarting every
 chunk. The dev UI's player also prefetches the next chunk while the
 current one is still playing (see `playAudioStream()` in
-`odf/ui/static/index.html`), hiding the fetch round-trip on top of that.
+`odf/ui/static/themes/default/index.html`), hiding the fetch round-trip on top of that.
 
 The player also skips the native `<audio controls>` UI entirely — each
 chunk is a complete, bounded WAV file, so a native seek bar would show

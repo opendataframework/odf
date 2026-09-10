@@ -101,6 +101,7 @@ class Server:
         mcp_host: str = "127.0.0.1",
         mcp_port: int = 4748,
         chat: bool = False,
+        theme: str | None = None,
         app_module: str | None = "app",
     ) -> None:
         """Start the wrapped ``Project`` and drive optional dev-tooling servers.
@@ -130,6 +131,10 @@ class Server:
                 their own name instead of the framework's.
             ui_host: Interface for the UI server to bind to.
             ui_port: Port for the UI server to bind to.
+            theme: Which UI theme (visual/layout file-set) to serve —
+                orthogonal to the UI's own client-side light/dark
+                color-mode toggle. An explicit value here wins; otherwise
+                falls back to ``[ui] theme`` in config, then ``"default"``.
             mcp: If ``True``, also start an optional MCP server (backgrounded,
                 like any ``Service``) exposing the same actions available in
                 the UI — component start/stop, task/pipeline
@@ -160,8 +165,10 @@ class Server:
                 entirely.
 
         Raises:
-            ValueError: If a circular dependency is detected, or if
-                ``chat=True`` is passed without ``ui=True``.
+            ValueError: If a circular dependency is detected, if
+                ``chat=True`` is passed without ``ui=True``, or if
+                ``theme``/``[ui] theme`` names a UI theme that doesn't
+                exist.
             ImportError: If ``ui=True``/``mcp=True``/``chat=True`` but the
                 corresponding extra is not installed.
 
@@ -225,6 +232,7 @@ class Server:
             colors = {**extensions.colors(), **ui_cfg.get("colors", {})}
             favicon = ui_cfg.get("favicon")
             logo = ui_cfg.get("logo")
+            resolved_theme = theme if theme is not None else ui_cfg.get("theme", "default")
             self._ui_server = UiServer(
                 self.context,
                 self._display_name(),
@@ -237,6 +245,7 @@ class Server:
                 favicon=Path(favicon) if favicon else None,
                 logo=Path(logo) if logo else None,
                 brand=ui_cfg.get("brand"),
+                theme=resolved_theme,
             )
             self._ui_server.start()
         self._running = True
@@ -299,6 +308,7 @@ class Server:
         mcp_host: str = "127.0.0.1",
         mcp_port: int = 4748,
         chat: bool = False,
+        theme: str | None = None,
         app_module: str | None = "app",
     ) -> None:
         """Start the server and block until interrupted, then stop.
@@ -323,6 +333,7 @@ class Server:
             mcp_host=mcp_host,
             mcp_port=mcp_port,
             chat=chat,
+            theme=theme,
             app_module=app_module,
         )
         self.wait()

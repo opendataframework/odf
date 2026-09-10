@@ -2,6 +2,7 @@ import json
 import time
 from dataclasses import dataclass
 
+import pytest
 from fastapi.testclient import TestClient
 from opendataframework.component import Component
 from opendataframework.context import Context
@@ -9,6 +10,7 @@ from opendataframework.namespace import Namespace
 from opendataframework.repository import Repository
 from opendataframework.view import StreamingAudioView, StreamingVideoView
 
+from odf.ui import themes
 from odf.ui.server import UiServer
 
 
@@ -730,3 +732,69 @@ def test_ui_extensions_reports_configured_brand():
         r = client.get("/api/ui/extensions")
 
     assert r.json()["brand"] == "Beacon Watch"
+
+
+# --- themes --------------------------------------------------------------------
+
+
+def test_serves_default_theme_by_default():
+    with Context(namespaces=set()) as ctx:
+        client = TestClient(UiServer(ctx, "proj")._app)
+        r = client.get("/")
+
+    assert r.status_code == 200
+    assert "text/html" in r.headers["content-type"]
+
+
+def test_serves_named_theme_explicitly():
+    with Context(namespaces=set()) as ctx:
+        client = TestClient(UiServer(ctx, "proj", theme="default")._app)
+        r = client.get("/")
+
+    assert r.status_code == 200
+    assert "text/html" in r.headers["content-type"]
+
+
+def test_favicon_falls_back_to_theme_default_when_not_overridden():
+    with Context(namespaces=set()) as ctx:
+        client = TestClient(UiServer(ctx, "proj", theme="default")._app)
+        r = client.get("/favicon.svg")
+
+    assert r.status_code == 200
+    assert "image/svg+xml" in r.headers["content-type"]
+
+
+def test_unknown_theme_raises_value_error_at_construction():
+    with Context(namespaces=set()) as ctx:
+        with pytest.raises(ValueError, match="Unknown UI theme 'bogus'"):
+            UiServer(ctx, "proj", theme="bogus")
+
+
+def test_selecting_a_different_theme_serves_different_content(tmp_path, monkeypatch):
+    alt = tmp_path / "alt"
+    alt.mkdir()
+    (alt / "index.html").write_text("<html><body>alt theme marker</body></html>")
+    (alt / "favicon.svg").write_text("<svg><title>alt favicon</title></svg>")
+    monkeypatch.setattr(themes, "_THEMES_DIR", tmp_path)
+
+    with Context(namespaces=set()) as ctx:
+        client = TestClient(UiServer(ctx, "proj", theme="alt")._app)
+        r = client.get("/")
+
+    assert "alt theme marker" in r.text
+
+
+def test_list_themes_finds_the_built_in_default_theme():
+    assert "default" in themes.list_themes()
+
+
+def test_theme_dir_resolves_the_default_theme():
+    path = themes.theme_dir("default")
+
+    assert (path / "index.html").is_file()
+    assert (path / "favicon.svg").is_file()
+
+
+def test_theme_dir_raises_on_unknown_theme():
+    with pytest.raises(ValueError, match="Unknown UI theme 'bogus'"):
+        themes.theme_dir("bogus")

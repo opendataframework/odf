@@ -122,7 +122,7 @@ server.start(ui=True, mcp=False, chat=False)  # non-blocking — returns immedia
 server.wait()  # blocks until Ctrl+C/SIGTERM or stop()
 ```
 
-- **`start(ui=, ui_host=, ui_port=, mcp=, mcp_host=, mcp_port=, chat=, app_module=)`**
+- **`start(ui=, ui_host=, ui_port=, theme=, mcp=, mcp_host=, mcp_port=, chat=, app_module=)`**
   resolves the `Context` (importing `app_module` first, see above), then
   optionally starts the MCP server and UI — each backgrounded on its own
   daemon thread, like any `Service`. Always returns immediately, whether

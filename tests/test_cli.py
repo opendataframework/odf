@@ -108,12 +108,42 @@ def test_run_passes_flags_through_to_start(tmp_path, monkeypatch, fake_project):
         "ui": False,
         "ui_host": "127.0.0.1",
         "ui_port": 4747,
+        "theme": None,
         "mcp": True,
         "mcp_host": "127.0.0.1",
         "mcp_port": 9999,
         "chat": True,
         "app_module": None,
     }
+
+
+def test_run_passes_theme_flag_through_to_start(tmp_path, monkeypatch, fake_project):
+    make_project_dir(tmp_path, monkeypatch)
+
+    result = runner.invoke(cli.app, ["run", "--theme", "default"])
+
+    assert result.exit_code == 0, result.output
+    assert FakeServer.instances[0].started_with["theme"] == "default"
+
+
+def test_run_reports_unknown_theme_as_clean_error(tmp_path, monkeypatch):
+    make_project_dir(tmp_path, monkeypatch)
+
+    class RejectingServer(FakeServer):
+        @classmethod
+        def from_config(cls, path):
+            return cls()
+
+        def start(self, **kwargs):
+            raise ValueError(f"Unknown UI theme {kwargs['theme']!r} — available themes: default")
+
+    monkeypatch.setattr(cli, "Server", RejectingServer)
+
+    result = runner.invoke(cli.app, ["run", "--theme", "bogus"])
+
+    assert result.exit_code != 0
+    assert "Unknown UI theme 'bogus'" in result.output
+    assert "available themes: default" in result.output
 
 
 def test_run_calls_wait_which_stops_the_server(tmp_path, monkeypatch, fake_project):
