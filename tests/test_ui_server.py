@@ -788,8 +788,28 @@ def test_list_themes_finds_the_built_in_default_theme():
     assert "default" in themes.list_themes()
 
 
+def test_list_themes_finds_the_built_in_glitch_theme():
+    assert "glitch" in themes.list_themes()
+
+
 def test_theme_dir_resolves_the_default_theme():
     path = themes.theme_dir("default")
+
+    assert (path / "index.html").is_file()
+    assert (path / "favicon.svg").is_file()
+
+
+def test_serves_glitch_theme_explicitly():
+    with Context(namespaces=set()) as ctx:
+        client = TestClient(UiServer(ctx, "proj", theme="glitch")._app)
+        r = client.get("/")
+
+    assert r.status_code == 200
+    assert "text/html" in r.headers["content-type"]
+
+
+def test_theme_dir_resolves_the_glitch_theme():
+    path = themes.theme_dir("glitch")
 
     assert (path / "index.html").is_file()
     assert (path / "favicon.svg").is_file()
