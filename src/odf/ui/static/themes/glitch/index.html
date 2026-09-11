@@ -116,7 +116,7 @@ body{
 
 .mono{font-family:'SF Mono','IBM Plex Mono','JetBrains Mono',Consolas,'Courier New',monospace}
 
-#topbar{height:3px;flex-shrink:0;background:linear-gradient(90deg,var(--title-accent),transparent 85%);opacity:.8}
+#topbar{height:3px;flex-shrink:0;background:linear-gradient(90deg,var(--split-a),transparent 50%),linear-gradient(270deg,var(--split-b),transparent 50%);opacity:.8}
 
 #shell{flex:1;min-height:0;display:flex;flex-direction:column;gap:8px;padding:8px}
 
@@ -131,8 +131,8 @@ body{
 
 #hdr{padding:0 16px;height:46px;display:flex;align-items:center;gap:0;flex-shrink:0}
 .brand{display:flex;align-items:center;gap:10px;margin-right:18px;padding-right:18px;border-right:1px solid var(--border)}
-.brand-mark{width:18px;height:18px;flex-shrink:0;border:1.5px solid var(--title-accent);position:relative;transform:rotate(45deg)}
-.brand-mark::after{content:"";position:absolute;inset:4px;background:var(--title-accent);opacity:.85}
+.brand-mark{width:18px;height:18px;flex-shrink:0;border:1.5px solid var(--accent-component);position:relative;transform:rotate(45deg);box-shadow:1.5px 0 0 color-mix(in srgb, var(--split-a) 55%, transparent),-1.5px 0 0 color-mix(in srgb, var(--split-b) 55%, transparent)}
+.brand-mark::after{content:"";position:absolute;inset:4px;background:var(--accent-component);opacity:.85}
 .brand-mark.has-logo{border:none;transform:none}
 .brand-mark.has-logo::after{content:none}
 .brand-mark img{width:100%;height:100%;object-fit:contain;display:block}
@@ -436,6 +436,20 @@ canvas{display:block;cursor:grab}
   .view-mode-select:hover{
     animation:glitch-jitter .16s steps(2,end) 1;
   }
+}
+
+/* Ambient idle tic on the nav bar itself — same ±1px amplitude as the
+   hover jitter above, but on a long cycle so the header reads as
+   glitchy even when nothing is being interacted with. */
+@keyframes hdr-idle-glitch{
+  0%,94%,100%{transform:translateX(0)}
+  95%{transform:translateX(-1px)}
+  96%{transform:translateX(1px)}
+  97%{transform:translateX(-1px)}
+  98%{transform:translateX(0)}
+}
+@media (prefers-reduced-motion: no-preference){
+  #hdr{animation:hdr-idle-glitch 8s steps(1,end) infinite}
 }
 </style>
 </head>
