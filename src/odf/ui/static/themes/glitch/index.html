@@ -433,23 +433,10 @@ canvas{display:block;cursor:grab}
   #grid-controls button:hover,
   .map-back-btn:hover,
   .activity-toggle:hover,
-  .view-mode-select:hover{
+  .view-mode-select:hover,
+  #hdr:hover{
     animation:glitch-jitter .16s steps(2,end) 1;
   }
-}
-
-/* Ambient idle tic on the nav bar itself — same ±1px amplitude as the
-   hover jitter above, but on a long cycle so the header reads as
-   glitchy even when nothing is being interacted with. */
-@keyframes hdr-idle-glitch{
-  0%,94%,100%{transform:translateX(0)}
-  95%{transform:translateX(-1px)}
-  96%{transform:translateX(1px)}
-  97%{transform:translateX(-1px)}
-  98%{transform:translateX(0)}
-}
-@media (prefers-reduced-motion: no-preference){
-  #hdr{animation:hdr-idle-glitch 8s steps(1,end) infinite}
 }
 </style>
 </head>
