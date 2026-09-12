@@ -4,11 +4,12 @@ Not a DI-managed ``Service`` — like ``UiServer``, it introspects the container
 from the outside, so it is constructed and driven directly by
 ``Server.start(mcp=True)`` / ``Server.stop()``, after the ``Context`` has
 already resolved. Lets any MCP-speaking client (an LLM agent, Claude Desktop,
-...) start/stop components and execute tasks/pipelines that were previously
-only reachable by clicking through the UI.
+...) start/stop components, execute tasks/pipelines, and query repository
+data that was previously only reachable by clicking through the UI.
 """
 
 import threading
+from typing import Any
 
 try:
     import uvicorn
@@ -19,8 +20,12 @@ except ImportError as exc:
     ) from exc
 
 from opendataframework.context import Context
+from opendataframework.repository import ReadableProtocol
 
+from odf.ui.data import find_repository, list_records, parse_filters
 from odf.ui.topology import build_topology
+
+_MAX_QUERY_LIMIT = 500
 
 
 class McpServer:
@@ -64,12 +69,48 @@ class McpServer:
             """List every resolved component, repository, service, task, and
             pipeline: its type, layer, and — for services — whether it is
             currently running. Use each entry's "label" (its class name) as
-            the "name" argument to the other tools."""
+            the "name" argument to the other tools. Use a "repository"-typed
+            entry's "id" as the "repo_id" argument to query_repository."""
             topology = build_topology(self._context, project)
             return [
                 {k: v for k, v in node.items() if k not in ("col", "row")}
                 for node in topology["nodes"]
             ]
+
+        @mcp.tool()
+        def query_repository(
+            repo_id: str,
+            limit: int = 50,
+            offset: int = 0,
+            filters: dict[str, str] | None = None,
+        ) -> dict[str, Any]:
+            """Return a page of records from a resolved repository's data,
+            with optional per-field substring filters — the same
+            paged/filtered access pattern the dev UI's data table uses, so
+            you can answer a question about a repository's data without
+            pulling the whole dataset into context. Use list_components()'s
+            "id" for a "repository"-typed entry as "repo_id" here. "filters"
+            is a field-name -> substring mapping; only keys matching the
+            repository's entity fields are applied (others are ignored), and
+            a record matches only if every given field's stringified value
+            contains its filter value, case-insensitively. "limit" is capped
+            at 500. Returns {"records": [...], "total": <total matching
+            count>}."""
+            found = find_repository(self._context, repo_id)
+            if found is None:
+                raise ValueError(f"No resolved repository named {repo_id!r}")
+            _, instance, entity_cls = found
+            if not isinstance(instance, ReadableProtocol):
+                raise ValueError(f"Repository {repo_id!r} is not readable")
+            parsed_filters = parse_filters(entity_cls, (filters or {}).items())
+            records, total = list_records(
+                instance,
+                entity_cls,
+                limit=min(limit, _MAX_QUERY_LIMIT),
+                offset=offset,
+                filters=parsed_filters,
+            )
+            return {"records": records, "total": total}
 
         @mcp.tool()
         def start_component(name: str) -> str:

@@ -51,7 +51,7 @@ needs a third-party dependency:
 |---|---|---|
 | `server.py` | `Server` — composes an `opendataframework.Project` and adds `start(ui=, mcp=, chat=)` orchestration on top | (imports the rest of this table lazily) |
 | `cli.py`, `scaffold.py`, `templates/` | `odf init`/`odf run` CLI | `typer`, `rich` |
-| `mcp/server.py` | MCP server exposing component lifecycle + task/pipeline execution as tools | `mcp`, `uvicorn` |
+| `mcp/server.py` | MCP server exposing component lifecycle + task/pipeline execution + repository data queries as tools | `mcp`, `uvicorn` |
 | `ui/server.py`, `ui/topology.py`, `ui/data.py`, `ui/layout.py`, `ui/extensions.py` | UI dev server | `fastapi`, `uvicorn` |
 | `chat/engine.py` | Chat window backing a `Server`'s UI | `ollama` |
 

@@ -1,15 +1,24 @@
 import asyncio
 import json
+from dataclasses import dataclass
 
 import pytest
 from mcp.server.fastmcp.exceptions import ToolError
 from opendataframework.component import Component
 from opendataframework.context import Context
 from opendataframework.namespace import Namespace
+from opendataframework.repository import Repository
 from opendataframework.service import Service
 from opendataframework.task import Task
 
 from odf.mcp.server import McpServer
+
+
+@dataclass
+class Widget:
+    id: int
+    name: str
+    color: str
 
 
 def make_ns():
@@ -210,3 +219,135 @@ def test_component_logs_unknown_component_raises():
         mcp = McpServer(ctx, "proj")._mcp
         with pytest.raises(ToolError, match="No resolved component named 'Nonexistent'"):
             call(mcp, "component_logs", {"name": "Nonexistent"})
+
+
+# --- query_repository ---------------------------------------------------------------
+
+
+def _widgets():
+    return [
+        Widget(1, "gadget", "red"),
+        Widget(2, "gizmo", "blue"),
+        Widget(3, "widget", "red"),
+    ]
+
+
+def test_query_repository_returns_page_and_total():
+    NS = make_ns()
+
+    @NS
+    @Repository(Widget)
+    class Widgets:
+        def all(self):
+            return _widgets()
+
+    with Context(namespaces={NS}) as ctx:
+        result = call(McpServer(ctx, "proj")._mcp, "query_repository", {"repo_id": "widgets"})
+
+    _, data = result
+    assert data["total"] == 3
+    assert [r["name"] for r in data["records"]] == ["gadget", "gizmo", "widget"]
+
+
+def test_query_repository_applies_limit_and_offset():
+    NS = make_ns()
+
+    @NS
+    @Repository(Widget)
+    class Widgets:
+        def all(self):
+            return _widgets()
+
+    with Context(namespaces={NS}) as ctx:
+        result = call(
+            McpServer(ctx, "proj")._mcp,
+            "query_repository",
+            {"repo_id": "widgets", "limit": 1, "offset": 1},
+        )
+
+    _, data = result
+    assert data["total"] == 3
+    assert [r["name"] for r in data["records"]] == ["gizmo"]
+
+
+def test_query_repository_clamps_limit_to_max():
+    NS = make_ns()
+
+    @NS
+    @Repository(Widget)
+    class Widgets:
+        def all(self):
+            return _widgets()
+
+    with Context(namespaces={NS}) as ctx:
+        result = call(
+            McpServer(ctx, "proj")._mcp,
+            "query_repository",
+            {"repo_id": "widgets", "limit": 10_000},
+        )
+
+    _, data = result
+    assert len(data["records"]) == 3
+    assert data["total"] == 3
+
+
+def test_query_repository_applies_filters():
+    NS = make_ns()
+
+    @NS
+    @Repository(Widget)
+    class Widgets:
+        def all(self):
+            return _widgets()
+
+    with Context(namespaces={NS}) as ctx:
+        result = call(
+            McpServer(ctx, "proj")._mcp,
+            "query_repository",
+            {"repo_id": "widgets", "filters": {"color": "red"}},
+        )
+
+    _, data = result
+    assert data["total"] == 2
+    assert {r["name"] for r in data["records"]} == {"gadget", "widget"}
+
+
+def test_query_repository_ignores_unknown_filter_keys():
+    NS = make_ns()
+
+    @NS
+    @Repository(Widget)
+    class Widgets:
+        def all(self):
+            return _widgets()
+
+    with Context(namespaces={NS}) as ctx:
+        result = call(
+            McpServer(ctx, "proj")._mcp,
+            "query_repository",
+            {"repo_id": "widgets", "filters": {"nonexistent_field": "anything"}},
+        )
+
+    _, data = result
+    assert data["total"] == 3
+
+
+def test_query_repository_unknown_repo_raises():
+    with Context(namespaces=set()) as ctx:
+        mcp = McpServer(ctx, "proj")._mcp
+        with pytest.raises(ToolError, match="No resolved repository named 'nope'"):
+            call(mcp, "query_repository", {"repo_id": "nope"})
+
+
+def test_query_repository_rejects_non_readable_repository():
+    NS = make_ns()
+
+    @NS
+    @Repository(Widget)
+    class Widgets:
+        def save(self, entity): ...
+
+    with Context(namespaces={NS}) as ctx:
+        mcp = McpServer(ctx, "proj")._mcp
+        with pytest.raises(ToolError, match="is not readable"):
+            call(mcp, "query_repository", {"repo_id": "widgets"})

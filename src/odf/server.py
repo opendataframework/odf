@@ -137,10 +137,10 @@ class Server:
                 falls back to ``[ui] theme`` in config, then ``"default"``.
             mcp: If ``True``, also start an optional MCP server (backgrounded,
                 like any ``Service``) exposing the same actions available in
-                the UI — component start/stop, task/pipeline
-                execution, and log inspection — as MCP tools for any
-                MCP-speaking client. Requires the ``mcp`` extra
-                (``pip install odf[mcp]``).
+                the UI — component start/stop, task/pipeline execution, log
+                inspection, and paged/filtered repository data queries — as
+                MCP tools for any MCP-speaking client. Requires the ``mcp``
+                extra (``pip install odf[mcp]``).
             mcp_host: Interface for the MCP server to bind to.
             mcp_port: Port for the MCP server to bind to.
             chat: If ``True``, also add a chat window to the UI,
