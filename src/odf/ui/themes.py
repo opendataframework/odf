@@ -3,9 +3,7 @@
 A theme is a self-contained ``index.html``/``favicon.svg`` pair under
 ``static/themes/<name>/`` — the whole UI (HTML/CSS/JS, including its own
 copy of the light/dark color-mode toggle) in one file, so themes never
-share templates/styles and can't bleed into each other. Orthogonal to that
-toggle: a "theme" here means which visual/layout file-set is served, not
-light vs. dark.
+share templates/styles and can't bleed into each other.
 """
 
 from pathlib import Path

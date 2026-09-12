@@ -184,8 +184,8 @@ def run(
         None,
         "--theme",
         help=(
-            "UI theme (visual file-set) to serve — not the light/dark color-mode "
-            'toggle. Defaults to config.toml\'s [ui] theme, or "default".'
+            "UI theme (visual file-set) to serve. Defaults to config.toml's "
+            '[ui] theme, or "default".'
         ),
     ),
     mcp: bool = typer.Option(False, help="Start the MCP server."),
