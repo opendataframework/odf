@@ -10,8 +10,11 @@ requires-python = ">=3.14"
 dependencies = [
     "typer (>=0.27.0,<0.28.0)",
     "rich (>=15.0.0,<16.0.0)",
-    "opendataframework (>=0.1.0,<0.2.0)"
+    "opendataframework (>=0.2.0,<0.3.0)"
 ]
+
+[tool.poetry.dependencies]
+opendataframework = { source = "local-pypi" }
 
 [project.optional-dependencies]
 ui = [
@@ -93,3 +96,8 @@ exclude_lines = [
     "pragma: no cover",
     "if TYPE_CHECKING:",
 ]
+
+[[tool.poetry.source]]
+name = "local-pypi"
+url = "http://localhost:8080/simple/"
+priority = "explicit"
