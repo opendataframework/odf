@@ -19,8 +19,10 @@ except ImportError as exc:
         "server.start(mcp=True) requires the 'mcp' extra. Install with: pip install odf[mcp]"
     ) from exc
 
+from opendataframework.component import McpToolsProtocol
 from opendataframework.context import Context
 from opendataframework.repository import ReadableProtocol
+from opendataframework.utils import kebab
 
 from odf.ui.data import find_repository, list_records, parse_filters
 from odf.ui.topology import build_topology
@@ -155,6 +157,27 @@ class McpServer:
             if not any(cls.__name__ == name for cls in self._context.instances):
                 raise ValueError(f"No resolved component named {name!r}")
             return self._context.tail_logs(name, lines)
+
+        # Component-exposed tools: every resolved instance implementing
+        # McpToolsProtocol contributes its own tools in addition to the six
+        # fixed tools above, namespaced by its kebab-case class name so they
+        # can't collide with the fixed tools or with another component's
+        # tools of the same local name.
+        registered_names: set[str] = set()
+        for cls, instance in self._context.instances.items():
+            if not isinstance(instance, McpToolsProtocol):
+                continue
+            for tool in instance.mcp_tools():
+                full_name = f"{kebab(cls.__name__)}.{tool.name}"
+                if full_name in registered_names:
+                    raise ValueError(f"Duplicate MCP tool name: {full_name!r}")
+                registered_names.add(full_name)
+                mcp.add_tool(
+                    tool.handler,
+                    name=full_name,
+                    description=tool.description,
+                    structured_output=tool.structured_output,
+                )
 
         self._mcp = mcp
         self._app = mcp.streamable_http_app()

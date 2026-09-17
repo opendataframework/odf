@@ -97,7 +97,9 @@ can likewise be overridden with `[ui] favicon` / `[ui] logo` / `[ui] brand`
 
 Exposes the same actions available in the UI — component
 start/stop, task/pipeline execution, log inspection — as MCP tools for
-any MCP-speaking client.
+any MCP-speaking client. Any resolved component can contribute its own
+tools alongside these by implementing
+`opendataframework.component.McpToolsProtocol`'s `mcp_tools()`.
 
 ```python
 server.start(mcp=True)

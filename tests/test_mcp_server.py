@@ -4,7 +4,7 @@ from dataclasses import dataclass
 
 import pytest
 from mcp.server.fastmcp.exceptions import ToolError
-from opendataframework.component import Component
+from opendataframework.component import Component, McpTool
 from opendataframework.context import Context
 from opendataframework.namespace import Namespace
 from opendataframework.repository import Repository
@@ -351,3 +351,74 @@ def test_query_repository_rejects_non_readable_repository():
         mcp = McpServer(ctx, "proj")._mcp
         with pytest.raises(ToolError, match="is not readable"):
             call(mcp, "query_repository", {"repo_id": "widgets"})
+
+
+# --- component-exposed MCP tools (McpToolsProtocol) -------------------------------
+
+
+def test_component_mcp_tool_is_registered_and_callable():
+    NS = make_ns()
+
+    @NS
+    @Component
+    class Thing:
+        def status(self) -> str:
+            return "ok"
+
+        def mcp_tools(self) -> list[McpTool]:
+            return [McpTool(name="status", description="Report status.", handler=self.status)]
+
+    with Context(namespaces={NS}) as ctx:
+        result = call(McpServer(ctx, "proj")._mcp, "thing.status")
+
+    assert structured(result) == "ok"
+
+
+def test_two_components_with_same_local_tool_name_stay_distinct():
+    NS = make_ns()
+
+    @NS
+    @Component
+    class Alpha:
+        def status(self) -> str:
+            return "alpha"
+
+        def mcp_tools(self) -> list[McpTool]:
+            return [McpTool(name="status", description="Alpha status.", handler=self.status)]
+
+    @NS
+    @Component
+    class Beta:
+        def status(self) -> str:
+            return "beta"
+
+        def mcp_tools(self) -> list[McpTool]:
+            return [McpTool(name="status", description="Beta status.", handler=self.status)]
+
+    with Context(namespaces={NS}) as ctx:
+        mcp = McpServer(ctx, "proj")._mcp
+        assert structured(call(mcp, "alpha.status")) == "alpha"
+        assert structured(call(mcp, "beta.status")) == "beta"
+
+
+def test_duplicate_full_tool_name_within_one_component_raises_at_construction():
+    NS = make_ns()
+
+    @NS
+    @Component
+    class Thing:
+        def first(self) -> str:
+            return "first"
+
+        def second(self) -> str:
+            return "second"
+
+        def mcp_tools(self) -> list[McpTool]:
+            return [
+                McpTool(name="status", description="First.", handler=self.first),
+                McpTool(name="status", description="Second.", handler=self.second),
+            ]
+
+    with Context(namespaces={NS}) as ctx:
+        with pytest.raises(ValueError, match="Duplicate MCP tool name: 'thing.status'"):
+            McpServer(ctx, "proj")

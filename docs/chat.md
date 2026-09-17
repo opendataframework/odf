@@ -51,10 +51,14 @@ When `mcp=True` is also passed, `Server.start()` hands the chat engine a
 reference to the same `FastMCP` instance the MCP server serves over
 streamable HTTP (`McpServer.mcp`) — tool definitions and execution are
 shared in-process, not duplicated. On each turn, the model is offered the
-current tool list (`list_components`, `query_repository`, `start_component`,
-`stop_component`, `execute_task`, `component_logs`); if it requests a tool call, the chat
-window shows what was called and its result inline, then feeds the result
-back to the model for a follow-up reply.
+current tool list — the six fixed tools (`list_components`,
+`query_repository`, `start_component`, `stop_component`, `execute_task`,
+`component_logs`) plus, for every resolved component that exposes its own
+MCP tools (namespaced `<component>.<tool>`), that component's own tools;
+these are dynamic per project, so they aren't enumerated here by name. If
+the model requests a tool call, the chat window shows what was called and
+its result inline, then feeds the result back to the model for a
+follow-up reply.
 
 ## Prerequisites
 
