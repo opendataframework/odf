@@ -77,7 +77,9 @@ component-exposed tool namespacing (e.g. a `MetricsFetcher` component is
 addressed as `@metrics-fetcher`); the chat input autocompletes it as you
 type `@`. An `@handle` that doesn't match any resolved component's id is
 just left as plain text — the turn falls back to the full, unscoped tool
-set.
+set. A message can only address one component at a time — mentioning
+more than one distinct component's id in the same message rejects the
+turn with an inline error instead of guessing which one you meant.
 
 ## Prerequisites
 

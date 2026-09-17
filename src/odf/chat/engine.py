@@ -62,7 +62,9 @@ class ChatEngine:
         If the latest user message addresses a component with ``@id``
         (e.g. ``"@postgres how many rows..."``), the turn's tool access is
         scoped to just that component for its whole tool-call loop — see
-        ``_resolve_addressed``/``_tool_allowed``.
+        ``_resolve_addressed``/``_tool_allowed``. Addressing more than one
+        distinct component in the same message rejects the turn with an
+        ``error`` event instead of picking one.
         """
         try:
             last_content = messages[-1].get("content", "") if messages else ""
@@ -96,23 +98,31 @@ class ChatEngine:
             yield {"type": "error", "message": str(exc)}
 
     async def _resolve_addressed(self, text: str) -> dict | None:
-        """Resolve the first ``@handle`` in ``text`` that names a known component.
+        """Resolve the ``@handle``(s) in ``text`` that name a known component.
 
         Returns that component's ``list_components()`` node (with ``id``,
         ``label``, ``type``, ...), or ``None`` if there's no mention, no MCP
         access, or no mention matches a known component id — addressing is
         opt-in, so an unrecognized ``@handle`` is just left as plain text.
+
+        Raises:
+            ValueError: If the message addresses more than one distinct
+                component — a turn can only be scoped to one at a time.
         """
         if self._mcp is None:
             return None
-        handles = [match.group(1).lower() for match in _MENTION_RE.finditer(text)]
+        handles = {match.group(1).lower() for match in _MENTION_RE.finditer(text)}
         if not handles:
             return None
         by_id = {node["id"]: node for node in await self._list_components()}
-        for handle in handles:
-            if handle in by_id:
-                return by_id[handle]
-        return None
+        matched_ids = sorted(handles & by_id.keys())
+        if len(matched_ids) > 1:
+            mentions = ", ".join(f"@{component_id}" for component_id in matched_ids)
+            raise ValueError(
+                f"multiple components addressed in one message ({mentions}) — "
+                "address one component per message"
+            )
+        return by_id[matched_ids[0]] if matched_ids else None
 
     async def _list_components(self) -> list[dict]:
         """Fetch ``list_components()``'s nodes directly, for internal @-resolution."""

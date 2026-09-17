@@ -292,3 +292,38 @@ def test_mid_message_mention_resolves(monkeypatch):
     tool_names = {t["function"]["name"] for t in client.calls[0]["tools"]}
     assert "widget.status" in tool_names
     assert "query_repository" not in tool_names
+
+
+def test_repeated_mention_of_same_component_is_not_multiple(monkeypatch):
+    client = FakeAsyncClient([[make_chunk("ok")]])
+    fake_mcp = FakeMcp(tools=_SCOPED_TOOLS)
+    chat_engine = build_engine(monkeypatch, client, mcp=fake_mcp)
+
+    events = collect(
+        chat_engine, [{"role": "user", "content": "@widget, seriously, @widget, are you there?"}]
+    )
+
+    assert not any(e["type"] == "error" for e in events)
+    tool_names = {t["function"]["name"] for t in client.calls[0]["tools"]}
+    assert "widget.status" in tool_names
+
+
+def test_addressing_multiple_distinct_components_rejects_turn(monkeypatch):
+    client = FakeAsyncClient([[make_chunk("ok")]])
+    fake_mcp = FakeMcp(tools=_SCOPED_TOOLS)
+    chat_engine = build_engine(monkeypatch, client, mcp=fake_mcp)
+
+    events = collect(
+        chat_engine, [{"role": "user", "content": "@widget and @logs, compare your data"}]
+    )
+
+    assert events == [
+        {
+            "type": "error",
+            "message": (
+                "multiple components addressed in one message (@logs, @widget) — "
+                "address one component per message"
+            ),
+        }
+    ]
+    assert client.calls == []
