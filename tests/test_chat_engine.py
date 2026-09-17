@@ -39,22 +39,39 @@ class FakeAsyncClient:
         return gen()
 
 
+_DEFAULT_TOOLS = [
+    SimpleNamespace(
+        name="start_component",
+        description="Start a service",
+        inputSchema={"type": "object", "properties": {"name": {"type": "string"}}},
+    )
+]
+
+_DEFAULT_COMPONENTS = [
+    {"id": "widget", "label": "Widget", "type": "component"},
+    {"id": "logs", "label": "Logs", "type": "repository"},
+]
+
+
 class FakeMcp:
-    def __init__(self, tool_result: dict | None = None) -> None:
+    def __init__(
+        self,
+        tool_result: dict | None = None,
+        tools: list[SimpleNamespace] | None = None,
+        components: list[dict] | None = None,
+    ) -> None:
         self.calls: list[tuple[str, dict]] = []
         self._tool_result = tool_result or {"result": "ok"}
+        self._tools = tools if tools is not None else _DEFAULT_TOOLS
+        self._components = components if components is not None else _DEFAULT_COMPONENTS
 
     async def list_tools(self):
-        return [
-            SimpleNamespace(
-                name="start_component",
-                description="Start a service",
-                inputSchema={"type": "object", "properties": {"name": {"type": "string"}}},
-            )
-        ]
+        return self._tools
 
     async def call_tool(self, name, arguments):
         self.calls.append((name, arguments))
+        if name == "list_components":
+            return self._components
         return self._tool_result
 
 
@@ -141,3 +158,137 @@ def test_stream_without_mcp_reports_tools_unavailable(monkeypatch):
 
     tool_result = next(e for e in events if e["type"] == "tool_result")
     assert "no tools available" in tool_result["result"]
+
+
+_SCOPED_TOOLS = [
+    SimpleNamespace(
+        name="query_repository",
+        description="Query a repository",
+        inputSchema={"type": "object", "properties": {}},
+    ),
+    SimpleNamespace(
+        name="start_component",
+        description="Start a service",
+        inputSchema={"type": "object", "properties": {"name": {"type": "string"}}},
+    ),
+    SimpleNamespace(
+        name="stop_component",
+        description="Stop a service",
+        inputSchema={"type": "object", "properties": {"name": {"type": "string"}}},
+    ),
+    SimpleNamespace(
+        name="execute_task",
+        description="Execute a task",
+        inputSchema={"type": "object", "properties": {"name": {"type": "string"}}},
+    ),
+    SimpleNamespace(
+        name="component_logs",
+        description="Read logs",
+        inputSchema={"type": "object", "properties": {"name": {"type": "string"}}},
+    ),
+    SimpleNamespace(
+        name="widget.status",
+        description="Widget's own status tool",
+        inputSchema={"type": "object", "properties": {}},
+    ),
+]
+
+
+def test_addressing_component_scopes_tool_specs(monkeypatch):
+    client = FakeAsyncClient([[make_chunk("ok")]])
+    fake_mcp = FakeMcp(tools=_SCOPED_TOOLS)
+    chat_engine = build_engine(monkeypatch, client, mcp=fake_mcp)
+
+    collect(chat_engine, [{"role": "user", "content": "@widget what's your status?"}])
+
+    tool_names = {t["function"]["name"] for t in client.calls[0]["tools"]}
+    assert tool_names == {
+        "widget.status",
+        "start_component",
+        "stop_component",
+        "execute_task",
+        "component_logs",
+    }
+
+
+def test_addressing_repository_includes_query_repository_and_forces_repo_id(monkeypatch):
+    tool_call = make_tool_call("query_repository", {"repo_id": "other", "limit": 10})
+    client = FakeAsyncClient(
+        [
+            [make_chunk("", tool_calls=[tool_call])],
+            [make_chunk("done")],
+        ]
+    )
+    fake_mcp = FakeMcp(tools=_SCOPED_TOOLS, tool_result={"records": [], "total": 0})
+    chat_engine = build_engine(monkeypatch, client, mcp=fake_mcp)
+
+    collect(chat_engine, [{"role": "user", "content": "@logs how many rows?"}])
+
+    tool_names = {t["function"]["name"] for t in client.calls[0]["tools"]}
+    assert "query_repository" in tool_names
+    forced_call = next(c for c in fake_mcp.calls if c[0] == "query_repository")
+    assert forced_call == ("query_repository", {"repo_id": "logs", "limit": 10})
+
+
+def test_addressing_forces_lifecycle_tool_name_to_addressed_label(monkeypatch):
+    tool_call = make_tool_call("start_component", {"name": "SomethingElse"})
+    client = FakeAsyncClient(
+        [
+            [make_chunk("", tool_calls=[tool_call])],
+            [make_chunk("done")],
+        ]
+    )
+    fake_mcp = FakeMcp(tools=_SCOPED_TOOLS, tool_result={"result": "Widget started"})
+    chat_engine = build_engine(monkeypatch, client, mcp=fake_mcp)
+
+    collect(chat_engine, [{"role": "user", "content": "@widget please start"}])
+
+    forced_call = next(c for c in fake_mcp.calls if c[0] == "start_component")
+    assert forced_call == ("start_component", {"name": "Widget"})
+
+
+def test_addressing_rejects_tool_outside_scope(monkeypatch):
+    tool_call = make_tool_call("other.thing", {})
+    client = FakeAsyncClient(
+        [
+            [make_chunk("", tool_calls=[tool_call])],
+            [make_chunk("done")],
+        ]
+    )
+    tools = [
+        *_SCOPED_TOOLS,
+        SimpleNamespace(
+            name="other.thing", description="", inputSchema={"type": "object", "properties": {}}
+        ),
+    ]
+    fake_mcp = FakeMcp(tools=tools)
+    chat_engine = build_engine(monkeypatch, client, mcp=fake_mcp)
+
+    events = collect(chat_engine, [{"role": "user", "content": "@widget do the other thing"}])
+
+    tool_result = next(e for e in events if e["type"] == "tool_result")
+    assert "not available while addressing" in tool_result["result"]
+    assert not any(call[0] == "other.thing" for call in fake_mcp.calls)
+
+
+def test_unknown_mention_falls_back_to_full_tool_set(monkeypatch):
+    client = FakeAsyncClient([[make_chunk("ok")]])
+    fake_mcp = FakeMcp(tools=_SCOPED_TOOLS)
+    chat_engine = build_engine(monkeypatch, client, mcp=fake_mcp)
+
+    collect(chat_engine, [{"role": "user", "content": "@nonexistent what now?"}])
+
+    tool_names = {t["function"]["name"] for t in client.calls[0]["tools"]}
+    assert tool_names == {tool.name for tool in _SCOPED_TOOLS}
+
+
+def test_mid_message_mention_resolves(monkeypatch):
+    client = FakeAsyncClient([[make_chunk("ok")]])
+    fake_mcp = FakeMcp(tools=_SCOPED_TOOLS)
+    chat_engine = build_engine(monkeypatch, client, mcp=fake_mcp)
+
+    collect(chat_engine, [{"role": "user", "content": "can you ask @widget about its state"}])
+
+    tool_names = {t["function"]["name"] for t in client.calls[0]["tools"]}
+    assert "widget.status" in tool_names
+    assert "query_repository" not in tool_names

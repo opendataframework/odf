@@ -276,10 +276,15 @@ canvas{display:block;cursor:grab}
 .chat-msg.assistant{align-self:flex-start;background:var(--hover-bg);border:1px solid var(--border);color:var(--text)}
 .chat-msg.tool{align-self:flex-start;background:transparent;border:1px dashed var(--border-strong);color:var(--text-dim);font-size:10.5px}
 .chat-msg.error{align-self:flex-start;background:color-mix(in srgb, var(--accent-alert) 14%, transparent);border:1px solid var(--accent-alert);color:var(--accent-alert)}
-#chat-footer{display:flex;gap:8px;padding:12px 16px;border-top:1px solid var(--border);flex-shrink:0}
+#chat-footer{display:flex;gap:8px;padding:12px 16px;border-top:1px solid var(--border);flex-shrink:0;position:relative}
 #chat-input{flex:1;resize:none;height:38px;background:var(--hover-bg);border:1px solid var(--border-strong);color:var(--text);font-family:inherit;font-size:11.5px;padding:8px 10px;border-radius:2px}
 #chat-input:focus{outline:none;border-color:var(--title-accent)}
 #chat-send{flex-shrink:0}
+.mention-menu{position:absolute;left:16px;right:16px;bottom:100%;margin-bottom:6px;max-height:160px;overflow-y:auto;background:var(--panel);border:1px solid var(--border-strong);border-radius:2px;box-shadow:0 -4px 16px rgba(0,0,0,.3);z-index:10}
+.mention-menu[hidden]{display:none}
+.mention-item{display:flex;justify-content:space-between;gap:8px;padding:6px 10px;font-family:'SF Mono',Consolas,monospace;font-size:11px;cursor:pointer;color:var(--text)}
+.mention-item:hover,.mention-item.active{background:var(--hover-bg);color:var(--title-accent)}
+.mention-label{color:var(--text-dim);font-size:10px}
 
 .data-btn{background:transparent;border:1px solid var(--border);color:var(--text-muted);font-family:'SF Mono',Consolas,monospace;font-size:10px;font-weight:600;letter-spacing:.03em;padding:3px 8px;border-radius:2px;cursor:pointer;margin-left:4px;transition:background .12s,color .12s,border-color .12s}
 .data-btn:first-child{margin-left:0}
@@ -501,7 +506,8 @@ canvas{display:block;cursor:grab}
       </div>
       <div id="chat-messages"></div>
       <div id="chat-footer">
-        <textarea id="chat-input" placeholder="Ask about this project…"></textarea>
+        <div id="chat-mention-menu" class="mention-menu" hidden></div>
+        <textarea id="chat-input" placeholder="Ask about this project… (@ to address a component)"></textarea>
         <button id="chat-send" class="data-btn primary">Send</button>
       </div>
     </div>
@@ -2452,8 +2458,110 @@ async function sendChatMessage() {
   }
 }
 
+// ── Chat @mention autocomplete ──────────────────────────────────────────
+// Suggests component ids from the topology (`nodes`/`nodeMap`, already
+// fetched for the graph view) while typing an `@handle` in chat-input.
+
+let mentionMatches = [];
+let mentionActive = -1;
+let mentionStart = -1;
+
+function currentMentionQuery(input) {
+  const upToCaret = input.value.slice(0, input.selectionStart);
+  const match = upToCaret.match(/(?:^|\s)@([A-Za-z0-9-]*)$/);
+  if (!match) return null;
+  return { query: match[1].toLowerCase(), start: input.selectionStart - match[1].length - 1 };
+}
+
+function updateMentionActive() {
+  const menu = document.getElementById('chat-mention-menu');
+  [...menu.children].forEach((el, i) => el.classList.toggle('active', i === mentionActive));
+}
+
+function renderMentionMenu(query) {
+  const menu = document.getElementById('chat-mention-menu');
+  mentionMatches = nodes
+    .filter(n => n.id.startsWith(query) || n.label.toLowerCase().startsWith(query))
+    .slice(0, 8);
+  if (!mentionMatches.length) {
+    menu.hidden = true;
+    mentionActive = -1;
+    return;
+  }
+  mentionActive = 0;
+  menu.innerHTML = mentionMatches
+    .map(n => `<div class="mention-item" data-id="${n.id}"><span>@${n.id}</span><span class="mention-label">${n.label}</span></div>`)
+    .join('');
+  menu.hidden = false;
+  updateMentionActive();
+}
+
+function hideMentionMenu() {
+  document.getElementById('chat-mention-menu').hidden = true;
+  mentionMatches = [];
+  mentionActive = -1;
+  mentionStart = -1;
+}
+
+function applyMention(input, id) {
+  const value = input.value;
+  const caret = input.selectionStart;
+  const before = value.slice(0, mentionStart);
+  const after = value.slice(caret);
+  const replacement = `@${id} `;
+  input.value = before + replacement + after;
+  const cursor = before.length + replacement.length;
+  input.setSelectionRange(cursor, cursor);
+  hideMentionMenu();
+  input.focus();
+}
+
+document.getElementById('chat-mention-menu').addEventListener('mousedown', e => {
+  const item = e.target.closest('.mention-item');
+  if (!item) return;
+  e.preventDefault();
+  applyMention(document.getElementById('chat-input'), item.dataset.id);
+});
+
+document.getElementById('chat-input').addEventListener('input', e => {
+  const mention = currentMentionQuery(e.target);
+  if (!mention) { hideMentionMenu(); return; }
+  mentionStart = mention.start;
+  renderMentionMenu(mention.query);
+});
+
+document.getElementById('chat-input').addEventListener('blur', () => {
+  // Delay so a mousedown selection on the menu registers before it's hidden.
+  setTimeout(hideMentionMenu, 150);
+});
+
 document.getElementById('chat-send').addEventListener('click', sendChatMessage);
 document.getElementById('chat-input').addEventListener('keydown', e => {
+  const menuOpen = !document.getElementById('chat-mention-menu').hidden && mentionMatches.length;
+  if (menuOpen) {
+    if (e.key === 'ArrowDown') {
+      e.preventDefault();
+      mentionActive = (mentionActive + 1) % mentionMatches.length;
+      updateMentionActive();
+      return;
+    }
+    if (e.key === 'ArrowUp') {
+      e.preventDefault();
+      mentionActive = (mentionActive - 1 + mentionMatches.length) % mentionMatches.length;
+      updateMentionActive();
+      return;
+    }
+    if (e.key === 'Enter' || e.key === 'Tab') {
+      e.preventDefault();
+      applyMention(e.target, mentionMatches[mentionActive].id);
+      return;
+    }
+    if (e.key === 'Escape') {
+      e.preventDefault();
+      hideMentionMenu();
+      return;
+    }
+  }
   if (e.key === 'Enter' && !e.shiftKey) {
     e.preventDefault();
     sendChatMessage();

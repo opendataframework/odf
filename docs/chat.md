@@ -60,6 +60,25 @@ the model requests a tool call, the chat window shows what was called and
 its result inline, then feeds the result back to the model for a
 follow-up reply.
 
+## Addressing a component with `@`
+
+Mentioning `@component-id` anywhere in a message scopes that turn's tool
+access to just that component — its own exposed tools, its own
+repository data (if it's a `Repository`), and its own lifecycle actions
+(`start_component`/`stop_component`/`execute_task`/`component_logs`,
+forced to that component regardless of what the model passes) — instead
+of offering every tool in the project. This is useful once a project has
+several repositories/services: instead of the model guessing which
+`repo_id` a data question is about, `@postgres how many rows are in the
+users table` scopes `query_repository` to just `postgres`'s data.
+
+The id is the same kebab-case id used by the topology graph and by
+component-exposed tool namespacing (e.g. a `MetricsFetcher` component is
+addressed as `@metrics-fetcher`); the chat input autocompletes it as you
+type `@`. An `@handle` that doesn't match any resolved component's id is
+just left as plain text — the turn falls back to the full, unscoped tool
+set.
+
 ## Prerequisites
 
 1. Install and run [Ollama](https://ollama.com) locally: `ollama serve`.

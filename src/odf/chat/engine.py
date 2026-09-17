@@ -5,6 +5,7 @@ owned by ``Server.start(chat=True)`` and handed to ``UiServer`` to serve.
 """
 
 import json
+import re
 from collections.abc import AsyncIterator
 from typing import TYPE_CHECKING, Any
 
@@ -19,6 +20,17 @@ if TYPE_CHECKING:
     from mcp.server.fastmcp import FastMCP
 
 _MAX_TOOL_ROUNDTRIPS = 6
+
+# Matches an `@handle` mention anywhere in a message, as long as the `@` is
+# preceded by whitespace or the start of the string (so `user@example.com`
+# doesn't get mistaken for one).
+_MENTION_RE = re.compile(r"(?:^|\s)@([A-Za-z][A-Za-z0-9-]*)")
+
+# Fixed lifecycle tools that stay available, scoped to just the addressed
+# component, when a message addresses one (see `_tool_allowed`).
+_LIFECYCLE_TOOLS = frozenset(
+    {"start_component", "stop_component", "execute_task", "component_logs"}
+)
 
 
 class ChatEngine:
@@ -46,9 +58,16 @@ class ChatEngine:
         (about to invoke an MCP tool), ``tool_result`` (its outcome), and
         ``error`` (the turn failed or was cut short) — the caller (an HTTP
         route) just forwards each event to the client, it never raises.
+
+        If the latest user message addresses a component with ``@id``
+        (e.g. ``"@postgres how many rows..."``), the turn's tool access is
+        scoped to just that component for its whole tool-call loop — see
+        ``_resolve_addressed``/``_tool_allowed``.
         """
         try:
-            tools = await self._tool_specs()
+            last_content = messages[-1].get("content", "") if messages else ""
+            addressed = await self._resolve_addressed(last_content)
+            tools = await self._tool_specs(addressed)
             history = list(messages)
             for _ in range(_MAX_TOOL_ROUNDTRIPS):
                 content = ""
@@ -69,17 +88,55 @@ class ChatEngine:
                     name = call.function.name
                     arguments = call.function.arguments or {}
                     yield {"type": "tool_call", "name": name, "arguments": arguments}
-                    result = await self._call_tool(name, arguments)
+                    result = await self._call_tool(name, arguments, addressed)
                     yield {"type": "tool_result", "name": name, "result": result}
                     history.append({"role": "tool", "content": result})
             yield {"type": "error", "message": "tool-call limit reached"}
         except Exception as exc:
             yield {"type": "error", "message": str(exc)}
 
-    async def _tool_specs(self) -> list[dict] | None:
+    async def _resolve_addressed(self, text: str) -> dict | None:
+        """Resolve the first ``@handle`` in ``text`` that names a known component.
+
+        Returns that component's ``list_components()`` node (with ``id``,
+        ``label``, ``type``, ...), or ``None`` if there's no mention, no MCP
+        access, or no mention matches a known component id — addressing is
+        opt-in, so an unrecognized ``@handle`` is just left as plain text.
+        """
+        if self._mcp is None:
+            return None
+        handles = [match.group(1).lower() for match in _MENTION_RE.finditer(text)]
+        if not handles:
+            return None
+        by_id = {node["id"]: node for node in await self._list_components()}
+        for handle in handles:
+            if handle in by_id:
+                return by_id[handle]
+        return None
+
+    async def _list_components(self) -> list[dict]:
+        """Fetch ``list_components()``'s nodes directly, for internal @-resolution."""
+        result = await self._mcp.call_tool("list_components", {})
+        structured = result[1] if isinstance(result, tuple) else result
+        if isinstance(structured, dict):
+            structured = structured.get("result", [])
+        return structured if isinstance(structured, list) else []
+
+    @staticmethod
+    def _tool_allowed(name: str, addressed: dict) -> bool:
+        """Whether ``name`` may be offered/called while a turn addresses ``addressed``."""
+        if name.startswith(f"{addressed['id']}."):
+            return True
+        if name == "query_repository":
+            return addressed.get("type") == "repository"
+        return name in _LIFECYCLE_TOOLS
+
+    async def _tool_specs(self, addressed: dict | None) -> list[dict] | None:
         if self._mcp is None:
             return None
         tools = await self._mcp.list_tools()
+        if addressed is not None:
+            tools = [tool for tool in tools if self._tool_allowed(tool.name, addressed)]
         return [
             {
                 "type": "function",
@@ -92,9 +149,16 @@ class ChatEngine:
             for tool in tools
         ]
 
-    async def _call_tool(self, name: str, arguments: dict) -> str:
+    async def _call_tool(self, name: str, arguments: dict, addressed: dict | None) -> str:
         if self._mcp is None:
             return "error: no tools available (mcp=True was not passed to Project.start())"
+        if addressed is not None:
+            if not self._tool_allowed(name, addressed):
+                return f"error: tool {name!r} is not available while addressing {addressed['id']!r}"
+            if name == "query_repository":
+                arguments = {**arguments, "repo_id": addressed["id"]}
+            elif name in _LIFECYCLE_TOOLS:
+                arguments = {**arguments, "name": addressed["label"]}
         try:
             result = await self._mcp.call_tool(name, arguments)
         except Exception as exc:
