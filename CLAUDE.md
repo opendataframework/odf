@@ -113,7 +113,9 @@ bundling that content here — each package's docs redeploy independently,
 on its own push, with no cross-repo CI needed. Changing this package's CLI
 flags, MCP tool surface, or UI behavior should come with a matching update
 to the relevant page here in the same change, since there's no separate
-docs repo to flag it to anymore.
+docs repo to flag it to anymore. User-visible changes also get an entry in
+`docs/release-notes.md` under the in-progress version (one entry per feature,
+not per commit; format mirrors `opendataframework`'s release notes).
 
 ## Examples
 
