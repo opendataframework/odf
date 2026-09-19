@@ -1,2 +1,6 @@
 [project]
 name = "custom-mcp-tool-example"
+
+[project.chat]
+model = "gpt-oss:20b"
+ollama-host = "http://localhost:11434"
