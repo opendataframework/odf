@@ -35,7 +35,7 @@ poetry run odf run
 ```
 
 Requires Python >=3.14, managed with Poetry. `pyproject.toml` depends on
-`opendataframework (>=0.1.0,<0.2.0)` by version — **`poetry install` will
+`opendataframework (>=0.2.0,<0.3.0)` by version — **`poetry install` will
 not resolve until `opendataframework` is published somewhere reachable**
 (PyPI or a private/local index), or the dependency is temporarily
 overridden to a local path/git source while developing both repos side
