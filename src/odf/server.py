@@ -224,6 +224,7 @@ class Server:
                     model=chat_cfg.get("model", "gpt-oss"),
                     host=chat_cfg.get("ollama-host", "http://localhost:11434"),
                     mcp=self._mcp_server.mcp if self._mcp_server is not None else None,
+                    debug=chat_cfg.get("debug", False),
                 )
             ui_cfg = self.config.get("ui", {})
             icon_scripts = extensions.icon_scripts() + [

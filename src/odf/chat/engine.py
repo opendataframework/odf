@@ -44,12 +44,19 @@ class ChatEngine:
             the same tools exposed over MCP's streamable HTTP transport.
             ``None`` disables tool-calling; the model still answers, it
             just can't act on the project.
+        debug: Whether to yield ``tool_call``/``tool_result`` events so
+            the chat window shows them inline. Tool calls are always
+            executed and fed back to the model either way; this only
+            controls whether that exchange is surfaced to the client.
     """
 
-    def __init__(self, model: str, host: str, mcp: FastMCP | None = None) -> None:
+    def __init__(
+        self, model: str, host: str, mcp: FastMCP | None = None, debug: bool = False
+    ) -> None:
         self.model = model
         self._client = AsyncClient(host=host)
         self._mcp = mcp
+        self._debug = debug
 
     async def stream(self, messages: list[dict]) -> AsyncIterator[dict]:
         """Yield ``{"type": ..., ...}`` events for one chat turn.
@@ -58,6 +65,9 @@ class ChatEngine:
         (about to invoke an MCP tool), ``tool_result`` (its outcome), and
         ``error`` (the turn failed or was cut short) — the caller (an HTTP
         route) just forwards each event to the client, it never raises.
+        ``tool_call``/``tool_result`` are only yielded when ``debug=True``
+        was passed to the constructor; the tool call itself still always
+        executes and its result is always fed back to the model.
 
         If the latest user message addresses a component with ``@id``
         (e.g. ``"@postgres how many rows..."``), the turn's tool access is
@@ -89,9 +99,11 @@ class ChatEngine:
                 for call in tool_calls:
                     name = call.function.name
                     arguments = call.function.arguments or {}
-                    yield {"type": "tool_call", "name": name, "arguments": arguments}
+                    if self._debug:
+                        yield {"type": "tool_call", "name": name, "arguments": arguments}
                     result = await self._call_tool(name, arguments, addressed)
-                    yield {"type": "tool_result", "name": name, "result": result}
+                    if self._debug:
+                        yield {"type": "tool_result", "name": name, "result": result}
                     history.append({"role": "tool", "content": result})
             yield {"type": "error", "message": "tool-call limit reached"}
         except Exception as exc:

@@ -75,9 +75,9 @@ class FakeMcp:
         return self._tool_result
 
 
-def build_engine(monkeypatch, client: FakeAsyncClient, mcp=None) -> ChatEngine:
+def build_engine(monkeypatch, client: FakeAsyncClient, mcp=None, debug: bool = False) -> ChatEngine:
     monkeypatch.setattr(engine_module, "AsyncClient", lambda host: client)
-    return ChatEngine(model="test-model", host="http://fake", mcp=mcp)
+    return ChatEngine(model="test-model", host="http://fake", mcp=mcp, debug=debug)
 
 
 def test_stream_yields_tokens_for_plain_reply(monkeypatch):
@@ -102,7 +102,7 @@ def test_stream_executes_tool_call_and_feeds_result_back(monkeypatch):
         ]
     )
     fake_mcp = FakeMcp(tool_result={"result": "Postgres started"})
-    chat_engine = build_engine(monkeypatch, client, mcp=fake_mcp)
+    chat_engine = build_engine(monkeypatch, client, mcp=fake_mcp, debug=True)
 
     events = collect(chat_engine, [{"role": "user", "content": "start postgres"}])
 
@@ -117,6 +117,25 @@ def test_stream_executes_tool_call_and_feeds_result_back(monkeypatch):
     ]
     assert fake_mcp.calls == [("start_component", {"name": "Postgres"})]
     # The follow-up call's tools list reflects list_tools(), same as the first.
+    assert client.calls[1]["tools"][0]["function"]["name"] == "start_component"
+
+
+def test_stream_suppresses_tool_events_by_default(monkeypatch):
+    tool_call = make_tool_call("start_component", {"name": "Postgres"})
+    client = FakeAsyncClient(
+        [
+            [make_chunk("", tool_calls=[tool_call])],
+            [make_chunk("Started it.")],
+        ]
+    )
+    fake_mcp = FakeMcp(tool_result={"result": "Postgres started"})
+    chat_engine = build_engine(monkeypatch, client, mcp=fake_mcp)
+
+    events = collect(chat_engine, [{"role": "user", "content": "start postgres"}])
+
+    assert events == [{"type": "token", "content": "Started it."}]
+    # The tool still actually ran and its result still fed the follow-up turn.
+    assert fake_mcp.calls == [("start_component", {"name": "Postgres"})]
     assert client.calls[1]["tools"][0]["function"]["name"] == "start_component"
 
 
@@ -152,7 +171,7 @@ def test_stream_without_mcp_reports_tools_unavailable(monkeypatch):
             [make_chunk("Can't do that.")],
         ]
     )
-    chat_engine = build_engine(monkeypatch, client, mcp=None)
+    chat_engine = build_engine(monkeypatch, client, mcp=None, debug=True)
 
     events = collect(chat_engine, [{"role": "user", "content": "start postgres"}])
 
@@ -262,7 +281,7 @@ def test_addressing_rejects_tool_outside_scope(monkeypatch):
         ),
     ]
     fake_mcp = FakeMcp(tools=tools)
-    chat_engine = build_engine(monkeypatch, client, mcp=fake_mcp)
+    chat_engine = build_engine(monkeypatch, client, mcp=fake_mcp, debug=True)
 
     events = collect(chat_engine, [{"role": "user", "content": "@widget do the other thing"}])
 

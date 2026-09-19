@@ -38,12 +38,14 @@ per-environment values that belong in `config.toml`:
 [project.chat]
 model = "gpt-oss:20b"
 ollama-host = "http://localhost:11434"
+debug = false
 ```
 
 | Key | Default | Description |
 |---|---|---|
 | `model` | `"gpt-oss"` | Ollama model name. Must already be pulled (`ollama pull gpt-oss:20b`). |
 | `ollama-host` | `"http://localhost:11434"` | URL of the running Ollama daemon (`ollama serve`). |
+| `debug` | `false` | Show tool-call/tool-result debug info inline in the chat window. |
 
 ## How tool-calling works
 
@@ -56,9 +58,10 @@ current tool list — the six fixed tools (`list_components`,
 `component_logs`) plus, for every resolved component that exposes its own
 MCP tools (namespaced `<component>.<tool>`), that component's own tools;
 these are dynamic per project, so they aren't enumerated here by name. If
-the model requests a tool call, the chat window shows what was called and
-its result inline, then feeds the result back to the model for a
-follow-up reply.
+the model requests a tool call, it's always executed and its result fed
+back to the model for a follow-up reply; the chat window additionally
+shows what was called and its result inline only when `[project.chat]`'s
+`debug` is `true`.
 
 ## Addressing a component with `@`
 
