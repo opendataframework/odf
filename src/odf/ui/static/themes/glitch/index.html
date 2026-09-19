@@ -4209,8 +4209,6 @@ async function init() {
   }
   for (const [id, pos] of Object.entries(layoutOverrides)) {
     if (!nodeMap[id]) continue;
-    nodeMap[id].col = pos.col;
-    nodeMap[id].row = pos.row;
     if (pos.icon) nodeMap[id].icon = pos.icon;
     if (pos.color) nodeMap[id].color = pos.color;
   }

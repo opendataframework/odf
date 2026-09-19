@@ -52,6 +52,49 @@ def test_topology_endpoint_returns_resolved_graph():
     assert any(n["label"] == "Thing" for n in body["nodes"])
 
 
+def test_topology_endpoint_applies_the_configured_view():
+    from odf.ui.topology import TopologyView
+
+    NS = make_ns()
+
+    @NS
+    @Component
+    class Plumbing: ...
+
+    @NS
+    @Component
+    class Front:
+        def __init__(self, plumbing: Plumbing) -> None: ...
+
+    view = TopologyView.from_config({"components": ["Front"], "connections": False})
+    with Context(namespaces={NS}) as ctx:
+        client = TestClient(UiServer(ctx, "proj", topology=view)._app)
+        body = client.get("/api/topology").json()
+
+    assert [n["id"] for n in body["nodes"]] == ["front"]
+    assert body["edges"] == []
+
+
+def test_topology_endpoint_moves_nodes_off_saved_cells(tmp_path):
+    NS = make_ns()
+
+    @NS
+    @Component
+    class Aaa: ...
+
+    @NS
+    @Component
+    class Bbb: ...
+
+    layout_file = tmp_path / "layout.json"
+    layout_file.write_text(json.dumps({"bbb": {"col": 0, "row": 0}, "_grid": {"nw": 1}}))
+    with Context(namespaces={NS}) as ctx:
+        client = TestClient(UiServer(ctx, "proj", layout_file=layout_file)._app)
+        nodes = client.get("/api/topology").json()["nodes"]
+
+    assert {n["id"]: (n["col"], n["row"]) for n in nodes} == {"bbb": (0, 0), "aaa": (0, 1)}
+
+
 def test_url_reflects_host_and_port():
     with Context(namespaces=set()) as ctx:
         server = UiServer(ctx, "proj", host="127.0.0.1", port=9999)
@@ -802,6 +845,15 @@ def test_every_theme_has_the_collapsible_sidebar_rail(theme):
 
     assert 'id="sb-rail"' in html
     assert "odf-ui-sidebar" in html
+
+
+@pytest.mark.parametrize("theme", themes.list_themes())
+def test_every_theme_takes_node_cells_from_the_topology_payload(theme):
+    html = (themes.theme_dir(theme) / "index.html").read_text()
+
+    assert "nodeMap[id].col = pos.col" not in html
+    assert "nodeMap[id].row = pos.row" not in html
+    assert "nodeMap[id].icon = pos.icon" in html
 
 
 def test_theme_dir_resolves_the_default_theme():

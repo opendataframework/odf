@@ -3,3 +3,7 @@ name = "data-engineering-example"
 
 [sqlite]
 path = "app.db"
+
+[ui.topology]
+config = false      # no Config node
+components = []     # no plain components (SQLite)

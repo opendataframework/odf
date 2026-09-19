@@ -1,3 +1,4 @@
+import json
 import os
 import signal
 import sys
@@ -39,6 +40,45 @@ def test_start_ui_true_serves_topology_over_http():
                 time.sleep(0.1)
         else:
             raise AssertionError(f"UI server never became ready: {last_err}")
+    finally:
+        server.stop()
+
+
+def test_start_ui_applies_ui_topology_config():
+    server = Server.from_dict({"ui": {"topology": {"config": False, "connections": False}}})
+    server.start(ui=True, ui_port=18770, app_module=None)
+    try:
+        last_err = None
+        for _ in range(50):
+            try:
+                with urllib.request.urlopen(f"{server.ui_url}/api/topology", timeout=1) as res:
+                    body = json.load(res)
+                    break
+            except OSError as e:
+                last_err = e
+                time.sleep(0.1)
+        else:
+            raise AssertionError(f"UI server never became ready: {last_err}")
+        assert not any(n["type"] == "config" for n in body["nodes"])
+        assert body["edges"] == []
+    finally:
+        server.stop()
+
+
+def test_start_ui_rejects_invalid_ui_topology_config():
+    server = Server.from_dict({"ui": {"topology": {"task": []}}})
+    try:
+        with pytest.raises(ValueError, match="Unknown"):
+            server.start(ui=True, ui_port=18771, app_module=None)
+    finally:
+        server.stop()
+
+
+def test_start_ui_warns_about_topology_names_matching_no_component():
+    server = Server.from_dict({"ui": {"topology": {"tasks": ["nothing-here"]}}})
+    try:
+        with pytest.warns(UserWarning, match="nothing-here"):
+            server.start(ui=True, ui_port=18772, app_module=None)
     finally:
         server.stop()
 

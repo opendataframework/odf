@@ -128,7 +128,13 @@ class Server:
                 (path to an image file, swapped in for the built-in CSS mark).
                 ``[ui] brand`` replaces the "ODF" label shown next to the
                 logo and in the browser tab title, for projects that want
-                their own name instead of the framework's.
+                their own name instead of the framework's. ``[ui.topology]``
+                limits what the topology shows: ``connections = false`` hides
+                the links between components, ``config = false`` hides the
+                ``Config`` node, and ``repositories``/``services``/``tasks``/
+                ``pipelines``/``components`` list the only components of that
+                kind to show (a kind without a list shows all of its
+                components).
             ui_host: Interface for the UI server to bind to.
             ui_port: Port for the UI server to bind to.
             theme: Which UI theme (visual/layout file-set) to serve —
@@ -166,9 +172,10 @@ class Server:
 
         Raises:
             ValueError: If a circular dependency is detected, if
-                ``chat=True`` is passed without ``ui=True``, or if
+                ``chat=True`` is passed without ``ui=True``, if
                 ``theme``/``[ui] theme`` names a UI theme that doesn't
-                exist.
+                exist, or if ``[ui.topology]`` has an unknown key or a value
+                of the wrong type.
             ImportError: If ``ui=True``/``mcp=True``/``chat=True`` but the
                 corresponding extra is not installed.
 
@@ -214,6 +221,7 @@ class Server:
         if ui:
             from odf.ui import extensions
             from odf.ui.server import UiServer
+            from odf.ui.topology import TopologyView
 
             chat_engine = None
             if chat:
@@ -234,6 +242,12 @@ class Server:
             favicon = ui_cfg.get("favicon")
             logo = ui_cfg.get("logo")
             resolved_theme = theme if theme is not None else ui_cfg.get("theme", "default")
+            topology = TopologyView.from_config(ui_cfg.get("topology", {}))
+            for key, name in topology.unmatched(self.context):
+                warnings.warn(
+                    f"[ui.topology] {key} lists {name!r}, which matches no component.",
+                    stacklevel=2,
+                )
             self._ui_server = UiServer(
                 self.context,
                 self._display_name(),
@@ -247,6 +261,7 @@ class Server:
                 logo=Path(logo) if logo else None,
                 brand=ui_cfg.get("brand"),
                 theme=resolved_theme,
+                topology=topology,
             )
             self._ui_server.start()
         self._running = True
