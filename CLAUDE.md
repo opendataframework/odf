@@ -85,6 +85,12 @@ are scaffolded onto disk by `scaffold.py` via
 template's `app/*.py` imports core symbols from `opendataframework`, not
 `odf`. When adding a new template, follow that same import convention.
 
+## Commit messages
+
+Follow `CONTRIBUTING.md`. In particular, never add Claude or other model
+references (no "Generated with …" line, no `Co-Authored-By` trailer) or
+external links to commit messages.
+
 ## Relationship to `opendataframework`
 
 - **`opendataframework`** (sibling repo, dependency) — the core framework.
