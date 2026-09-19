@@ -139,7 +139,23 @@ body{
 
 #body{display:flex;flex:1;min-height:0;gap:8px}
 
-#sidebar{width:272px;flex-shrink:0;display:flex;flex-direction:column;overflow-y:auto}
+/* Sidebar: an always-visible icon rail (#sb-rail, one .sb-tab per SIDEBAR_TABS
+   entry + a collapse chevron) beside the active tab's panel (#sb-panels).
+   .collapsed hides only the panel, so the rail stays as the way back in. */
+#sidebar{width:312px;flex-shrink:0;display:flex;flex-direction:row;overflow:hidden}
+#sidebar.collapsed{width:auto}
+#sb-rail{width:40px;flex-shrink:0;display:flex;flex-direction:column;align-items:center;gap:4px;padding:8px 0;border-right:1px solid var(--border)}
+#sidebar.collapsed #sb-rail{border-right:none}
+.sb-tab,#sb-collapse{width:28px;height:28px;padding:0;background:transparent;border:2px solid transparent;border-radius:0;color:var(--text-muted);cursor:pointer;display:flex;align-items:center;justify-content:center;transition:background .12s,color .12s,border-color .12s}
+.sb-tab:hover,#sb-collapse:hover{background:var(--hover-bg);color:var(--title-accent);border-color:var(--border-strong)}
+.sb-tab.active{color:var(--title-accent);border-color:var(--border-strong);background:var(--hover-bg)}
+.sb-tab svg,#sb-collapse svg{width:16px;height:16px;fill:none;stroke:currentColor;stroke-width:1.6;stroke-linecap:round;stroke-linejoin:round}
+#sb-collapse{margin-top:auto}
+#sidebar.collapsed #sb-collapse svg{transform:rotate(180deg)}
+#sb-panels{flex:1;min-width:0;overflow-y:auto;display:flex;flex-direction:column}
+#sidebar.collapsed #sb-panels{display:none}
+.sb-panel{display:none}
+.sb-panel.active{display:flex;flex-direction:column;flex:1;min-height:0}
 .sb-section{padding:14px 16px}
 .sb-section + .sb-section{border-top:1px solid var(--border)}
 .sb-heading{color:var(--text-dim);font-family:'Archivo Black','Arial Black',Inter,'Segoe UI',Roboto,-apple-system,BlinkMacSystemFont,Helvetica,Arial,sans-serif;font-size:9.5px;font-weight:600;letter-spacing:.1em;text-transform:uppercase;margin-bottom:11px;display:flex;align-items:center;justify-content:space-between}
@@ -429,9 +445,16 @@ canvas{display:block;cursor:grab}
 
 <div id="body">
   <div id="sidebar" class="panel">
-    <div class="sb-section" style="flex:1">
-      <div class="sb-heading">Objects <span class="count" id="node-count">00</span></div>
-      <div id="node-list"></div>
+    <div id="sb-rail" role="tablist" aria-orientation="vertical" aria-label="Sidebar">
+      <button id="sb-collapse" title="Collapse sidebar" aria-label="Collapse sidebar" aria-controls="sb-panels" aria-expanded="true"><svg viewBox="0 0 16 16"><path d="M10 3 5 8l5 5"/></svg></button>
+    </div>
+    <div id="sb-panels">
+      <div class="sb-panel active" id="sb-panel-objects" data-panel="objects" role="tabpanel">
+        <div class="sb-section" style="flex:1">
+          <div class="sb-heading">Objects <span class="count" id="node-count">00</span></div>
+          <div id="node-list"></div>
+        </div>
+      </div>
     </div>
   </div>
 
@@ -2282,6 +2305,93 @@ async function executeNode(id) {
   if (btn) btn.disabled = false;
 }
 
+// ── Sidebar tabs ───────────────────────────────────────────────────────────
+// The sidebar is an icon rail plus the active tab's panel. Adding a tab is one
+// SIDEBAR_TABS entry here plus one matching .sb-panel[data-panel] in the
+// markup. Collapsing hides the panel but leaves the rail, so it can reopen.
+// Like the layer-group collapse state, this is a per-browser view preference,
+// so it lives in localStorage rather than /api/layout.
+
+const SIDEBAR_TABS = [
+  { id: 'objects', label: 'Objects',
+    icon: '<svg viewBox="0 0 16 16"><path d="M6 4h7M6 8h7M6 12h7"/><path d="M3 4h.01M3 8h.01M3 12h.01"/></svg>' },
+];
+const SIDEBAR_KEY = 'odf-ui-sidebar';
+let sidebarState = { collapsed: false, tab: SIDEBAR_TABS[0].id };
+
+function loadSidebarState() {
+  try {
+    const s = JSON.parse(localStorage.getItem(SIDEBAR_KEY) || '{}');
+    if (typeof s.collapsed === 'boolean') sidebarState.collapsed = s.collapsed;
+    if (SIDEBAR_TABS.some(t => t.id === s.tab)) sidebarState.tab = s.tab;
+  } catch {}
+}
+
+function saveSidebarState() {
+  try { localStorage.setItem(SIDEBAR_KEY, JSON.stringify(sidebarState)); } catch {}
+}
+
+function applySidebarState() {
+  const { collapsed, tab } = sidebarState;
+  document.getElementById('sidebar').classList.toggle('collapsed', collapsed);
+  for (const btn of document.querySelectorAll('.sb-tab')) {
+    const on = btn.dataset.tab === tab;
+    btn.classList.toggle('active', on && !collapsed);
+    btn.setAttribute('aria-selected', String(on));
+    btn.setAttribute('aria-expanded', String(on && !collapsed));
+  }
+  for (const p of document.querySelectorAll('.sb-panel')) {
+    p.classList.toggle('active', p.dataset.panel === tab);
+  }
+  const c = document.getElementById('sb-collapse');
+  const label = collapsed ? 'Expand sidebar' : 'Collapse sidebar';
+  c.title = label;
+  c.setAttribute('aria-label', label);
+  c.setAttribute('aria-expanded', String(!collapsed));
+}
+
+function setSidebarState(patch) {
+  Object.assign(sidebarState, patch);
+  saveSidebarState();
+  applySidebarState();
+}
+
+function initSidebarTabs() {
+  loadSidebarState();
+  const rail = document.getElementById('sb-rail');
+  const collapseBtn = document.getElementById('sb-collapse');
+  for (const t of SIDEBAR_TABS) {
+    const btn = document.createElement('button');
+    btn.className   = 'sb-tab';
+    btn.dataset.tab = t.id;
+    btn.title       = t.label;
+    btn.setAttribute('role', 'tab');
+    btn.setAttribute('aria-label', t.label);
+    btn.setAttribute('aria-controls', `sb-panel-${t.id}`);
+    btn.innerHTML   = t.icon;
+    // The active tab's button toggles collapse; any other tab opens (and
+    // expands) its own panel.
+    btn.addEventListener('click', () => {
+      if (sidebarState.tab === t.id) setSidebarState({ collapsed: !sidebarState.collapsed });
+      else setSidebarState({ tab: t.id, collapsed: false });
+    });
+    rail.insertBefore(btn, collapseBtn);
+  }
+  collapseBtn.addEventListener('click', () => setSidebarState({ collapsed: !sidebarState.collapsed }));
+  applySidebarState();
+}
+
+// Collapsing changes #map's width without a window resize, so the canvas is
+// re-measured when #map itself changes size. Skips no-op sizes so it doesn't
+// double up with the window 'resize' listener.
+function observeMapSize() {
+  const map = document.getElementById('map');
+  new ResizeObserver(() => {
+    const r = map.getBoundingClientRect();
+    if (r.width !== CW || r.height !== CH) resize();
+  }).observe(map);
+}
+
 // ── Sidebar ────────────────────────────────────────────────────────────────
 // Grouped into a collapsible tree keyed by @Layer, since a flat list gives no
 // sense of which layer a component belongs to (the same gap the canvas/
@@ -4042,8 +4152,10 @@ async function init() {
 
   buildSidebar();
   initTheme();
+  initSidebarTabs();
   window.addEventListener('resize', resize);
   resize();
+  observeMapSize();
   updateCoordReadout({ col: 0, row: 0 });
 
   updateGridTitle();

@@ -796,6 +796,14 @@ def test_list_themes_finds_the_built_in_neo_theme():
     assert "neo" in themes.list_themes()
 
 
+@pytest.mark.parametrize("theme", themes.list_themes())
+def test_every_theme_has_the_collapsible_sidebar_rail(theme):
+    html = (themes.theme_dir(theme) / "index.html").read_text()
+
+    assert 'id="sb-rail"' in html
+    assert "odf-ui-sidebar" in html
+
+
 def test_theme_dir_resolves_the_default_theme():
     path = themes.theme_dir("default")
 

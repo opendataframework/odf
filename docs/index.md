@@ -66,6 +66,8 @@ A small FastAPI dev server (backgrounded, like any `Service`) that
 visualizes the resolved object graph — every `Component`/`Service`/
 `Repository`, grouped by `Layer`, with lifecycle actions (start/stop/
 execute) available from the UI. Grid positions persist across reloads.
+The left sidebar collapses to an icon rail to give the canvas more
+room; its collapsed/expanded state is remembered per browser.
 Repositories can declare a `data_view()` to pick how their data renders
 (table, map, timeseries, streaming video/audio, ...) instead of the
 default table.
