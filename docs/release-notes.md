@@ -5,7 +5,7 @@
 ### Added
 
 - **UI**: selectable themes. `odf run --theme` or `[ui] theme` in `config.toml` picks one
-  of `default`, `glitch` or `neo`; `Server.start(theme=)` does the same. An unknown theme
+  of `default`, `glitch`, `neo` or `emerald`; `Server.start(theme=)` does the same. An unknown theme
   is reported as a CLI parameter error. See [CLI](cli.md) and [Server](server.md).
 - **UI**: collapsible left sidebar with an icon tab rail. The collapsed state and the
   active tab persist per browser.
