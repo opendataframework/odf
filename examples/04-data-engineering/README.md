@@ -15,7 +15,7 @@ in-memory buffer.
 
 ```
 04-data-engineering/
-├── config.toml                    # SQLite path
+├── config.toml                    # SQLite path, topology UI visibility
 ├── main.py                         # entry point — runs SetupPipeline
 ├── app/
 │   ├── __init__.py                 # imports all modules so decorators register at startup
@@ -51,3 +51,11 @@ Or start the dev UI and run `SetupPipeline` from there (or via the MCP
 ```bash
 odf run
 ```
+
+## Topology view
+
+`config.toml`'s `[ui.topology]` table trims what the UI draws: `config = false`
+hides the `Config` node and `components = []` hides every plain
+`@Component` (`SQLite`). The repository, tasks and pipeline stay because
+their kinds have no list, and the links between them are drawn as usual.
+Remove the table to see the full graph.

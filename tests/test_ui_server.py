@@ -2,6 +2,7 @@ import json
 import time
 from dataclasses import dataclass
 
+import pytest
 from fastapi.testclient import TestClient
 from opendataframework.component import Component
 from opendataframework.context import Context
@@ -9,6 +10,7 @@ from opendataframework.namespace import Namespace
 from opendataframework.repository import Repository
 from opendataframework.view import StreamingAudioView, StreamingVideoView
 
+from odf.ui import themes
 from odf.ui.server import UiServer
 
 
@@ -48,6 +50,49 @@ def test_topology_endpoint_returns_resolved_graph():
     body = r.json()
     assert body["project"] == "proj"
     assert any(n["label"] == "Thing" for n in body["nodes"])
+
+
+def test_topology_endpoint_applies_the_configured_view():
+    from odf.ui.topology import TopologyView
+
+    NS = make_ns()
+
+    @NS
+    @Component
+    class Plumbing: ...
+
+    @NS
+    @Component
+    class Front:
+        def __init__(self, plumbing: Plumbing) -> None: ...
+
+    view = TopologyView.from_config({"components": ["Front"], "connections": False})
+    with Context(namespaces={NS}) as ctx:
+        client = TestClient(UiServer(ctx, "proj", topology=view)._app)
+        body = client.get("/api/topology").json()
+
+    assert [n["id"] for n in body["nodes"]] == ["front"]
+    assert body["edges"] == []
+
+
+def test_topology_endpoint_moves_nodes_off_saved_cells(tmp_path):
+    NS = make_ns()
+
+    @NS
+    @Component
+    class Aaa: ...
+
+    @NS
+    @Component
+    class Bbb: ...
+
+    layout_file = tmp_path / "layout.json"
+    layout_file.write_text(json.dumps({"bbb": {"col": 0, "row": 0}, "_grid": {"nw": 1}}))
+    with Context(namespaces={NS}) as ctx:
+        client = TestClient(UiServer(ctx, "proj", layout_file=layout_file)._app)
+        nodes = client.get("/api/topology").json()["nodes"]
+
+    assert {n["id"]: (n["col"], n["row"]) for n in nodes} == {"bbb": (0, 0), "aaa": (0, 1)}
 
 
 def test_url_reflects_host_and_port():
@@ -730,3 +775,146 @@ def test_ui_extensions_reports_configured_brand():
         r = client.get("/api/ui/extensions")
 
     assert r.json()["brand"] == "Beacon Watch"
+
+
+# --- themes --------------------------------------------------------------------
+
+
+def test_serves_default_theme_by_default():
+    with Context(namespaces=set()) as ctx:
+        client = TestClient(UiServer(ctx, "proj")._app)
+        r = client.get("/")
+
+    assert r.status_code == 200
+    assert "text/html" in r.headers["content-type"]
+
+
+def test_serves_named_theme_explicitly():
+    with Context(namespaces=set()) as ctx:
+        client = TestClient(UiServer(ctx, "proj", theme="default")._app)
+        r = client.get("/")
+
+    assert r.status_code == 200
+    assert "text/html" in r.headers["content-type"]
+
+
+def test_favicon_falls_back_to_theme_default_when_not_overridden():
+    with Context(namespaces=set()) as ctx:
+        client = TestClient(UiServer(ctx, "proj", theme="default")._app)
+        r = client.get("/favicon.svg")
+
+    assert r.status_code == 200
+    assert "image/svg+xml" in r.headers["content-type"]
+
+
+def test_unknown_theme_raises_value_error_at_construction():
+    with Context(namespaces=set()) as ctx:
+        with pytest.raises(ValueError, match="Unknown UI theme 'bogus'"):
+            UiServer(ctx, "proj", theme="bogus")
+
+
+def test_selecting_a_different_theme_serves_different_content(tmp_path, monkeypatch):
+    alt = tmp_path / "alt"
+    alt.mkdir()
+    (alt / "index.html").write_text("<html><body>alt theme marker</body></html>")
+    (alt / "favicon.svg").write_text("<svg><title>alt favicon</title></svg>")
+    monkeypatch.setattr(themes, "_THEMES_DIR", tmp_path)
+
+    with Context(namespaces=set()) as ctx:
+        client = TestClient(UiServer(ctx, "proj", theme="alt")._app)
+        r = client.get("/")
+
+    assert "alt theme marker" in r.text
+
+
+def test_list_themes_finds_the_built_in_default_theme():
+    assert "default" in themes.list_themes()
+
+
+def test_list_themes_finds_the_built_in_glitch_theme():
+    assert "glitch" in themes.list_themes()
+
+
+def test_list_themes_finds_the_built_in_neo_theme():
+    assert "neo" in themes.list_themes()
+
+
+def test_list_themes_finds_the_built_in_emerald_theme():
+    assert "emerald" in themes.list_themes()
+
+
+@pytest.mark.parametrize("theme", themes.list_themes())
+def test_every_theme_has_the_collapsible_sidebar_rail(theme):
+    html = (themes.theme_dir(theme) / "index.html").read_text()
+
+    assert 'id="sb-rail"' in html
+    assert "odf-ui-sidebar" in html
+
+
+@pytest.mark.parametrize("theme", themes.list_themes())
+def test_every_theme_takes_node_cells_from_the_topology_payload(theme):
+    html = (themes.theme_dir(theme) / "index.html").read_text()
+
+    assert "nodeMap[id].col = pos.col" not in html
+    assert "nodeMap[id].row = pos.row" not in html
+    assert "nodeMap[id].icon = pos.icon" in html
+
+
+def test_theme_dir_resolves_the_default_theme():
+    path = themes.theme_dir("default")
+
+    assert (path / "index.html").is_file()
+    assert (path / "favicon.svg").is_file()
+
+
+def test_serves_glitch_theme_explicitly():
+    with Context(namespaces=set()) as ctx:
+        client = TestClient(UiServer(ctx, "proj", theme="glitch")._app)
+        r = client.get("/")
+
+    assert r.status_code == 200
+    assert "text/html" in r.headers["content-type"]
+
+
+def test_theme_dir_resolves_the_glitch_theme():
+    path = themes.theme_dir("glitch")
+
+    assert (path / "index.html").is_file()
+    assert (path / "favicon.svg").is_file()
+
+
+def test_serves_neo_theme_explicitly():
+    with Context(namespaces=set()) as ctx:
+        client = TestClient(UiServer(ctx, "proj", theme="neo")._app)
+        r = client.get("/")
+
+    assert r.status_code == 200
+    assert "text/html" in r.headers["content-type"]
+
+
+def test_theme_dir_resolves_the_neo_theme():
+    path = themes.theme_dir("neo")
+
+    assert (path / "index.html").is_file()
+    assert (path / "favicon.svg").is_file()
+
+
+def test_serves_emerald_theme_explicitly():
+    with Context(namespaces=set()) as ctx:
+        client = TestClient(UiServer(ctx, "proj", theme="emerald")._app)
+        r = client.get("/")
+
+    assert r.status_code == 200
+    assert "text/html" in r.headers["content-type"]
+
+
+def test_theme_dir_resolves_the_emerald_theme():
+    path = themes.theme_dir("emerald")
+
+    assert (path / "index.html").is_file()
+    assert (path / "favicon.svg").is_file()
+
+
+def test_theme_dir_raises_on_unknown_theme():
+    with pytest.raises(ValueError, match="Unknown UI theme 'bogus'"):
+        themes.theme_dir("bogus")

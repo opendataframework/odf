@@ -103,6 +103,7 @@ the `app` package, the same layout `odf init` produces.
 | `--app` | `app` | Import name of the package that registers components — see [Server](server.md#the-app-module) for the same convention used when building a `Server` directly in Python |
 | `--ui` / `--no-ui` | `--ui` | Start the UI |
 | `--ui-host`, `--ui-port` | `127.0.0.1`, `4747` | Interface/port for the UI |
+| `--theme` | config's `[ui] theme`, or `default` | UI theme (visual file-set) to serve. Built in: `default`, `glitch`, `neo`, `emerald` |
 | `--mcp` / `--no-mcp` | `--no-mcp` | Start the MCP server |
 | `--mcp-host`, `--mcp-port` | `127.0.0.1`, `4748` | Interface/port for the MCP server |
 | `--chat` / `--no-chat` | `--no-chat` | Add a chat window to the UI (requires `--ui`) |

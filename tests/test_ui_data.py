@@ -288,7 +288,7 @@ def test_resolve_replay_field_uses_timeseries_view_field_without_opt_in():
 
 def test_resolve_replay_field_uses_replay_protocol_when_implemented():
     class Replayed:
-        def replay_field(self):
+        def field(self):
             return "recorded_at"
 
     assert resolve_replay_field(Replayed(), LocationView(fields=("lat", "lon"))) == "recorded_at"
@@ -314,7 +314,7 @@ def test_build_repositories_reports_replay_field_when_implemented():
         def data_view(self):
             return LocationView(fields=("lat", "lon"))
 
-        def replay_field(self):
+        def field(self):
             return "id"  # arbitrary existing field, just to prove it's surfaced
 
     with Context(namespaces={NS}) as ctx:

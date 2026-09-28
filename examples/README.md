@@ -10,7 +10,7 @@ check that the split works for external consumers.
 | 1 | [`01-table-view/`](01-table-view/) | A repository implementing no `data_view()` at all, so the UI falls back to the implicit default plain table. |
 | 2 | [`02-data-analytics/`](02-data-analytics/) | The `data-analytics` template layout: a `SummarizeReadings` `@Analytics @Task` writing a JSON report to `reports/`. |
 | 3 | [`03-data-science/`](03-data-science/) | The `data-science` template layout: `data/raw/` ingested via `Project`, then explored from `notebooks/` through a `Repository` built standalone, outside the `Context`. |
-| 4 | [`04-data-engineering/`](04-data-engineering/) | The `data-engineering` template layout: `SeedReadings` + `ExportReadingsSummary` `@Task`s composed by a `Pipeline` into a raw-to-processed ETL flow. |
+| 4 | [`04-data-engineering/`](04-data-engineering/) | The `data-engineering` template layout: `SeedReadings` + `ExportReadingsSummary` `@Task`s composed by a `Pipeline` into a raw-to-processed ETL flow. Its `[ui.topology]` config hides the `Config` and `SQLite` nodes. |
 | 5 | [`05-research/`](05-research/) | The `research` template layout: a single `RunExperiment` `@Task` loading `data/` into a repository and writing `results/summary.json`, alongside a `doc/notes.md` lab-notebook stub. |
 | 6 | [`06-location-view/`](06-location-view/) | A repository implementing `data_view() -> LocationView` so the UI renders a map instead of a table. Run with `odf run` and click "View Map" on `Stores`. |
 | 7 | [`07-streaming-video-view/`](07-streaming-video-view/) | A stream-only `Webcam` repository (`data_view() -> StreamingVideoView`) rendered as a live video player with a Start/Stop toggle. |

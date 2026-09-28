@@ -180,6 +180,14 @@ def run(
     ui: bool = typer.Option(True, help="Start the UI."),
     ui_host: str = typer.Option("127.0.0.1", help="Interface for the UI to bind to."),
     ui_port: int = typer.Option(4747, help="Port for the UI to bind to."),
+    theme: str | None = typer.Option(
+        None,
+        "--theme",
+        help=(
+            "UI theme (visual file-set) to serve. Defaults to config.toml's "
+            '[ui] theme, or "default".'
+        ),
+    ),
     mcp: bool = typer.Option(False, help="Start the MCP server."),
     mcp_host: str = typer.Option("127.0.0.1", help="Interface for the MCP server to bind to."),
     mcp_port: int = typer.Option(4748, help="Port for the MCP server to bind to."),
@@ -206,16 +214,20 @@ def run(
         ) from exc
 
     server = Server.from_config(config)
-    server.start(
-        ui=ui,
-        ui_host=ui_host,
-        ui_port=ui_port,
-        mcp=mcp,
-        mcp_host=mcp_host,
-        mcp_port=mcp_port,
-        chat=chat,
-        app_module=None,
-    )
+    try:
+        server.start(
+            ui=ui,
+            ui_host=ui_host,
+            ui_port=ui_port,
+            mcp=mcp,
+            mcp_host=mcp_host,
+            mcp_port=mcp_port,
+            chat=chat,
+            theme=theme,
+            app_module=None,
+        )
+    except ValueError as exc:
+        raise typer.BadParameter(str(exc)) from exc
 
     lines = []
     if server.ui_url:

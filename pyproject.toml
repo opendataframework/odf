@@ -1,6 +1,6 @@
 [project]
 name = "odf"
-version = "0.1.0"
+version = "0.2.0"
 description = "CLI, UI, MCP server, and chat for Open Data Framework (ODF) projects built on opendataframework."
 authors = [
     {name = "mykytapavlov",email = "mykytapavlov@users.noreply.github.com"}
@@ -10,7 +10,7 @@ requires-python = ">=3.14"
 dependencies = [
     "typer (>=0.27.0,<0.28.0)",
     "rich (>=15.0.0,<16.0.0)",
-    "opendataframework (>=0.1.0,<0.2.0)"
+    "opendataframework (>=0.2.0,<0.3.0)"
 ]
 
 [project.optional-dependencies]

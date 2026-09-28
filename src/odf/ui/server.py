@@ -33,8 +33,8 @@ from opendataframework.view import (
     VideoView,
 )
 
-from odf.ui import data, layout
-from odf.ui.topology import build_topology
+from odf.ui import data, layout, themes
+from odf.ui.topology import TopologyView, build_topology
 
 if TYPE_CHECKING:
     from odf.chat.engine import ChatEngine
@@ -49,8 +49,6 @@ _MEDIA_CONTENT_TYPES: dict[type, str] = {
     # dependency; nothing else uses plain AudioView today.
     AudioView: "audio/wav",
 }
-
-_STATIC_DIR = Path(__file__).parent / "static"
 
 
 class UiServer:
@@ -90,6 +88,14 @@ class UiServer:
             (the default) keeps the built-in ``"ODF"`` label. Distinct from
             ``project`` — that's the specific project being visualized;
             this is the product/tool name wrapping around it.
+        theme: Name of the UI theme (visual/layout file-set) to serve — see
+            ``odf.ui.themes``. Defaults to ``"default"``. Orthogonal to the
+            UI's own client-side light/dark color-mode toggle, which each
+            theme keeps working independently.
+        topology: Which components and connections the topology shows — see
+            ``odf.ui.topology.TopologyView``. ``None`` (the default) shows
+            everything. Display-only: hidden components stay reachable through
+            the other endpoints.
     """
 
     def __init__(
@@ -105,6 +111,8 @@ class UiServer:
         favicon: str | Path | None = None,
         logo: str | Path | None = None,
         brand: str | None = None,
+        theme: str = "default",
+        topology: TopologyView | None = None,
     ) -> None:
         """Build the FastAPI app and register every route (see class docstring for args)."""
         self._context = context
@@ -118,6 +126,8 @@ class UiServer:
         self._favicon = Path(favicon) if favicon is not None else None
         self._logo = Path(logo) if logo is not None else None
         self._brand = brand
+        self._theme_dir = themes.theme_dir(theme)
+        self._topology = topology
         self._server: uvicorn.Server | None = None
         self._thread: threading.Thread | None = None
 
@@ -126,7 +136,8 @@ class UiServer:
         @app.get("/api/topology")
         def topology() -> dict:
             """Return the current node/edge graph for the topology view."""
-            return build_topology(self._context, self._project)
+            saved = layout.load(self._layout_path) if self._layout_path is not None else {}
+            return build_topology(self._context, self._project, self._topology, saved)
 
         @app.get("/api/layout")
         def get_layout() -> dict:
@@ -342,13 +353,13 @@ class UiServer:
 
         @app.get("/")
         def index() -> FileResponse:
-            """Serve the UI's ``index.html``."""
-            return FileResponse(_STATIC_DIR / "index.html")
+            """Serve the selected theme's ``index.html``."""
+            return FileResponse(self._theme_dir / "index.html")
 
         @app.get("/favicon.svg")
         def favicon() -> FileResponse:
             """Serve the UI's favicon — the project's custom one, if configured."""
-            path = self._favicon if self._favicon is not None else _STATIC_DIR / "favicon.svg"
+            path = self._favicon if self._favicon is not None else self._theme_dir / "favicon.svg"
             return FileResponse(path, media_type="image/svg+xml")
 
         self._app = app

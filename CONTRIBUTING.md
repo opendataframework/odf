@@ -24,6 +24,10 @@ Common types: `feat`, `fix`, `refactor`, `docs`, `chore`, `test`, `build`.
 Append `!` after the type/scope for a breaking change. Keep the
 description short and in the imperative mood ("add", not "added").
 
+Commit messages must not mention AI tools or models (no "Generated with
+…" lines, no `Co-Authored-By` trailers for them) and must not contain
+external links.
+
 Example:
 
 ```

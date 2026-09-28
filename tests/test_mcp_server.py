@@ -1,15 +1,24 @@
 import asyncio
 import json
+from dataclasses import dataclass
 
 import pytest
 from mcp.server.fastmcp.exceptions import ToolError
-from opendataframework.component import Component
+from opendataframework.component import Component, McpTool
 from opendataframework.context import Context
 from opendataframework.namespace import Namespace
+from opendataframework.repository import Repository
 from opendataframework.service import Service
 from opendataframework.task import Task
 
 from odf.mcp.server import McpServer
+
+
+@dataclass
+class Widget:
+    id: int
+    name: str
+    color: str
 
 
 def make_ns():
@@ -210,3 +219,206 @@ def test_component_logs_unknown_component_raises():
         mcp = McpServer(ctx, "proj")._mcp
         with pytest.raises(ToolError, match="No resolved component named 'Nonexistent'"):
             call(mcp, "component_logs", {"name": "Nonexistent"})
+
+
+# --- query_repository ---------------------------------------------------------------
+
+
+def _widgets():
+    return [
+        Widget(1, "gadget", "red"),
+        Widget(2, "gizmo", "blue"),
+        Widget(3, "widget", "red"),
+    ]
+
+
+def test_query_repository_returns_page_and_total():
+    NS = make_ns()
+
+    @NS
+    @Repository(Widget)
+    class Widgets:
+        def all(self):
+            return _widgets()
+
+    with Context(namespaces={NS}) as ctx:
+        result = call(McpServer(ctx, "proj")._mcp, "query_repository", {"repo_id": "widgets"})
+
+    _, data = result
+    assert data["total"] == 3
+    assert [r["name"] for r in data["records"]] == ["gadget", "gizmo", "widget"]
+
+
+def test_query_repository_applies_limit_and_offset():
+    NS = make_ns()
+
+    @NS
+    @Repository(Widget)
+    class Widgets:
+        def all(self):
+            return _widgets()
+
+    with Context(namespaces={NS}) as ctx:
+        result = call(
+            McpServer(ctx, "proj")._mcp,
+            "query_repository",
+            {"repo_id": "widgets", "limit": 1, "offset": 1},
+        )
+
+    _, data = result
+    assert data["total"] == 3
+    assert [r["name"] for r in data["records"]] == ["gizmo"]
+
+
+def test_query_repository_clamps_limit_to_max():
+    NS = make_ns()
+
+    @NS
+    @Repository(Widget)
+    class Widgets:
+        def all(self):
+            return _widgets()
+
+    with Context(namespaces={NS}) as ctx:
+        result = call(
+            McpServer(ctx, "proj")._mcp,
+            "query_repository",
+            {"repo_id": "widgets", "limit": 10_000},
+        )
+
+    _, data = result
+    assert len(data["records"]) == 3
+    assert data["total"] == 3
+
+
+def test_query_repository_applies_filters():
+    NS = make_ns()
+
+    @NS
+    @Repository(Widget)
+    class Widgets:
+        def all(self):
+            return _widgets()
+
+    with Context(namespaces={NS}) as ctx:
+        result = call(
+            McpServer(ctx, "proj")._mcp,
+            "query_repository",
+            {"repo_id": "widgets", "filters": {"color": "red"}},
+        )
+
+    _, data = result
+    assert data["total"] == 2
+    assert {r["name"] for r in data["records"]} == {"gadget", "widget"}
+
+
+def test_query_repository_ignores_unknown_filter_keys():
+    NS = make_ns()
+
+    @NS
+    @Repository(Widget)
+    class Widgets:
+        def all(self):
+            return _widgets()
+
+    with Context(namespaces={NS}) as ctx:
+        result = call(
+            McpServer(ctx, "proj")._mcp,
+            "query_repository",
+            {"repo_id": "widgets", "filters": {"nonexistent_field": "anything"}},
+        )
+
+    _, data = result
+    assert data["total"] == 3
+
+
+def test_query_repository_unknown_repo_raises():
+    with Context(namespaces=set()) as ctx:
+        mcp = McpServer(ctx, "proj")._mcp
+        with pytest.raises(ToolError, match="No resolved repository named 'nope'"):
+            call(mcp, "query_repository", {"repo_id": "nope"})
+
+
+def test_query_repository_rejects_non_readable_repository():
+    NS = make_ns()
+
+    @NS
+    @Repository(Widget)
+    class Widgets:
+        def save(self, entity): ...
+
+    with Context(namespaces={NS}) as ctx:
+        mcp = McpServer(ctx, "proj")._mcp
+        with pytest.raises(ToolError, match="is not readable"):
+            call(mcp, "query_repository", {"repo_id": "widgets"})
+
+
+# --- component-exposed MCP tools (McpToolsProtocol) -------------------------------
+
+
+def test_component_mcp_tool_is_registered_and_callable():
+    NS = make_ns()
+
+    @NS
+    @Component
+    class Thing:
+        def status(self) -> str:
+            return "ok"
+
+        def mcp_tools(self) -> list[McpTool]:
+            return [McpTool(name="status", description="Report status.", handler=self.status)]
+
+    with Context(namespaces={NS}) as ctx:
+        result = call(McpServer(ctx, "proj")._mcp, "thing.status")
+
+    assert structured(result) == "ok"
+
+
+def test_two_components_with_same_local_tool_name_stay_distinct():
+    NS = make_ns()
+
+    @NS
+    @Component
+    class Alpha:
+        def status(self) -> str:
+            return "alpha"
+
+        def mcp_tools(self) -> list[McpTool]:
+            return [McpTool(name="status", description="Alpha status.", handler=self.status)]
+
+    @NS
+    @Component
+    class Beta:
+        def status(self) -> str:
+            return "beta"
+
+        def mcp_tools(self) -> list[McpTool]:
+            return [McpTool(name="status", description="Beta status.", handler=self.status)]
+
+    with Context(namespaces={NS}) as ctx:
+        mcp = McpServer(ctx, "proj")._mcp
+        assert structured(call(mcp, "alpha.status")) == "alpha"
+        assert structured(call(mcp, "beta.status")) == "beta"
+
+
+def test_duplicate_full_tool_name_within_one_component_raises_at_construction():
+    NS = make_ns()
+
+    @NS
+    @Component
+    class Thing:
+        def first(self) -> str:
+            return "first"
+
+        def second(self) -> str:
+            return "second"
+
+        def mcp_tools(self) -> list[McpTool]:
+            return [
+                McpTool(name="status", description="First.", handler=self.first),
+                McpTool(name="status", description="Second.", handler=self.second),
+            ]
+
+    with Context(namespaces={NS}) as ctx:
+        with pytest.raises(ValueError, match="Duplicate MCP tool name: 'thing.status'"):
+            McpServer(ctx, "proj")

@@ -1,3 +1,4 @@
+import pytest
 from opendataframework.component import Component
 from opendataframework.context import Context
 from opendataframework.layer import Storage
@@ -7,7 +8,7 @@ from opendataframework.repository import Repository
 from opendataframework.service import Service
 from opendataframework.task import Task
 
-from odf.ui.topology import build_topology
+from odf.ui.topology import TopologyView, build_topology
 
 
 def make_ns():
@@ -282,3 +283,289 @@ def test_project_name_passthrough_and_empty_graph():
     assert data["nodes"] == []
     assert data["edges"] == []
     assert data["stats"] == {"objects": 0, "links": 0, "types": {}}
+
+
+# --- topology view: connections and component visibility ---------------------
+
+
+def make_chain():
+    """Return ``(NS, Store, Mid, Job)``: a Job task -> Mid component -> Store component chain."""
+    NS = make_ns()
+
+    @NS
+    @Component
+    class ViewStore: ...
+
+    @NS
+    @Component
+    class ViewMid:
+        def __init__(self, store: ViewStore) -> None:
+            self.store = store
+
+    @NS
+    @Task
+    class ViewJob:
+        def __init__(self, mid: ViewMid) -> None:
+            self.mid = mid
+
+        def execute(self) -> None: ...
+
+    return NS, ViewStore, ViewMid, ViewJob
+
+
+def ids(data):
+    return {n["id"] for n in data["nodes"]}
+
+
+def edge_pairs(data):
+    return {(e["from"], e["to"]) for e in data["edges"]}
+
+
+def test_default_view_matches_no_view():
+    NS, *_ = make_chain()
+
+    with Context(namespaces={NS}) as ctx:
+        assert build_topology(ctx, "p", TopologyView()) == build_topology(ctx, "p")
+
+
+def test_connections_off_draws_no_edges_but_keeps_nodes_and_layout():
+    NS, *_ = make_chain()
+
+    with Context(namespaces={NS}) as ctx:
+        full = build_topology(ctx, "p")
+        data = build_topology(ctx, "p", TopologyView(connections=False))
+
+    assert data["edges"] == []
+    assert data["stats"]["links"] == 0
+    assert data["nodes"] == full["nodes"]
+
+
+def test_list_shows_only_listed_components_of_that_kind():
+    NS = make_ns()
+
+    @NS
+    @Task
+    class ViewKept:
+        def execute(self) -> None: ...
+
+    @NS
+    @Task
+    class ViewDropped:
+        def execute(self) -> None: ...
+
+    view = TopologyView.from_config({"tasks": ["ViewKept"]})
+    with Context(namespaces={NS}) as ctx:
+        assert ids(build_topology(ctx, "p", view)) >= {"view-kept"}
+        assert "view-dropped" not in ids(build_topology(ctx, "p", view))
+
+
+def test_kind_without_a_list_shows_every_component_of_that_kind():
+    NS, *_ = make_chain()
+
+    view = TopologyView.from_config({"tasks": []})
+    with Context(namespaces={NS}) as ctx:
+        data = build_topology(ctx, "p", view)
+
+    assert "view-job" not in ids(data)
+    assert {"view-store", "view-mid"} <= ids(data)
+
+
+def test_names_match_class_name_kebab_id_and_snake_case():
+    NS, *_ = make_chain()
+
+    for name in ("ViewStore", "view-store", "view_store"):
+        view = TopologyView.from_config({"components": [name]})
+        with Context(namespaces={NS}) as ctx:
+            data = build_topology(ctx, "p", view)
+        assert "view-store" in ids(data)
+        assert "view-mid" not in ids(data)
+
+
+def test_config_false_hides_the_config_node():
+    NS, *_ = make_chain()
+
+    with Context(namespaces={NS}, config={"k": "v"}) as ctx:
+        shown = build_topology(ctx, "p")
+        hidden = build_topology(ctx, "p", TopologyView.from_config({"config": False}))
+
+    assert any(n["type"] == "config" for n in shown["nodes"])
+    assert not any(n["type"] == "config" for n in hidden["nodes"])
+
+
+def test_hidden_component_is_bridged_and_layout_has_no_gap():
+    NS, *_ = make_chain()
+
+    view = TopologyView.from_config({"components": ["ViewStore"]})
+    with Context(namespaces={NS}) as ctx:
+        data = build_topology(ctx, "p", view)
+
+    assert ids(data) == {"view-store", "view-job"}
+    assert edge_pairs(data) == {("view-store", "view-job")}
+    cells = {n["id"]: (n["col"], n["row"]) for n in data["nodes"]}
+    assert cells == {"view-store": (0, 0), "view-job": (1, 0)}
+
+
+def test_bridged_edges_are_not_duplicated():
+    NS = make_ns()
+
+    @NS
+    @Component
+    class ViewLeaf: ...
+
+    @NS
+    @Component
+    class ViewLeft:
+        def __init__(self, leaf: ViewLeaf) -> None: ...
+
+    @NS
+    @Component
+    class ViewRight:
+        def __init__(self, leaf: ViewLeaf) -> None: ...
+
+    @NS
+    @Task
+    class ViewTop:
+        def __init__(self, left: ViewLeft, right: ViewRight) -> None: ...
+
+        def execute(self) -> None: ...
+
+    view = TopologyView.from_config({"components": ["ViewLeaf"]})
+    with Context(namespaces={NS}) as ctx:
+        data = build_topology(ctx, "p", view)
+
+    assert data["edges"] == [{"from": "view-leaf", "to": "view-top"}]
+
+
+def test_stats_describe_the_visible_graph():
+    NS, *_ = make_chain()
+
+    view = TopologyView.from_config({"components": []})
+    with Context(namespaces={NS}) as ctx:
+        data = build_topology(ctx, "p", view)
+
+    assert data["stats"] == {"objects": 1, "links": 0, "types": {"task": 1}}
+
+
+def test_view_config_rejects_unknown_keys_and_wrong_types():
+    with pytest.raises(ValueError, match="Unknown"):
+        TopologyView.from_config({"task": []})
+    with pytest.raises(ValueError, match="connections"):
+        TopologyView.from_config({"connections": "no"})
+    with pytest.raises(ValueError, match="tasks"):
+        TopologyView.from_config({"tasks": "seed"})
+    with pytest.raises(ValueError, match="components"):
+        TopologyView.from_config({"components": [1]})
+
+
+def test_unmatched_reports_names_that_match_no_component_of_that_kind():
+    NS, *_ = make_chain()
+
+    view = TopologyView.from_config({"components": ["ViewStore", "Nope"], "tasks": ["ViewStore"]})
+    with Context(namespaces={NS}) as ctx:
+        assert view.unmatched(ctx) == [("components", "nope"), ("tasks", "view-store")]
+
+
+# --- saved layout: cells never overlap -----------------------------------------
+
+
+def cells_of(data):
+    return {n["id"]: (n["col"], n["row"]) for n in data["nodes"]}
+
+
+def test_saved_cell_is_kept():
+    NS, *_ = make_chain()
+
+    with Context(namespaces={NS}) as ctx:
+        data = build_topology(ctx, "p", layout={"view-job": {"col": 5, "row": 3}})
+
+    assert cells_of(data)["view-job"] == (5, 3)
+
+
+def test_auto_node_on_a_saved_cell_moves_to_the_nearest_free_row_in_its_column():
+    NS = make_ns()
+
+    @NS
+    @Component
+    class ViewA: ...
+
+    @NS
+    @Component
+    class ViewB: ...
+
+    with Context(namespaces={NS}) as ctx:
+        auto = cells_of(build_topology(ctx, "p"))
+        assert auto == {"view-a": (0, 0), "view-b": (0, 1)}
+        # Pin B onto A's automatic cell: A must yield, staying in column 0.
+        data = build_topology(ctx, "p", layout={"view-b": {"col": 0, "row": 0}})
+
+    assert cells_of(data) == {"view-b": (0, 0), "view-a": (0, 1)}
+
+
+def test_two_saved_cells_on_the_same_slot_keep_the_first_id():
+    NS = make_ns()
+
+    @NS
+    @Component
+    class ViewA: ...
+
+    @NS
+    @Component
+    class ViewB: ...
+
+    layout = {"view-a": {"col": 4, "row": 4}, "view-b": {"col": 4, "row": 4}}
+    with Context(namespaces={NS}) as ctx:
+        data = build_topology(ctx, "p", layout=layout)
+
+    cells = cells_of(data)
+    assert cells["view-a"] == (4, 4)
+    assert cells["view-b"] != (4, 4)
+    assert len(set(cells.values())) == 2
+
+
+def test_saved_cell_of_a_hidden_node_reserves_nothing_and_returns_when_shown():
+    NS = make_ns()
+
+    @NS
+    @Component
+    class ViewA: ...
+
+    @NS
+    @Component
+    class ViewB: ...
+
+    layout = {"view-a": {"col": 0, "row": 0}}
+    with Context(namespaces={NS}) as ctx:
+        hidden = build_topology(
+            ctx, "p", TopologyView.from_config({"components": ["ViewB"]}), layout
+        )
+        shown = build_topology(ctx, "p", layout=layout)
+
+    assert cells_of(hidden) == {"view-b": (0, 0)}
+    assert cells_of(shown) == {"view-a": (0, 0), "view-b": (0, 1)}
+
+
+def test_non_node_and_malformed_layout_entries_are_ignored():
+    NS, *_ = make_chain()
+
+    layout = {
+        "_grid": {"nw": 1, "ne": 0, "se": 0, "sw": 0},
+        "_layers": {"x": "#fff"},
+        "view-job": {"col": True, "row": 1},
+        "view-mid": {"col": "2", "row": 1},
+        "view-store": "nope",
+    }
+    with Context(namespaces={NS}) as ctx:
+        assert build_topology(ctx, "p", layout=layout) == build_topology(ctx, "p")
+
+
+def test_resolved_cells_are_unique():
+    NS = make_ns()
+
+    for name in "ABCDE":
+        NS(Component(type(f"View{name}", (), {})))
+
+    layout = {"view-c": {"col": 0, "row": 0}, "view-e": {"col": 0, "row": 1}}
+    with Context(namespaces={NS}) as ctx:
+        data = build_topology(ctx, "p", layout=layout)
+
+    assert len(set(cells_of(data).values())) == 5

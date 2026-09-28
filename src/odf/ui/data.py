@@ -191,7 +191,7 @@ def resolve_replay_field(instance: object, view: DataView | None) -> str | None:
     """Resolve the timestamp field a repository's records can be replayed by, if any.
 
     A ``TimeseriesView`` is always replayable via its own ``field`` — no opt-in
-    needed. Otherwise, an explicit ``ReplayProtocol.replay_field()`` opts a
+    needed. Otherwise, an explicit ``ReplayProtocol.field()`` opts a
     ``LocationView``/``VideoView``/``AudioView`` repository in. Everything else
     (``TableView``, ``ImageView``, ``DocumentView``, the streaming views) has no
     replay concept in the dev UI today.
@@ -199,7 +199,7 @@ def resolve_replay_field(instance: object, view: DataView | None) -> str | None:
     if isinstance(view, TimeseriesView):
         return view.field
     if isinstance(instance, ReplayProtocol):
-        return instance.replay_field()
+        return instance.field()
     return None
 
 

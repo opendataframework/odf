@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>ODF — Topology</title>
-<link rel="icon" type="image/svg+xml" href="favicon.svg">
+<link rel="icon" type="image/svg+xml" href="/favicon.svg">
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin="">
 <style>
 *,*::before,*::after{margin:0;padding:0;box-sizing:border-box}
@@ -142,7 +142,23 @@ body{
 
 #body{display:flex;flex:1;min-height:0;gap:8px}
 
-#sidebar{width:272px;flex-shrink:0;display:flex;flex-direction:column;overflow-y:auto}
+/* Sidebar: an always-visible icon rail (#sb-rail, one .sb-tab per SIDEBAR_TABS
+   entry + a collapse chevron) beside the active tab's panel (#sb-panels).
+   .collapsed hides only the panel, so the rail stays as the way back in. */
+#sidebar{width:312px;flex-shrink:0;display:flex;flex-direction:row;overflow:hidden}
+#sidebar.collapsed{width:auto}
+#sb-rail{width:40px;flex-shrink:0;display:flex;flex-direction:column;align-items:center;gap:4px;padding:8px 0;border-right:1px solid var(--border)}
+#sidebar.collapsed #sb-rail{border-right:none}
+.sb-tab,#sb-collapse{width:28px;height:28px;padding:0;background:transparent;border:1px solid transparent;border-radius:2px;color:var(--text-muted);cursor:pointer;display:flex;align-items:center;justify-content:center;transition:background .12s,color .12s,border-color .12s}
+.sb-tab:hover,#sb-collapse:hover{background:var(--hover-bg);color:var(--title-accent);border-color:var(--border-strong)}
+.sb-tab.active{color:var(--title-accent);border-color:var(--border-strong);background:var(--hover-bg)}
+.sb-tab svg,#sb-collapse svg{width:16px;height:16px;fill:none;stroke:currentColor;stroke-width:1.6;stroke-linecap:round;stroke-linejoin:round}
+#sb-collapse{margin-top:auto}
+#sidebar.collapsed #sb-collapse svg{transform:rotate(180deg)}
+#sb-panels{flex:1;min-width:0;overflow-y:auto;display:flex;flex-direction:column}
+#sidebar.collapsed #sb-panels{display:none}
+.sb-panel{display:none}
+.sb-panel.active{display:flex;flex-direction:column;flex:1;min-height:0}
 .sb-section{padding:14px 16px}
 .sb-section + .sb-section{border-top:1px solid var(--border)}
 .sb-heading{color:var(--text-dim);font-family:'SF Mono',Consolas,monospace;font-size:9.5px;font-weight:600;letter-spacing:.1em;text-transform:uppercase;margin-bottom:11px;display:flex;align-items:center;justify-content:space-between}
@@ -276,10 +292,15 @@ canvas{display:block;cursor:grab}
 .chat-msg.assistant{align-self:flex-start;background:var(--hover-bg);border:1px solid var(--border);color:var(--text)}
 .chat-msg.tool{align-self:flex-start;background:transparent;border:1px dashed var(--border-strong);color:var(--text-dim);font-size:10.5px}
 .chat-msg.error{align-self:flex-start;background:color-mix(in srgb, var(--accent-alert) 14%, transparent);border:1px solid var(--accent-alert);color:var(--accent-alert)}
-#chat-footer{display:flex;gap:8px;padding:12px 16px;border-top:1px solid var(--border);flex-shrink:0}
+#chat-footer{display:flex;gap:8px;padding:12px 16px;border-top:1px solid var(--border);flex-shrink:0;position:relative}
 #chat-input{flex:1;resize:none;height:38px;background:var(--hover-bg);border:1px solid var(--border-strong);color:var(--text);font-family:inherit;font-size:11.5px;padding:8px 10px;border-radius:2px}
 #chat-input:focus{outline:none;border-color:var(--title-accent)}
 #chat-send{flex-shrink:0}
+.mention-menu{position:absolute;left:16px;right:16px;bottom:100%;margin-bottom:6px;max-height:160px;overflow-y:auto;background:var(--panel);border:1px solid var(--border-strong);border-radius:2px;box-shadow:0 -4px 16px rgba(0,0,0,.3);z-index:10}
+.mention-menu[hidden]{display:none}
+.mention-item{display:flex;justify-content:space-between;gap:8px;padding:6px 10px;font-family:'SF Mono',Consolas,monospace;font-size:11px;cursor:pointer;color:var(--text)}
+.mention-item:hover,.mention-item.active{background:var(--hover-bg);color:var(--title-accent)}
+.mention-label{color:var(--text-dim);font-size:10px}
 
 .data-btn{background:transparent;border:1px solid var(--border);color:var(--text-muted);font-family:'SF Mono',Consolas,monospace;font-size:10px;font-weight:600;letter-spacing:.03em;padding:3px 8px;border-radius:2px;cursor:pointer;margin-left:4px;transition:background .12s,color .12s,border-color .12s}
 .data-btn:first-child{margin-left:0}
@@ -331,6 +352,12 @@ canvas{display:block;cursor:grab}
 #map.mode-chart #map-panel-body{padding:0;overflow:hidden}
 #chart-frame{width:100%;height:100%;border:0;display:block}
 .stream-placeholder{padding:32px;color:var(--text-dim);font-family:'SF Mono',Consolas,monospace;font-size:11.5px}
+.stream-audio-bar{display:flex;align-items:center;gap:10px;padding:20px 28px;font-family:'SF Mono',Consolas,monospace}
+.stream-live-dot{flex:none;width:7px;height:7px;border-radius:50%;background:var(--accent-alert);box-shadow:0 0 0 3px color-mix(in srgb, var(--accent-alert) 25%, transparent);animation:pulse-dot 1.4s ease-in-out infinite}
+.stream-live-dot.buffering{background:#6a6d72;box-shadow:none;animation:none}
+.stream-live-label{color:#e8e6e3;font-size:11px;font-weight:700;letter-spacing:.1em}
+.stream-audio-bar .data-btn{color:#c7c9cc;border-color:#3a3d42}
+.stream-audio-bar .data-btn:hover{background:rgba(255,255,255,.08);color:#fff}
 
 #map.mode-geo #map-panel-body{padding:0;overflow:hidden;position:relative}
 #geo-map{width:100%;height:100%;background:var(--bg-canvas)}
@@ -394,18 +421,6 @@ canvas{display:block;cursor:grab}
 .ts-legend-item.hidden{opacity:.4;text-decoration:line-through}
 .ts-swatch{width:9px;height:9px;border-radius:1px;display:inline-block}
 .timeseries-chart{width:100%;height:calc(100% - 30px)}
-
-/* Docs-embed-only trim: this copy exists to show the topology grid on its
-   own, not the full dev-UI chrome — the header (project stats/clock) and
-   the left "Objects" list duplicate what the graph already shows. Hiding
-   them (rather than deleting the markup) keeps this a stock copy of the
-   real index.html elsewhere, and #map/#body/#shell are plain flexbox, so
-   #map's canvas reflows to fill the reclaimed space with no JS changes.
-
-   Note: GET /api/repositories (the list) was renamed to api/repository-list
-   in this copy's one call site — static files can't have both a file at
-   api/repositories and a api/repositories/books/records under it. */
-#hdr, #sidebar { display: none !important; }
 </style>
 </head>
 <body>
@@ -433,9 +448,16 @@ canvas{display:block;cursor:grab}
 
 <div id="body">
   <div id="sidebar" class="panel">
-    <div class="sb-section" style="flex:1">
-      <div class="sb-heading">Objects <span class="count" id="node-count">00</span></div>
-      <div id="node-list"></div>
+    <div id="sb-rail" role="tablist" aria-orientation="vertical" aria-label="Sidebar">
+      <button id="sb-collapse" title="Collapse sidebar" aria-label="Collapse sidebar" aria-controls="sb-panels" aria-expanded="true"><svg viewBox="0 0 16 16"><path d="M10 3 5 8l5 5"/></svg></button>
+    </div>
+    <div id="sb-panels">
+      <div class="sb-panel active" id="sb-panel-objects" data-panel="objects" role="tabpanel">
+        <div class="sb-section" style="flex:1">
+          <div class="sb-heading">Objects <span class="count" id="node-count">00</span></div>
+          <div id="node-list"></div>
+        </div>
+      </div>
     </div>
   </div>
 
@@ -507,7 +529,8 @@ canvas{display:block;cursor:grab}
       </div>
       <div id="chat-messages"></div>
       <div id="chat-footer">
-        <textarea id="chat-input" placeholder="Ask about this project…"></textarea>
+        <div id="chat-mention-menu" class="mention-menu" hidden></div>
+        <textarea id="chat-input" placeholder="Ask about this project… (@ to address a component)"></textarea>
         <button id="chat-send" class="data-btn primary">Send</button>
       </div>
     </div>
@@ -696,7 +719,7 @@ function saveLayerColor(name, hex) {
   if (!layoutOverrides._layers) layoutOverrides._layers = {};
   if (hex) layoutOverrides._layers[name] = hex;
   else delete layoutOverrides._layers[name];
-  fetch('api/layout', {
+  fetch('/api/layout', {
     method: 'PUT',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(layoutOverrides),
@@ -774,7 +797,7 @@ function updateGridTitle() {
 
 function saveGridExpand() {
   layoutOverrides._grid = { ...gridExpand };
-  fetch('api/layout', {
+  fetch('/api/layout', {
     method: 'PUT',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(layoutOverrides),
@@ -1896,7 +1919,7 @@ function saveLayoutOverride(node) {
   if (node.icon) entry.icon = node.icon; // omitted entirely once reset, so it doesn't linger as a stale key
   if (node.color) entry.color = node.color; // ditto for a reset color override
   layoutOverrides[node.id] = entry;
-  fetch('api/layout', {
+  fetch('/api/layout', {
     method: 'PUT',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(layoutOverrides),
@@ -2236,7 +2259,7 @@ async function toggleService(id) {
   const btn = document.getElementById('lifecycle-btn');
   if (btn) btn.disabled = true;
   try {
-    const res = await fetch(`api/components/${id}/${action}`, { method: 'POST' });
+    const res = await fetch(`/api/components/${id}/${action}`, { method: 'POST' });
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
     node.running = !node.running;
     addLog(`${node.label} ${node.running ? 'started' : 'stopped'}`, ACCENT.service);
@@ -2251,7 +2274,7 @@ async function executeNode(id) {
   const btn = document.getElementById('execute-btn');
   if (btn) btn.disabled = true;
   try {
-    const res = await fetch(`api/components/${id}/execute`, { method: 'POST' });
+    const res = await fetch(`/api/components/${id}/execute`, { method: 'POST' });
     if (!res.ok) {
       const body = await res.json().catch(() => ({}));
       throw new Error(body.detail || `HTTP ${res.status}`);
@@ -2261,6 +2284,93 @@ async function executeNode(id) {
     addLog(`${node.label} execute failed — ${err.message}`, ACCENT.alert);
   }
   if (btn) btn.disabled = false;
+}
+
+// ── Sidebar tabs ───────────────────────────────────────────────────────────
+// The sidebar is an icon rail plus the active tab's panel. Adding a tab is one
+// SIDEBAR_TABS entry here plus one matching .sb-panel[data-panel] in the
+// markup. Collapsing hides the panel but leaves the rail, so it can reopen.
+// Like the layer-group collapse state, this is a per-browser view preference,
+// so it lives in localStorage rather than /api/layout.
+
+const SIDEBAR_TABS = [
+  { id: 'objects', label: 'Objects',
+    icon: '<svg viewBox="0 0 16 16"><path d="M6 4h7M6 8h7M6 12h7"/><path d="M3 4h.01M3 8h.01M3 12h.01"/></svg>' },
+];
+const SIDEBAR_KEY = 'odf-ui-sidebar';
+let sidebarState = { collapsed: false, tab: SIDEBAR_TABS[0].id };
+
+function loadSidebarState() {
+  try {
+    const s = JSON.parse(localStorage.getItem(SIDEBAR_KEY) || '{}');
+    if (typeof s.collapsed === 'boolean') sidebarState.collapsed = s.collapsed;
+    if (SIDEBAR_TABS.some(t => t.id === s.tab)) sidebarState.tab = s.tab;
+  } catch {}
+}
+
+function saveSidebarState() {
+  try { localStorage.setItem(SIDEBAR_KEY, JSON.stringify(sidebarState)); } catch {}
+}
+
+function applySidebarState() {
+  const { collapsed, tab } = sidebarState;
+  document.getElementById('sidebar').classList.toggle('collapsed', collapsed);
+  for (const btn of document.querySelectorAll('.sb-tab')) {
+    const on = btn.dataset.tab === tab;
+    btn.classList.toggle('active', on && !collapsed);
+    btn.setAttribute('aria-selected', String(on));
+    btn.setAttribute('aria-expanded', String(on && !collapsed));
+  }
+  for (const p of document.querySelectorAll('.sb-panel')) {
+    p.classList.toggle('active', p.dataset.panel === tab);
+  }
+  const c = document.getElementById('sb-collapse');
+  const label = collapsed ? 'Expand sidebar' : 'Collapse sidebar';
+  c.title = label;
+  c.setAttribute('aria-label', label);
+  c.setAttribute('aria-expanded', String(!collapsed));
+}
+
+function setSidebarState(patch) {
+  Object.assign(sidebarState, patch);
+  saveSidebarState();
+  applySidebarState();
+}
+
+function initSidebarTabs() {
+  loadSidebarState();
+  const rail = document.getElementById('sb-rail');
+  const collapseBtn = document.getElementById('sb-collapse');
+  for (const t of SIDEBAR_TABS) {
+    const btn = document.createElement('button');
+    btn.className   = 'sb-tab';
+    btn.dataset.tab = t.id;
+    btn.title       = t.label;
+    btn.setAttribute('role', 'tab');
+    btn.setAttribute('aria-label', t.label);
+    btn.setAttribute('aria-controls', `sb-panel-${t.id}`);
+    btn.innerHTML   = t.icon;
+    // The active tab's button toggles collapse; any other tab opens (and
+    // expands) its own panel.
+    btn.addEventListener('click', () => {
+      if (sidebarState.tab === t.id) setSidebarState({ collapsed: !sidebarState.collapsed });
+      else setSidebarState({ tab: t.id, collapsed: false });
+    });
+    rail.insertBefore(btn, collapseBtn);
+  }
+  collapseBtn.addEventListener('click', () => setSidebarState({ collapsed: !sidebarState.collapsed }));
+  applySidebarState();
+}
+
+// Collapsing changes #map's width without a window resize, so the canvas is
+// re-measured when #map itself changes size. Skips no-op sizes so it doesn't
+// double up with the window 'resize' listener.
+function observeMapSize() {
+  const map = document.getElementById('map');
+  new ResizeObserver(() => {
+    const r = map.getBoundingClientRect();
+    if (r.width !== CW || r.height !== CH) resize();
+  }).observe(map);
 }
 
 // ── Sidebar ────────────────────────────────────────────────────────────────
@@ -2380,7 +2490,7 @@ let chatBusy = false;
 
 async function initChat() {
   try {
-    const res = await fetch('api/chat/config');
+    const res = await fetch('/api/chat/config');
     if (!res.ok) return;
     const cfg = await res.json();
     if (cfg.enabled) document.getElementById('chat-toggle').classList.add('visible');
@@ -2414,7 +2524,7 @@ async function sendChatMessage() {
   const list = document.getElementById('chat-messages');
 
   try {
-    const res = await fetch('api/chat', {
+    const res = await fetch('/api/chat', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ messages: chatHistory }),
@@ -2458,8 +2568,110 @@ async function sendChatMessage() {
   }
 }
 
+// ── Chat @mention autocomplete ──────────────────────────────────────────
+// Suggests component ids from the topology (`nodes`/`nodeMap`, already
+// fetched for the graph view) while typing an `@handle` in chat-input.
+
+let mentionMatches = [];
+let mentionActive = -1;
+let mentionStart = -1;
+
+function currentMentionQuery(input) {
+  const upToCaret = input.value.slice(0, input.selectionStart);
+  const match = upToCaret.match(/(?:^|\s)@([A-Za-z0-9-]*)$/);
+  if (!match) return null;
+  return { query: match[1].toLowerCase(), start: input.selectionStart - match[1].length - 1 };
+}
+
+function updateMentionActive() {
+  const menu = document.getElementById('chat-mention-menu');
+  [...menu.children].forEach((el, i) => el.classList.toggle('active', i === mentionActive));
+}
+
+function renderMentionMenu(query) {
+  const menu = document.getElementById('chat-mention-menu');
+  mentionMatches = nodes
+    .filter(n => n.id.startsWith(query) || n.label.toLowerCase().startsWith(query))
+    .slice(0, 8);
+  if (!mentionMatches.length) {
+    menu.hidden = true;
+    mentionActive = -1;
+    return;
+  }
+  mentionActive = 0;
+  menu.innerHTML = mentionMatches
+    .map(n => `<div class="mention-item" data-id="${n.id}"><span>@${n.id}</span><span class="mention-label">${n.label}</span></div>`)
+    .join('');
+  menu.hidden = false;
+  updateMentionActive();
+}
+
+function hideMentionMenu() {
+  document.getElementById('chat-mention-menu').hidden = true;
+  mentionMatches = [];
+  mentionActive = -1;
+  mentionStart = -1;
+}
+
+function applyMention(input, id) {
+  const value = input.value;
+  const caret = input.selectionStart;
+  const before = value.slice(0, mentionStart);
+  const after = value.slice(caret);
+  const replacement = `@${id} `;
+  input.value = before + replacement + after;
+  const cursor = before.length + replacement.length;
+  input.setSelectionRange(cursor, cursor);
+  hideMentionMenu();
+  input.focus();
+}
+
+document.getElementById('chat-mention-menu').addEventListener('mousedown', e => {
+  const item = e.target.closest('.mention-item');
+  if (!item) return;
+  e.preventDefault();
+  applyMention(document.getElementById('chat-input'), item.dataset.id);
+});
+
+document.getElementById('chat-input').addEventListener('input', e => {
+  const mention = currentMentionQuery(e.target);
+  if (!mention) { hideMentionMenu(); return; }
+  mentionStart = mention.start;
+  renderMentionMenu(mention.query);
+});
+
+document.getElementById('chat-input').addEventListener('blur', () => {
+  // Delay so a mousedown selection on the menu registers before it's hidden.
+  setTimeout(hideMentionMenu, 150);
+});
+
 document.getElementById('chat-send').addEventListener('click', sendChatMessage);
 document.getElementById('chat-input').addEventListener('keydown', e => {
+  const menuOpen = !document.getElementById('chat-mention-menu').hidden && mentionMatches.length;
+  if (menuOpen) {
+    if (e.key === 'ArrowDown') {
+      e.preventDefault();
+      mentionActive = (mentionActive + 1) % mentionMatches.length;
+      updateMentionActive();
+      return;
+    }
+    if (e.key === 'ArrowUp') {
+      e.preventDefault();
+      mentionActive = (mentionActive - 1 + mentionMatches.length) % mentionMatches.length;
+      updateMentionActive();
+      return;
+    }
+    if (e.key === 'Enter' || e.key === 'Tab') {
+      e.preventDefault();
+      applyMention(e.target, mentionMatches[mentionActive].id);
+      return;
+    }
+    if (e.key === 'Escape') {
+      e.preventDefault();
+      hideMentionMenu();
+      return;
+    }
+  }
   if (e.key === 'Enter' && !e.shiftKey) {
     e.preventDefault();
     sendChatMessage();
@@ -2675,7 +2887,7 @@ async function refreshDataTable() {
   const body = document.getElementById('map-panel-body');
   let records;
   try {
-    const res = await fetch(`api/repositories/${activeRepoId}/records?${recordsQuery()}`);
+    const res = await fetch(`/api/repositories/${activeRepoId}/records?${recordsQuery()}`);
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
     records = await res.json();
     tableTotal = Number(res.headers.get('X-Total-Count') ?? records.length);
@@ -2910,7 +3122,7 @@ async function enterReplayMode(schema) {
   if (!field) return;
   let all;
   try {
-    const res = await fetch(`api/repositories/${schema.id}/records`);
+    const res = await fetch(`/api/repositories/${schema.id}/records`);
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
     all = await res.json();
   } catch (err) {
@@ -2970,7 +3182,7 @@ async function saveEditRow(tr, schema, key) {
     body[f.name] = tr.querySelector(`td[data-field="${f.name}"] input`).value;
   }
   try {
-    const res = await fetch(`api/repositories/${activeRepoId}/records/${encodeURIComponent(key)}`, {
+    const res = await fetch(`/api/repositories/${activeRepoId}/records/${encodeURIComponent(key)}`, {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(body),
@@ -3008,7 +3220,7 @@ function startAddRow(schema) {
       body[f.name] = inputs[i++].value;
     }
     try {
-      const res = await fetch(`api/repositories/${activeRepoId}/records`, {
+      const res = await fetch(`/api/repositories/${activeRepoId}/records`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(body),
@@ -3027,7 +3239,7 @@ async function deleteRow(tr, schema) {
   const key = tr.dataset.key;
   if (!confirm(`Delete ${schema.entity} ${key}?`)) return;
   try {
-    const res = await fetch(`api/repositories/${activeRepoId}/records/${encodeURIComponent(key)}`, { method: 'DELETE' });
+    const res = await fetch(`/api/repositories/${activeRepoId}/records/${encodeURIComponent(key)}`, { method: 'DELETE' });
     if (!res.ok && res.status !== 204) throw new Error(`HTTP ${res.status}`);
     addLog(`Deleted ${schema.entity} ${key}`, ACCENT.repository);
   } catch (err) {
@@ -3068,7 +3280,7 @@ async function startStreaming(id) {
   const btn = document.getElementById('stream-toggle-btn');
   if (btn) btn.disabled = true;
   try {
-    const res = await fetch(`api/repositories/${id}/start-stream`, { method: 'POST' });
+    const res = await fetch(`/api/repositories/${id}/start-stream`, { method: 'POST' });
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
     node.streaming = true;
     addLog(`${repoSchemas[id].label} streaming started`, ACCENT.repository);
@@ -3084,7 +3296,7 @@ async function stopStreaming(id) {
   const btn = document.getElementById('stream-toggle-btn');
   if (btn) btn.disabled = true;
   try {
-    const res = await fetch(`api/repositories/${id}/stop-stream`, { method: 'POST' });
+    const res = await fetch(`/api/repositories/${id}/stop-stream`, { method: 'POST' });
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
     node.streaming = false;
     addLog(`${repoSchemas[id].label} streaming stopped`, ACCENT.repository);
@@ -3112,11 +3324,32 @@ function showStreamView(repoId) {
   setMapMode('stream');
   document.getElementById('map-panel-title').textContent = `${schema.label} · live`;
   const isAudio = schema.view.kind === 'streaming-audio';
+  // No native `controls` on the audio element: it's fed a new, fully-formed
+  // WAV file every chunk, so a native seek bar would show that one chunk's
+  // duration/position — implying a bounded track you can scrub, when this
+  // is actually an unbounded live feed. Chrome-less <audio> plus our own
+  // LIVE indicator avoids that false affordance; the play/pause button only
+  // controls local listening, not the underlying stream (see Start/Stop).
   document.getElementById('map-panel-body').innerHTML = isAudio
-    ? `<audio id="stream-audio" controls></audio>`
-    : `<img id="stream-img" src="api/repositories/${repoId}/stream" alt="${schema.label} stream">`;
+    ? `<div class="stream-audio-bar">
+         <span id="stream-live-dot" class="stream-live-dot buffering"></span>
+         <span id="stream-live-label" class="stream-live-label">BUFFERING…</span>
+         <audio id="stream-audio"></audio>
+         <button id="stream-audio-toggle" class="data-btn" type="button">Pause</button>
+       </div>`
+    : `<img id="stream-img" src="/api/repositories/${repoId}/stream" alt="${schema.label} stream">`;
   if (isAudio) {
     playAudioStream(repoId);
+    document.getElementById('stream-audio-toggle').addEventListener('click', (e) => {
+      const audio = document.getElementById('stream-audio');
+      if (audio.paused) {
+        audio.play().catch(() => {});
+        e.target.textContent = 'Pause';
+      } else {
+        audio.pause();
+        e.target.textContent = 'Resume';
+      }
+    });
   } else {
     document.getElementById('stream-img').addEventListener('error', () => {
       document.getElementById('map-panel-body').innerHTML =
@@ -3129,19 +3362,35 @@ function showStreamView(repoId) {
 // Streaming-audio chunks come one complete WAV clip per request (see
 // odf.ui.server.stream_records) rather than over one multiplexed connection
 // like the MJPEG video stream above — multipart/x-mixed-replace has no
-// browser support for <audio>. This chains playback client-side: fetch one
-// chunk, play it, and on 'ended' fetch the next — until audioStreamActive
-// is cleared by leaving the view (see setMapMode).
+// browser support for <audio>. This chains playback client-side: play one
+// chunk, and on 'ended' switch to the next — until audioStreamActive is
+// cleared by leaving the view (see setMapMode). The chunk after the one
+// about to play is fetched in the background (nextChunk) as soon as
+// playback starts, rather than waiting for 'ended' to begin fetching — that
+// hides the request round-trip so there's no gap between chunks on top of
+// the repository's own chunk-to-chunk phase continuity (see
+// app.audio.synth_melody_wav in the streaming-audio-view example).
+//
+// The very first fetch can take up to one whole chunk period: subscribing
+// to a stream that's already running attaches to a queue that only holds
+// the single newest not-yet-delivered chunk (see DispatchRadio's own
+// comments on _INTERVAL_SECONDS), and a brand new subscriber starts with
+// nothing queued — it waits for the producer's next tick. The BUFFERING
+// indicator (see showStreamView) exists so that wait reads as expected
+// startup, not as a broken player.
 async function playAudioStream(repoId) {
   audioStreamActive = true;
   const audio = document.getElementById('stream-audio');
-  const playNext = async () => {
+  const fetchChunk = () => fetch(`/api/repositories/${repoId}/stream`).then((res) => {
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    return res.blob();
+  });
+  let nextChunk = null;
+  const playNext = async (prefetched) => {
     if (!audioStreamActive) return;
     let blob;
     try {
-      const res = await fetch(`api/repositories/${repoId}/stream`);
-      if (!res.ok) throw new Error(`HTTP ${res.status}`);
-      blob = await res.blob();
+      blob = await (prefetched || fetchChunk());
     } catch (err) {
       if (audioStreamActive) {
         document.getElementById('map-panel-body').innerHTML =
@@ -3153,8 +3402,12 @@ async function playAudioStream(repoId) {
     if (audio.src) URL.revokeObjectURL(audio.src);
     audio.src = URL.createObjectURL(blob);
     audio.play().catch(() => {});
+    document.getElementById('stream-live-dot')?.classList.remove('buffering');
+    const label = document.getElementById('stream-live-label');
+    if (label) label.textContent = 'LIVE';
+    nextChunk = fetchChunk();
   };
-  audio.addEventListener('ended', playNext);
+  audio.addEventListener('ended', () => playNext(nextChunk));
   await playNext();
 }
 
@@ -3205,7 +3458,7 @@ async function refreshGeoMap() {
   }
   let records;
   try {
-    const res = await fetch(`api/repositories/${activeRepoId}/records?${recordsQuery()}`);
+    const res = await fetch(`/api/repositories/${activeRepoId}/records?${recordsQuery()}`);
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
     records = await res.json();
     tableTotal = Number(res.headers.get('X-Total-Count') ?? records.length);
@@ -3329,7 +3582,7 @@ async function refreshImageView() {
   const body = document.getElementById('map-panel-body');
   let records;
   try {
-    const res = await fetch(`api/repositories/${activeRepoId}/records`);
+    const res = await fetch(`/api/repositories/${activeRepoId}/records`);
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
     records = await res.json();
   } catch (err) {
@@ -3342,7 +3595,7 @@ async function refreshImageView() {
   }
   body.innerHTML = '<div class="media-grid">' + records.map(r => {
     const key = escapeHtml(r[schema.key]);
-    return `<div class="media-tile"><img src="api/repositories/${activeRepoId}/records/${key}/media" alt="${key}">` +
+    return `<div class="media-tile"><img src="/api/repositories/${activeRepoId}/records/${key}/media" alt="${key}">` +
       `<div class="media-caption">${key}</div></div>`;
   }).join('') + '</div>';
 }
@@ -3372,7 +3625,7 @@ async function refreshMediaView() {
   }
   let records;
   try {
-    const res = await fetch(`api/repositories/${activeRepoId}/records`);
+    const res = await fetch(`/api/repositories/${activeRepoId}/records`);
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
     records = await res.json();
   } catch (err) {
@@ -3387,7 +3640,7 @@ async function refreshMediaView() {
   body.innerHTML = '<div class="media-list">' + records.map(r => {
     const key = escapeHtml(r[schema.key]);
     return `<div class="media-item"><div class="media-caption">${key}</div>` +
-      `<${tag} controls src="api/repositories/${activeRepoId}/records/${key}/media"></${tag}></div>`;
+      `<${tag} controls src="/api/repositories/${activeRepoId}/records/${key}/media"></${tag}></div>`;
   }).join('') + '</div>';
 }
 
@@ -3405,7 +3658,7 @@ function renderMediaReplay(schema) {
   body.innerHTML =
     '<div class="media-list"><div class="media-item">' +
     `<div class="media-caption">${key}</div>` +
-    `<${tag} controls id="replay-media-el" src="api/repositories/${activeRepoId}/records/${key}/media"></${tag}>` +
+    `<${tag} controls id="replay-media-el" src="/api/repositories/${activeRepoId}/records/${key}/media"></${tag}>` +
     '</div></div>' +
     `<div class="floating-pagination">${renderTimelineBar()}</div>`;
   wireMediaReplay(schema);
@@ -3456,7 +3709,7 @@ function wireMediaReplay(schema) {
       const clip = activeClipFor(pos);
       if (String(clip[schema.key]) !== String(currentClip[schema.key])) {
         currentClip = clip;
-        el.src = `api/repositories/${activeRepoId}/records/${String(clip[schema.key])}/media`;
+        el.src = `/api/repositories/${activeRepoId}/records/${String(clip[schema.key])}/media`;
         // el.currentTime is set once `loadedmetadata` fires for the new src.
       } else {
         el.currentTime = Math.min(Math.max(0, pos - clip[replayField]), el.duration || 0);
@@ -3486,7 +3739,7 @@ async function refreshDocumentView() {
   const body = document.getElementById('map-panel-body');
   let records;
   try {
-    const res = await fetch(`api/repositories/${activeRepoId}/records`);
+    const res = await fetch(`/api/repositories/${activeRepoId}/records`);
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
     records = await res.json();
   } catch (err) {
@@ -3553,7 +3806,7 @@ async function refreshTimeseriesView() {
   }
   let records;
   try {
-    const res = await fetch(`api/repositories/${activeRepoId}/records?${recordsQuery()}`);
+    const res = await fetch(`/api/repositories/${activeRepoId}/records?${recordsQuery()}`);
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
     records = await res.json();
     tableTotal = Number(res.headers.get('X-Total-Count') ?? records.length);
@@ -3681,7 +3934,7 @@ async function refreshLogs() {
   const body = document.getElementById('map-panel-body');
   let entries;
   try {
-    const res = await fetch(`api/components/${activeLogComponentId}/logs`);
+    const res = await fetch(`/api/components/${activeLogComponentId}/logs`);
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
     entries = await res.json();
   } catch (err) {
@@ -3733,7 +3986,7 @@ async function refreshDetails() {
   const body = document.getElementById('map-panel-body');
   let entries;
   try {
-    const res = await fetch(`api/components/${activeDetailsComponentId}/details`);
+    const res = await fetch(`/api/components/${activeDetailsComponentId}/details`);
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
     entries = await res.json();
   } catch (err) {
@@ -3776,7 +4029,7 @@ function showChartView(id) {
   setMapMode('chart');
   document.getElementById('map-panel-title').textContent = `${node.label} · chart`;
   document.getElementById('map-panel-body').innerHTML =
-    `<iframe id="chart-frame" src="api/components/${id}/chart"></iframe>`;
+    `<iframe id="chart-frame" src="/api/components/${id}/chart"></iframe>`;
 }
 
 // ── Init ──────────────────────────────────────────────────────────────────
@@ -3798,7 +4051,7 @@ let BRAND = 'ODF';
 async function loadUiExtensions() {
   let ext = { iconScripts: [], colors: {}, logo: null, brand: null };
   try {
-    const res = await fetch('api/ui/extensions');
+    const res = await fetch('/api/ui/extensions');
     if (res.ok) ext = await res.json();
   } catch (err) {
     console.error('Failed to load UI extensions', err);
@@ -3835,7 +4088,7 @@ async function init() {
 
   let data = { project: 'ODF Project', nodes: [], edges: [], stats: { objects: 0, links: 0, types: {} } };
   try {
-    const res = await fetch('api/topology');
+    const res = await fetch('/api/topology');
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
     data = await res.json();
   } catch (err) {
@@ -3845,7 +4098,7 @@ async function init() {
   }
 
   try {
-    const rr = await fetch('api/repository-list');
+    const rr = await fetch('/api/repositories');
     if (rr.ok) {
       repoSchemas = Object.fromEntries((await rr.json()).map(r => [r.id, r]));
     }
@@ -3854,7 +4107,7 @@ async function init() {
   }
 
   try {
-    const lr = await fetch('api/layout');
+    const lr = await fetch('/api/layout');
     if (lr.ok) layoutOverrides = await lr.json();
   } catch (err) {
     console.error('Failed to load saved layout', err);
@@ -3870,8 +4123,6 @@ async function init() {
   }
   for (const [id, pos] of Object.entries(layoutOverrides)) {
     if (!nodeMap[id]) continue;
-    nodeMap[id].col = pos.col;
-    nodeMap[id].row = pos.row;
     if (pos.icon) nodeMap[id].icon = pos.icon;
     if (pos.color) nodeMap[id].color = pos.color;
   }
@@ -3881,8 +4132,10 @@ async function init() {
 
   buildSidebar();
   initTheme();
+  initSidebarTabs();
   window.addEventListener('resize', resize);
   resize();
+  observeMapSize();
   updateCoordReadout({ col: 0, row: 0 });
 
   updateGridTitle();

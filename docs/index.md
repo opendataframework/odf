@@ -66,6 +66,8 @@ A small FastAPI dev server (backgrounded, like any `Service`) that
 visualizes the resolved object graph — every `Component`/`Service`/
 `Repository`, grouped by `Layer`, with lifecycle actions (start/stop/
 execute) available from the UI. Grid positions persist across reloads.
+The left sidebar collapses to an icon rail to give the canvas more
+room; its collapsed/expanded state is remembered per browser.
 Repositories can declare a `data_view()` to pick how their data renders
 (table, map, timeseries, streaming video/audio, ...) instead of the
 default table.
@@ -82,6 +84,38 @@ can likewise be overridden with `[ui] favicon` / `[ui] logo` / `[ui] brand`
 (see
 [`examples/17-custom-icon`](https://github.com/opendataframework/odf/tree/main/examples/17-custom-icon)).
 
+### Choosing what the topology shows
+
+By default the topology shows every component and every connection between
+them. The `[ui.topology]` table in config narrows that:
+
+```toml
+[ui.topology]
+connections = false                  # default true: draw links between components
+config = false                       # default true: show the Config node
+repositories = ["readings"]          # only these repositories
+tasks = ["seed-readings"]            # only these tasks
+components = []                      # no plain components (e.g. a Storage component)
+```
+
+`repositories`, `services`, `tasks`, `pipelines` and `components` each take
+class names or kebab-case ids. A kind without a list shows all of its
+components; a kind with a list shows only the listed ones, and an empty list
+hides the kind. A component added later to a kind that has a list stays hidden
+until it is added to that list. A `Storage` component counts as a plain
+`component`.
+
+When a component is hidden, the components that depend on it are linked to
+whatever it depends on, so the remaining graph keeps its shape. The remaining
+nodes are laid out again without gaps. A node whose saved grid position is
+taken by another node moves to the nearest free row in its column; those
+adjustments are not written to the layout file. Hidden components keep
+running and stay available through MCP and chat; only the topology view
+changes. Unknown keys and values of the wrong type raise a `ValueError` when
+the UI starts, and a listed name that matches no component produces a warning.
+See
+[`examples/04-data-engineering`](https://github.com/opendataframework/odf/tree/main/examples/04-data-engineering).
+
 !!! tip "This is the actual UI, live — not a screenshot"
     Pointed at a static snapshot of
     [`examples/01-table-view`](https://github.com/opendataframework/odf/tree/main/examples/01-table-view),
@@ -97,7 +131,9 @@ can likewise be overridden with `[ui] favicon` / `[ui] logo` / `[ui] brand`
 
 Exposes the same actions available in the UI — component
 start/stop, task/pipeline execution, log inspection — as MCP tools for
-any MCP-speaking client.
+any MCP-speaking client. Any resolved component can contribute its own
+tools alongside these by implementing
+`opendataframework.component.McpToolsProtocol`'s `mcp_tools()`.
 
 ```python
 server.start(mcp=True)

@@ -35,12 +35,11 @@ poetry run odf run
 ```
 
 Requires Python >=3.14, managed with Poetry. `pyproject.toml` depends on
-`opendataframework (>=0.1.0,<0.2.0)` by version — **`poetry install` will
-not resolve until `opendataframework` is published somewhere reachable**
-(PyPI or a private/local index), or the dependency is temporarily
-overridden to a local path/git source while developing both repos side
-by side. If `poetry install` fails here, check that first before
-assuming something is broken in this repo.
+`opendataframework (>=0.2.0,<0.3.0)` by version, resolved from PyPI. When
+developing both repos side by side against unreleased `opendataframework`
+changes, temporarily override the dependency to a local path/git source —
+and revert that override (and regenerate `poetry.lock`) before releasing a
+new version of `odf`.
 
 ## Architecture
 
@@ -51,7 +50,7 @@ needs a third-party dependency:
 |---|---|---|
 | `server.py` | `Server` — composes an `opendataframework.Project` and adds `start(ui=, mcp=, chat=)` orchestration on top | (imports the rest of this table lazily) |
 | `cli.py`, `scaffold.py`, `templates/` | `odf init`/`odf run` CLI | `typer`, `rich` |
-| `mcp/server.py` | MCP server exposing component lifecycle + task/pipeline execution as tools | `mcp`, `uvicorn` |
+| `mcp/server.py` | MCP server exposing component lifecycle + task/pipeline execution + repository data queries as tools | `mcp`, `uvicorn` |
 | `ui/server.py`, `ui/topology.py`, `ui/data.py`, `ui/layout.py`, `ui/extensions.py` | UI dev server | `fastapi`, `uvicorn` |
 | `chat/engine.py` | Chat window backing a `Server`'s UI | `ollama` |
 
@@ -85,6 +84,12 @@ are scaffolded onto disk by `scaffold.py` via
 template's `app/*.py` imports core symbols from `opendataframework`, not
 `odf`. When adding a new template, follow that same import convention.
 
+## Commit messages
+
+Follow `CONTRIBUTING.md`. In particular, never add Claude or other model
+references (no "Generated with …" line, no `Co-Authored-By` trailer) or
+external links to commit messages.
+
 ## Relationship to `opendataframework`
 
 - **`opendataframework`** (sibling repo, dependency) — the core framework.
@@ -107,7 +112,9 @@ bundling that content here — each package's docs redeploy independently,
 on its own push, with no cross-repo CI needed. Changing this package's CLI
 flags, MCP tool surface, or UI behavior should come with a matching update
 to the relevant page here in the same change, since there's no separate
-docs repo to flag it to anymore.
+docs repo to flag it to anymore. User-visible changes also get an entry in
+`docs/release-notes.md` under the in-progress version (one entry per feature,
+not per commit; format mirrors `opendataframework`'s release notes).
 
 ## Examples
 

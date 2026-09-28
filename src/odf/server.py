@@ -101,6 +101,7 @@ class Server:
         mcp_host: str = "127.0.0.1",
         mcp_port: int = 4748,
         chat: bool = False,
+        theme: str | None = None,
         app_module: str | None = "app",
     ) -> None:
         """Start the wrapped ``Project`` and drive optional dev-tooling servers.
@@ -127,15 +128,25 @@ class Server:
                 (path to an image file, swapped in for the built-in CSS mark).
                 ``[ui] brand`` replaces the "ODF" label shown next to the
                 logo and in the browser tab title, for projects that want
-                their own name instead of the framework's.
+                their own name instead of the framework's. ``[ui.topology]``
+                limits what the topology shows: ``connections = false`` hides
+                the links between components, ``config = false`` hides the
+                ``Config`` node, and ``repositories``/``services``/``tasks``/
+                ``pipelines``/``components`` list the only components of that
+                kind to show (a kind without a list shows all of its
+                components).
             ui_host: Interface for the UI server to bind to.
             ui_port: Port for the UI server to bind to.
+            theme: Which UI theme (visual/layout file-set) to serve —
+                orthogonal to the UI's own client-side light/dark
+                color-mode toggle. An explicit value here wins; otherwise
+                falls back to ``[ui] theme`` in config, then ``"default"``.
             mcp: If ``True``, also start an optional MCP server (backgrounded,
                 like any ``Service``) exposing the same actions available in
-                the UI — component start/stop, task/pipeline
-                execution, and log inspection — as MCP tools for any
-                MCP-speaking client. Requires the ``mcp`` extra
-                (``pip install odf[mcp]``).
+                the UI — component start/stop, task/pipeline execution, log
+                inspection, and paged/filtered repository data queries — as
+                MCP tools for any MCP-speaking client. Requires the ``mcp``
+                extra (``pip install odf[mcp]``).
             mcp_host: Interface for the MCP server to bind to.
             mcp_port: Port for the MCP server to bind to.
             chat: If ``True``, also add a chat window to the UI,
@@ -160,8 +171,11 @@ class Server:
                 entirely.
 
         Raises:
-            ValueError: If a circular dependency is detected, or if
-                ``chat=True`` is passed without ``ui=True``.
+            ValueError: If a circular dependency is detected, if
+                ``chat=True`` is passed without ``ui=True``, if
+                ``theme``/``[ui] theme`` names a UI theme that doesn't
+                exist, or if ``[ui.topology]`` has an unknown key or a value
+                of the wrong type.
             ImportError: If ``ui=True``/``mcp=True``/``chat=True`` but the
                 corresponding extra is not installed.
 
@@ -207,6 +221,7 @@ class Server:
         if ui:
             from odf.ui import extensions
             from odf.ui.server import UiServer
+            from odf.ui.topology import TopologyView
 
             chat_engine = None
             if chat:
@@ -217,6 +232,7 @@ class Server:
                     model=chat_cfg.get("model", "gpt-oss"),
                     host=chat_cfg.get("ollama-host", "http://localhost:11434"),
                     mcp=self._mcp_server.mcp if self._mcp_server is not None else None,
+                    debug=chat_cfg.get("debug", False),
                 )
             ui_cfg = self.config.get("ui", {})
             icon_scripts = extensions.icon_scripts() + [
@@ -225,6 +241,13 @@ class Server:
             colors = {**extensions.colors(), **ui_cfg.get("colors", {})}
             favicon = ui_cfg.get("favicon")
             logo = ui_cfg.get("logo")
+            resolved_theme = theme if theme is not None else ui_cfg.get("theme", "default")
+            topology = TopologyView.from_config(ui_cfg.get("topology", {}))
+            for key, name in topology.unmatched(self.context):
+                warnings.warn(
+                    f"[ui.topology] {key} lists {name!r}, which matches no component.",
+                    stacklevel=2,
+                )
             self._ui_server = UiServer(
                 self.context,
                 self._display_name(),
@@ -237,6 +260,8 @@ class Server:
                 favicon=Path(favicon) if favicon else None,
                 logo=Path(logo) if logo else None,
                 brand=ui_cfg.get("brand"),
+                theme=resolved_theme,
+                topology=topology,
             )
             self._ui_server.start()
         self._running = True
@@ -299,6 +324,7 @@ class Server:
         mcp_host: str = "127.0.0.1",
         mcp_port: int = 4748,
         chat: bool = False,
+        theme: str | None = None,
         app_module: str | None = "app",
     ) -> None:
         """Start the server and block until interrupted, then stop.
@@ -323,6 +349,7 @@ class Server:
             mcp_host=mcp_host,
             mcp_port=mcp_port,
             chat=chat,
+            theme=theme,
             app_module=app_module,
         )
         self.wait()
