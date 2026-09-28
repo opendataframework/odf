@@ -40,3 +40,8 @@
 - **Chat**: `tool_call`/`tool_result` events are only shown in the chat window when
   `[project.chat] debug = true`. They were previously always shown. Tool execution is
   unaffected.
+
+### Fixed
+
+- **UI**: the Customize popover now closes when a data, details, chart or logs view is
+  opened. It previously stayed on top of the view.

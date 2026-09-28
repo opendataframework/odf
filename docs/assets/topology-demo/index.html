@@ -2521,6 +2521,7 @@ function setMapMode(mode) {
   }
   if (replayMode && mode !== mapMode) teardownReplay();
   if (mode === 'topology') activeRepoId = null;
+  if (mode !== 'topology') closeStylePicker(); // its anchor (the inspector popup) is hidden outside topology
   mapMode = mode;
   document.getElementById('map').className = 'panel mode-' + mode;
   document.getElementById('map-panel-hdr-extra').innerHTML = '';
