@@ -13,9 +13,6 @@ dependencies = [
     "opendataframework (>=0.2.0,<0.3.0)"
 ]
 
-[tool.poetry.dependencies]
-opendataframework = { source = "local-pypi" }
-
 [project.optional-dependencies]
 ui = [
     "fastapi>=0.100.0",
@@ -96,8 +93,3 @@ exclude_lines = [
     "pragma: no cover",
     "if TYPE_CHECKING:",
 ]
-
-[[tool.poetry.source]]
-name = "local-pypi"
-url = "http://localhost:8080/simple/"
-priority = "explicit"
