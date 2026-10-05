@@ -843,6 +843,10 @@ def test_list_themes_finds_the_built_in_emerald_theme():
     assert "emerald" in themes.list_themes()
 
 
+def test_list_themes_finds_the_built_in_onyx_theme():
+    assert "onyx" in themes.list_themes()
+
+
 @pytest.mark.parametrize("theme", themes.list_themes())
 def test_every_theme_has_the_collapsible_sidebar_rail(theme):
     html = (themes.theme_dir(theme) / "index.html").read_text()
@@ -910,6 +914,22 @@ def test_serves_emerald_theme_explicitly():
 
 def test_theme_dir_resolves_the_emerald_theme():
     path = themes.theme_dir("emerald")
+
+    assert (path / "index.html").is_file()
+    assert (path / "favicon.svg").is_file()
+
+
+def test_serves_onyx_theme_explicitly():
+    with Context(namespaces=set()) as ctx:
+        client = TestClient(UiServer(ctx, "proj", theme="onyx")._app)
+        r = client.get("/")
+
+    assert r.status_code == 200
+    assert "text/html" in r.headers["content-type"]
+
+
+def test_theme_dir_resolves_the_onyx_theme():
+    path = themes.theme_dir("onyx")
 
     assert (path / "index.html").is_file()
     assert (path / "favicon.svg").is_file()

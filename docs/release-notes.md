@@ -1,5 +1,13 @@
 # Release Notes
 
+## 0.3.0
+
+### Added
+
+- **UI**: `onyx` theme, a monochrome graphite take on Material Design 3, in both
+  light and dark mode. Select it with `odf run --theme onyx` or
+  `[ui] theme = "onyx"` in `config.toml`. See [CLI](cli.md).
+
 ## 0.2.0
 
 ### Added
