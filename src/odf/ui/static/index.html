@@ -28,6 +28,10 @@
   </div>
   <div class="hdr-status"><span class="dot"></span>System Nominal</div>
   <div class="hdr-clock mono" id="hdr-clock">--:--:--</div>
+  <div class="hdr-actions">
+    <button id="activity-toggle" class="hdr-icon-btn" title="Activity log" aria-label="Toggle activity log" aria-pressed="false"><svg viewBox="0 0 16 16"><path d="M1.5 8h3l2-5 3 10 2-5h3"/></svg></button>
+    <button id="chat-toggle" class="hdr-icon-btn" title="Chat" aria-label="Toggle chat" aria-pressed="false"><svg viewBox="0 0 16 16"><path d="M2.5 3h11v8h-6l-3 2.5V11h-2z"/></svg></button>
+  </div>
   <button id="theme-toggle" class="theme-toggle" title="Toggle light / dark theme" aria-label="Toggle theme" style="margin-left:10px"></button>
 </div>
 
@@ -96,10 +100,6 @@
         <div class="style-picker-label">Color</div>
         <div class="color-picker-grid" id="color-picker-grid"></div>
       </div>
-    </div>
-    <div class="map-toggle-group">
-      <button id="activity-toggle" class="activity-toggle" title="Toggle activity log">Activity</button>
-      <button id="chat-toggle" class="activity-toggle" title="Toggle chat">Chat</button>
     </div>
     <div id="activity-drawer">
       <div class="activity-drawer-hdr">

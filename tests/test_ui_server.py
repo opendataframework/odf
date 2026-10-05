@@ -871,6 +871,23 @@ def test_index_loads_the_shared_script_and_the_theme_files():
     assert html.index('src="/app.js"') < html.index('src="/theme.js"')
 
 
+def test_activity_and_chat_toggles_live_in_the_header():
+    html = (themes.STATIC_DIR / "index.html").read_text()
+    body = html.index('<div id="body">')
+
+    assert html.index('id="hdr"') < html.index('id="activity-toggle"') < body
+    assert html.index('id="hdr"') < html.index('id="chat-toggle"') < body
+    assert "map-toggle-group" not in html
+
+
+@pytest.mark.parametrize("theme", themes.list_themes())
+def test_no_theme_floats_toggles_over_the_map(theme):
+    css = (themes.theme_dir(theme) / "theme.css").read_text()
+
+    assert "map-toggle-group" not in css
+    assert ".hdr-icon-btn" in css
+
+
 @pytest.mark.parametrize("theme", themes.list_themes())
 def test_no_theme_ships_its_own_index_html(theme):
     assert not (themes.theme_dir(theme) / "index.html").exists()

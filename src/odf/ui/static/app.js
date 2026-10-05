@@ -1383,21 +1383,26 @@ function deselectNode() {
 
 document.getElementById('inspector-popup-close').addEventListener('click', deselectNode);
 
-document.getElementById('activity-toggle').addEventListener('click', () => {
-  document.getElementById('chat-drawer').classList.remove('open');
-  document.getElementById('activity-drawer').classList.toggle('open');
-});
-document.getElementById('activity-drawer-close').addEventListener('click', () => {
-  document.getElementById('activity-drawer').classList.remove('open');
-});
+// The Activity and Chat drawers share the map's right edge, so at most one is
+// open. `name` is 'activity', 'chat' or null (close both); the header button
+// of the open drawer is marked active.
+function setDrawer(name) {
+  for (const key of ['activity', 'chat']) {
+    const open = key === name;
+    const btn = document.getElementById(`${key}-toggle`);
+    document.getElementById(`${key}-drawer`).classList.toggle('open', open);
+    btn.classList.toggle('active', open);
+    btn.setAttribute('aria-pressed', String(open));
+  }
+}
 
-document.getElementById('chat-toggle').addEventListener('click', () => {
-  document.getElementById('activity-drawer').classList.remove('open');
-  document.getElementById('chat-drawer').classList.toggle('open');
-});
-document.getElementById('chat-drawer-close').addEventListener('click', () => {
-  document.getElementById('chat-drawer').classList.remove('open');
-});
+for (const key of ['activity', 'chat']) {
+  document.getElementById(`${key}-toggle`).addEventListener('click', () => {
+    const open = document.getElementById(`${key}-drawer`).classList.contains('open');
+    setDrawer(open ? null : key);
+  });
+  document.getElementById(`${key}-drawer-close`).addEventListener('click', () => setDrawer(null));
+}
 
 // Sidebar clicks always update the Object Inspector (selectNode above). If a
 // data/stream/map/logs view is currently swapped into the map panel, follow

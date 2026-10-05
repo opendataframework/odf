@@ -13,6 +13,13 @@
   optional `group` in `ODF.registerIcon(key, draw, meta)`. The helpers the built-in icons
   are drawn with are available to custom icon scripts as `ODF.iconKit`.
 
+### Changed
+
+- **UI**: the Activity and Chat buttons moved from the top-right corner of the map into
+  the header bar, as icon buttons next to the theme toggle. They no longer cover a
+  view's own controls, such as the table view's timeline dropdown and replay controls,
+  and the button of the open drawer stays highlighted.
+
 ## 0.2.0
 
 ### Added

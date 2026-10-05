@@ -155,10 +155,10 @@ body{
 #sidebar.collapsed{width:auto}
 #sb-rail{width:40px;flex-shrink:0;display:flex;flex-direction:column;align-items:center;gap:4px;padding:8px 0;border-right:1px solid var(--border)}
 #sidebar.collapsed #sb-rail{border-right:none}
-.sb-tab,#sb-collapse{width:28px;height:28px;padding:0;background:transparent;border:1px solid transparent;border-radius:2px;color:var(--text-muted);cursor:pointer;display:flex;align-items:center;justify-content:center;transition:background .12s,color .12s,border-color .12s}
-.sb-tab:hover,#sb-collapse:hover{background:var(--hover-bg);color:var(--title-accent);border-color:var(--border-strong)}
-.sb-tab.active{color:var(--title-accent);border-color:var(--border-strong);background:var(--hover-bg)}
-.sb-tab svg,#sb-collapse svg{width:16px;height:16px;fill:none;stroke:currentColor;stroke-width:1.6;stroke-linecap:round;stroke-linejoin:round}
+.sb-tab,.hdr-icon-btn,#sb-collapse{width:28px;height:28px;padding:0;background:transparent;border:1px solid transparent;border-radius:2px;color:var(--text-muted);cursor:pointer;display:flex;align-items:center;justify-content:center;transition:background .12s,color .12s,border-color .12s}
+.sb-tab:hover,.hdr-icon-btn:hover,#sb-collapse:hover{background:var(--hover-bg);color:var(--title-accent);border-color:var(--border-strong)}
+.sb-tab.active,.hdr-icon-btn.active{color:var(--title-accent);border-color:var(--border-strong);background:var(--hover-bg)}
+.sb-tab svg,.hdr-icon-btn svg,#sb-collapse svg{width:16px;height:16px;fill:none;stroke:currentColor;stroke-width:1.6;stroke-linecap:round;stroke-linejoin:round}
 #sb-collapse{margin-top:auto}
 #sidebar.collapsed #sb-collapse svg{transform:rotate(180deg)}
 #sb-panels{flex:1;min-width:0;overflow-y:auto;display:flex;flex-direction:column}
@@ -282,8 +282,7 @@ canvas{display:block;cursor:grab}
 
 /* Activity toggle + drawer — global (not tied to topology mode), floats
    above the map-panel-view so it's reachable from Data/Stream/Logs too. */
-.activity-toggle{position:absolute;top:12px;right:14px;z-index:8;background:rgba(var(--panel-rgb),0.9);border:1px solid var(--border);color:var(--text-muted);font-family:Inter,'Segoe UI',Roboto,-apple-system,BlinkMacSystemFont,Helvetica,Arial,sans-serif;font-size:10px;font-weight:600;letter-spacing:.05em;text-transform:uppercase;padding:6px 10px;border-radius:2px;cursor:pointer;transition:background .12s,color .12s,border-color .12s}
-.activity-toggle:hover{background:var(--hover-bg);color:var(--title-accent);border-color:var(--border-strong);box-shadow:0 0 0 1px var(--split-a),0 0 0 2px color-mix(in srgb, var(--split-b) 60%, transparent)}
+.hdr-icon-btn:hover{box-shadow:0 0 0 1px var(--split-a),0 0 0 2px color-mix(in srgb, var(--split-b) 60%, transparent)}
 
 #activity-drawer{position:absolute;top:0;right:0;bottom:0;width:300px;max-width:80%;z-index:9;background:var(--panel);border-left:1px solid var(--border-strong);box-shadow:-1px 0 0 color-mix(in srgb, var(--split-a) 35%, transparent),-2px 0 0 color-mix(in srgb, var(--split-b) 25%, transparent),-8px 0 20px rgba(0,0,0,.25);transform:translateX(100%);transition:transform .18s ease;display:flex;flex-direction:column}
 #activity-drawer.open{transform:translateX(0)}
@@ -292,8 +291,7 @@ canvas{display:block;cursor:grab}
 #log-lines{flex:1;overflow-y:auto;display:flex;flex-direction:column;gap:6px;padding:12px 16px}
 
 /* Toggle buttons row (Activity / Chat) — top right, above the map. */
-.map-toggle-group{position:absolute;top:12px;right:14px;z-index:8;display:flex;gap:6px}
-.map-toggle-group .activity-toggle{position:static}
+.hdr-actions{display:flex;align-items:center;gap:6px;margin-left:10px}
 #chat-toggle{display:none}
 #chat-toggle.visible{display:inline-flex}
 
@@ -351,7 +349,7 @@ canvas{display:block;cursor:grab}
 #map:not(.mode-topology) #grid-controls,
 #map:not(.mode-topology) #type-legend{display:none}
 
-.map-panel-hdr{display:flex;align-items:center;gap:12px;padding:12px 100px 12px 16px;border-bottom:1px solid var(--border);flex-shrink:0}
+.map-panel-hdr{display:flex;align-items:center;gap:12px;padding:12px 16px;border-bottom:1px solid var(--border);flex-shrink:0}
 #map-panel-title{font-family:Inter,'Segoe UI',Roboto,-apple-system,BlinkMacSystemFont,Helvetica,Arial,sans-serif;font-size:12.5px;font-weight:700;letter-spacing:.02em;color:var(--title-accent);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;text-shadow:1px 0 color-mix(in srgb, var(--split-a) 50%, transparent),-1px 0 color-mix(in srgb, var(--split-b) 50%, transparent)}
 .map-back-btn{background:transparent;border:1px solid var(--border);color:var(--text-muted);font-family:Inter,'Segoe UI',Roboto,-apple-system,BlinkMacSystemFont,Helvetica,Arial,sans-serif;font-size:10.5px;font-weight:600;letter-spacing:.03em;padding:5px 10px;border-radius:2px;cursor:pointer;transition:background .12s,color .12s,border-color .12s}
 .map-back-btn:hover{background:var(--hover-bg);color:var(--title-accent);border-color:var(--border-strong);box-shadow:0 0 0 1px var(--split-a),0 0 0 2px color-mix(in srgb, var(--split-b) 60%, transparent)}
@@ -453,7 +451,7 @@ canvas{display:block;cursor:grab}
   #zoom-controls button:hover,
   #grid-controls button:hover,
   .map-back-btn:hover,
-  .activity-toggle:hover,
+  .hdr-icon-btn:hover,
   .view-mode-select:hover,
   #hdr:hover{
     animation:glitch-jitter .16s steps(2,end) 1;
