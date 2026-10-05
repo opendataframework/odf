@@ -9,7 +9,7 @@ from opendataframework.component import Component
 from opendataframework.context import Context
 from opendataframework.namespace import Namespace
 from opendataframework.repository import Repository
-from opendataframework.view import StreamingAudioView, StreamingVideoView
+from opendataframework.view import ImageView, StreamingAudioView, StreamingVideoView
 
 from odf.ui import themes
 from odf.ui.server import UiServer
@@ -557,6 +557,91 @@ def test_stream_endpoint_serves_one_chunk_per_request_for_audio():
     assert r.headers["content-type"] == "audio/wav"
     assert b"odf-frame" not in r.content
     assert r.content.startswith(b"chunk-")
+
+
+@dataclass
+class Photo:
+    name: str
+    image: bytes | None
+
+
+def photos_namespace(photos):
+    """A namespace holding a ``Photos`` repository of ``photos`` with an ``ImageView``."""
+    NS = make_ns()
+
+    @NS
+    @Repository(Photo)
+    class Photos:
+        def all(self):
+            return photos
+
+        def data_view(self):
+            return ImageView(field="image")
+
+    return NS
+
+
+@pytest.mark.parametrize(
+    ("content", "content_type"),
+    [
+        (b"\xff\xd8\xff\xe0rest", "image/jpeg"),
+        (b"\x89PNG\r\n\x1a\nrest", "image/png"),
+        (b"GIF89arest", "image/gif"),
+        (b"RIFF\x00\x00\x00\x00WEBPrest", "image/webp"),
+        (b"\x00\x00\x00\x18ftypheicrest", "image/heic"),
+        (b"\x00\x00\x00\x18ftypavifrest", "image/avif"),
+        (b"unrecognised", "image/jpeg"),
+    ],
+)
+def test_record_media_serves_an_image_with_its_detected_type(content, content_type):
+    NS = photos_namespace([Photo(name="a", image=content)])
+
+    with Context(namespaces={NS}) as ctx:
+        client = TestClient(UiServer(ctx, "proj")._app)
+        r = client.get("/api/repositories/photos/records/a/media")
+
+    assert r.status_code == 200
+    assert r.headers["content-type"] == content_type
+    assert r.content == content
+
+
+def test_record_media_resolves_a_url_encoded_key():
+    NS = photos_namespace([Photo(name="front door #1.jpg", image=b"\xff\xd8\xffjpg")])
+
+    with Context(namespaces={NS}) as ctx:
+        client = TestClient(UiServer(ctx, "proj")._app)
+        r = client.get("/api/repositories/photos/records/front%20door%20%231.jpg/media")
+
+    assert r.status_code == 200
+    assert r.content == b"\xff\xd8\xffjpg"
+
+
+def test_record_media_returns_404_for_a_missing_record_or_missing_bytes():
+    NS = photos_namespace([Photo(name="empty", image=None)])
+
+    with Context(namespaces={NS}) as ctx:
+        client = TestClient(UiServer(ctx, "proj")._app)
+        unknown = client.get("/api/repositories/photos/records/nope/media")
+        no_bytes = client.get("/api/repositories/photos/records/empty/media")
+
+    assert unknown.status_code == 404
+    assert no_bytes.status_code == 404
+
+
+def test_record_media_returns_403_for_a_repository_without_a_media_view():
+    NS = make_ns()
+
+    @NS
+    @Repository(Item)
+    class Items:
+        def all(self):
+            return [Item(id=1, name="a")]
+
+    with Context(namespaces={NS}) as ctx:
+        client = TestClient(UiServer(ctx, "proj")._app)
+        r = client.get("/api/repositories/items/records/1/media")
+
+    assert r.status_code == 403
 
 
 def test_repositories_endpoint_reports_streaming_state():

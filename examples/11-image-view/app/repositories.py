@@ -1,43 +1,21 @@
 """In-memory repository backing the image-view example."""
 
 import time
+from pathlib import Path
 
-import cv2
-import numpy as np
 from opendataframework import ImageView, Repository, Storage
 
 from app.entities import DeliveryPhoto
 
-_PHOTO_SIZE = (320, 240)  # (width, height)
+_PHOTOS_DIR = Path(__file__).resolve().parent.parent / "data" / "photos"
 
-
-def synth_photo_jpeg(order_id: int) -> bytes:
-    """Generate a synthetic JPEG still — a solid color block (derived from
-    ``order_id``, so each photo looks distinct) with the order id drawn on
-    it via ``cv2.putText`` — no binary asset to commit.
-    """
-    width, height = _PHOTO_SIZE
-    color = (int(order_id * 47) % 256, int(order_id * 91) % 256, int(order_id * 137) % 256)
-    image = np.full((height, width, 3), color, dtype=np.uint8)
-    cv2.putText(
-        image,
-        f"Order #{order_id}",
-        (16, height // 2),
-        cv2.FONT_HERSHEY_SIMPLEX,
-        0.8,
-        (255, 255, 255),
-        2,
-    )
-    ok, buf = cv2.imencode(".jpg", image)
-    return buf.tobytes() if ok else b""
-
-
-# (order_id, captured_at offset in seconds from construction time) — so
-# there are a couple of real photos to look at without hand-triggering a
-# save() first.
-_SEED_PHOTOS: tuple[tuple[int, float], ...] = (
-    (101, -3600.0),
-    (102, -1800.0),
+# (file name under data/photos, order_id, captured_at offset in seconds from
+# construction time) — one photo per image format, so there are a few real
+# pictures to look at without hand-triggering a save() first.
+_SEED_PHOTOS: tuple[tuple[str, int, float], ...] = (
+    ("order-101.jpg", 101, -3600.0),
+    ("order-102.png", 102, -1800.0),
+    ("order-103.webp", 103, -600.0),
 )
 
 
@@ -49,7 +27,8 @@ class DeliveryPhotos:
     Kept in-memory on purpose — the concept here is ``data_view()``, not
     persistence (see ../02-data-analytics for a SQLite-backed repository).
     Pre-seeded, also on purpose — a photo grid is a lot more useful to look
-    at with a couple of real photos already in it than an empty one.
+    at with a few real photos already in it than an empty one. The image
+    files are only read once, here; ``image`` holds their encoded bytes.
     """
 
     def __init__(self) -> None:
@@ -59,10 +38,10 @@ class DeliveryPhotos:
             DeliveryPhoto(
                 id=photo_id,
                 order_id=order_id,
-                image=synth_photo_jpeg(order_id),
+                image=(_PHOTOS_DIR / filename).read_bytes(),
                 captured_at=now + offset,
             )
-            for photo_id, (order_id, offset) in enumerate(_SEED_PHOTOS, start=1)
+            for photo_id, (filename, order_id, offset) in enumerate(_SEED_PHOTOS, start=1)
         ]
         self._next_id = len(self._photos) + 1
 

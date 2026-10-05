@@ -17,7 +17,7 @@ check that the split works for external consumers.
 | 8 | [`08-video-view/`](08-video-view/) | A `SecurityClips` repository (`data_view() -> VideoView`) rendered as a list of seekable video clips, one per record. |
 | 9 | [`09-streaming-audio-view/`](09-streaming-audio-view/) | A stream-only `DispatchRadio` repository (`data_view() -> StreamingAudioView`) rendered as a live audio player. |
 | 10 | [`10-audio-view/`](10-audio-view/) | A `VoiceMemos` repository (`data_view() -> AudioView`) rendered as a list of seekable audio clips. |
-| 11 | [`11-image-view/`](11-image-view/) | A `DeliveryPhotos` repository (`data_view() -> ImageView`) rendered as a grid of thumbnails. |
+| 11 | [`11-image-view/`](11-image-view/) | A `DeliveryPhotos` repository (`data_view() -> ImageView`) rendered as a grid of thumbnails that open full size. |
 | 12 | [`12-document-view/`](12-document-view/) | An `OrderReceipts` repository (`data_view() -> DocumentView`) rendered as a collapsible, Postman-style JSON tree per record. |
 | 13 | [`13-timeseries-view/`](13-timeseries-view/) | An `Orders` repository (`data_view() -> TimeseriesView`) rendered as a line chart, one point per record. |
 | 14 | [`14-chart/`](14-chart/) | A `SalesByStore` component implementing `chart() -> str`, a matplotlib-backed self-contained HTML chart the dev UI renders behind a **View Chart** button. |

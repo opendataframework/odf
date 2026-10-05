@@ -2,11 +2,11 @@
 
 DeliveryPhotos implements data_view() -> ImageView instead of the default
 table. The topology UI renders a grid of thumbnails, one per record, instead
-of a grid of columns.
+of a grid of columns; selecting a thumbnail opens that image full size.
 
-DeliveryPhotos comes pre-seeded in-memory (see app/repositories.py's
-_SEED_PHOTOS) rather than seeded here, so there's already something to
-look at — main.py only reads the photos back. Run from this directory:
+DeliveryPhotos comes pre-seeded from the image files in data/photos (see
+app/repositories.py's _SEED_PHOTOS) rather than seeded here, so there's
+already something to look at — main.py only reads the photos back. Run from this directory:
 `python main.py`, or `odf run` and click "View Photos" on DeliveryPhotos
 in the UI.
 """

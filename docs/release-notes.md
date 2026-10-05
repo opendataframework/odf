@@ -13,6 +13,13 @@
   optional `group` in `ODF.registerIcon(key, draw, meta)`. The helpers the built-in icons
   are drawn with are available to custom icon scripts as `ODF.iconKit`.
 
+- **UI**: selecting a thumbnail in the image view opens that image full size, with the
+  record's other fields as a caption, previous/next buttons (or the arrow keys), and
+  `Esc` to return to the grid. Images are now served with the media type detected from
+  their bytes (JPEG, PNG, GIF, WebP, BMP, TIFF, AVIF, HEIC) instead of always
+  `image/jpeg`, and an image the browser can't decode, such as HEIC outside Safari, is
+  labelled with its type instead of showing a broken-image icon.
+
 ### Changed
 
 - **UI**: the Activity and Chat buttons moved from the top-right corner of the map into

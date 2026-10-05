@@ -50,6 +50,47 @@ _MEDIA_CONTENT_TYPES: dict[type, str] = {
     AudioView: "audio/wav",
 }
 
+# ISO-BMFF major brands (bytes 8-12, after the ``ftyp`` box marker) of the
+# still-image formats phones save by default.
+_FTYP_IMAGE_TYPES: dict[bytes, str] = {
+    b"avif": "image/avif",
+    b"avis": "image/avif",
+    b"heic": "image/heic",
+    b"heix": "image/heic",
+    b"hevc": "image/heic",
+    b"hevx": "image/heic",
+    b"mif1": "image/heif",
+    b"msf1": "image/heif",
+}
+
+
+def _sniff_image_type(content: bytes) -> str:
+    """Detect an encoded image's media type from its leading magic bytes.
+
+    An ``ImageView`` field holds whatever the project stored, not necessarily
+    JPEG, and a browser only gets to explain an image it can't decode (HEIC
+    outside Safari, say) if it is told the real type.
+
+    Args:
+        content: The encoded image.
+
+    Returns:
+        The detected media type, or ``image/jpeg`` when nothing matches.
+    """
+    if content.startswith(b"\x89PNG\r\n\x1a\n"):
+        return "image/png"
+    if content.startswith((b"GIF87a", b"GIF89a")):
+        return "image/gif"
+    if content[:4] == b"RIFF" and content[8:12] == b"WEBP":
+        return "image/webp"
+    if content.startswith(b"BM"):
+        return "image/bmp"
+    if content.startswith((b"II*\x00", b"MM\x00*")):
+        return "image/tiff"
+    if content[4:8] == b"ftyp":
+        return _FTYP_IMAGE_TYPES.get(content[8:12], "image/jpeg")
+    return "image/jpeg"
+
 
 class UiServer:
     """Serves the UI for a single ``Context`` over HTTP.
@@ -287,7 +328,12 @@ class UiServer:
             record = next((r for r in instance.all() if getattr(r, key_field) == coerced_key), None)
             if record is None:
                 raise HTTPException(status_code=404, detail="Record not found")
-            return Response(content=getattr(record, view.field), media_type=content_type)
+            content = getattr(record, view.field)
+            if not isinstance(content, (bytes, bytearray)):
+                raise HTTPException(status_code=404, detail="Record has no media")
+            if isinstance(view, ImageView):
+                content_type = _sniff_image_type(bytes(content[:12]))
+            return Response(content=bytes(content), media_type=content_type)
 
         @app.get("/api/components/{component_id}/logs")
         def component_logs(component_id: str) -> list[dict]:

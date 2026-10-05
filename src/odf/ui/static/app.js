@@ -1907,6 +1907,7 @@ function setMapMode(mode) {
     }
   }
   if (mapMode === 'geo' && mode !== 'geo') destroyGeoMap();
+  if (mapMode === 'image' && mode !== 'image') closeImageLightbox();
   if (mapMode === 'chart' && mode !== 'chart') {
     const frame = document.getElementById('chart-frame');
     if (frame) frame.src = 'about:blank';
@@ -2429,6 +2430,15 @@ async function deleteRow(tr, schema) {
 }
 
 window.addEventListener('keydown', e => {
+  if (imageIndex >= 0) {
+    // An open image takes the keys first, so Esc returns to the grid rather
+    // than all the way to the topology.
+    if (e.key === 'Escape') closeImageLightbox();
+    else if (e.target.closest('input, textarea, select')) return;
+    else if (e.key === 'ArrowLeft') stepImageLightbox(-1);
+    else if (e.key === 'ArrowRight') stepImageLightbox(1);
+    return;
+  }
   if (e.key !== 'Escape') return;
   if (mapMode !== 'topology') backToTopology();
   else if (selectId) deselectNode();
@@ -2748,11 +2758,39 @@ function renderGeoMap(schema, records, opts = {}) {
 // Backs the "View Images" action on repository nodes whose DataView is an
 // ImageView — a grid of thumbnails, one per record, each sourced from
 // GET /api/repositories/{id}/records/{key}/media (see UiServer.record_media).
+// Selecting a thumbnail opens that image in #image-lightbox, which covers
+// the panel body (not the panel header) until closed.
+
+let imageRecords = []; // the grid's records, in display order
+let imageIndex = -1;   // index into imageRecords of the image open in the lightbox, -1 when closed
+
+function mediaUrl(repoId, key) {
+  return `/api/repositories/${repoId}/records/${encodeURIComponent(key)}/media`;
+}
+
+// The type the server detected for a record's media, to name a format this
+// browser can't decode (HEIC outside Safari, say). Only the response headers
+// are needed, so the body is dropped unread.
+async function mediaContentType(url) {
+  try {
+    const res = await fetch(url);
+    if (res.body) res.body.cancel();
+    return res.ok ? (res.headers.get('Content-Type') || '') : `HTTP ${res.status}`;
+  } catch (err) {
+    return '';
+  }
+}
+
+function mediaFallbackHtml(detail) {
+  return "<span>Can't display this image</span>" +
+    (detail ? `<span class="media-fallback-detail">${escapeHtml(detail)}</span>` : '');
+}
 
 async function showImageView(repoId) {
   activeRepoId = repoId;
   const schema = repoSchemas[repoId];
   setMapMode('image');
+  closeImageLightbox();
   document.getElementById('map-panel-title').textContent = `${schema.label} · images`;
   await refreshImageView();
 }
@@ -2760,6 +2798,7 @@ async function showImageView(repoId) {
 async function refreshImageView() {
   const schema = repoSchemas[activeRepoId];
   const body = document.getElementById('map-panel-body');
+  imageRecords = [];
   let records;
   try {
     const res = await fetch(`/api/repositories/${activeRepoId}/records`);
@@ -2773,12 +2812,87 @@ async function refreshImageView() {
     body.innerHTML = '<span class="detail-empty">// no records</span>';
     return;
   }
-  body.innerHTML = '<div class="media-grid">' + records.map(r => {
+  imageRecords = records;
+  body.innerHTML = '<div class="media-grid">' + records.map((r, i) => {
     const key = escapeHtml(r[schema.key]);
-    return `<div class="media-tile"><img src="/api/repositories/${activeRepoId}/records/${key}/media" alt="${key}">` +
-      `<div class="media-caption">${key}</div></div>`;
+    return `<button class="media-tile" data-index="${i}" title="Open ${key}">` +
+      `<img loading="lazy" src="${escapeHtml(mediaUrl(activeRepoId, r[schema.key]))}" alt="${key}">` +
+      `<div class="media-caption">${key}</div></button>`;
   }).join('') + '</div>';
+  const grid = body.querySelector('.media-grid');
+  grid.addEventListener('click', e => {
+    const tile = e.target.closest('.media-tile');
+    if (tile) openImageLightbox(Number(tile.dataset.index));
+  });
+  // `error` doesn't bubble, hence the capturing listener. The tile stays a
+  // button, so an image that won't render can still be opened.
+  grid.addEventListener('error', async e => {
+    if (e.target.tagName !== 'IMG') return;
+    const url = e.target.src;
+    const fallback = document.createElement('div');
+    fallback.className = 'media-fallback';
+    fallback.innerHTML = mediaFallbackHtml('');
+    e.target.replaceWith(fallback);
+    fallback.innerHTML = mediaFallbackHtml(await mediaContentType(url));
+  }, true);
 }
+
+function openImageLightbox(index) {
+  const record = imageRecords[index];
+  if (!record) return;
+  const schema = repoSchemas[activeRepoId];
+  const url = mediaUrl(activeRepoId, record[schema.key]);
+  imageIndex = index;
+
+  const img = document.getElementById('image-lightbox-img');
+  document.getElementById('image-lightbox-error').hidden = true;
+  img.hidden = false;
+  img.alt = String(record[schema.key]);
+  img.src = url;
+  document.getElementById('image-lightbox-open').href = url;
+  document.getElementById('image-lightbox-caption').innerHTML =
+    `<span>${index + 1} / ${imageRecords.length}</span>` +
+    Object.entries(record)
+      .filter(([k]) => k !== schema.view.field)
+      .map(([k, v]) => `<span><b>${escapeHtml(k)}</b>: ${escapeHtml(v ?? '')}</span>`)
+      .join('');
+  document.getElementById('image-lightbox-prev').disabled = index === 0;
+  document.getElementById('image-lightbox-next').disabled = index === imageRecords.length - 1;
+
+  const lightbox = document.getElementById('image-lightbox');
+  lightbox.style.top = document.getElementById('map-panel-body').offsetTop + 'px';
+  lightbox.hidden = false;
+}
+
+function closeImageLightbox() {
+  if (imageIndex < 0) return;
+  const tile = document.querySelector(`.media-tile[data-index="${imageIndex}"]`);
+  imageIndex = -1;
+  document.getElementById('image-lightbox').hidden = true;
+  document.getElementById('image-lightbox-img').removeAttribute('src');
+  if (tile) tile.focus();
+}
+
+function stepImageLightbox(delta) {
+  openImageLightbox(imageIndex + delta);
+}
+
+document.getElementById('image-lightbox-prev').addEventListener('click', () => stepImageLightbox(-1));
+document.getElementById('image-lightbox-next').addEventListener('click', () => stepImageLightbox(1));
+document.getElementById('image-lightbox-close').addEventListener('click', closeImageLightbox);
+document.getElementById('image-lightbox-stage').addEventListener('click', e => {
+  if (e.target === e.currentTarget) closeImageLightbox();
+});
+document.getElementById('image-lightbox-img').addEventListener('error', async e => {
+  const index = imageIndex;
+  if (index < 0) return;
+  const error = document.getElementById('image-lightbox-error');
+  e.target.hidden = true;
+  error.innerHTML = mediaFallbackHtml('');
+  error.hidden = false;
+  const detail = await mediaContentType(e.target.src);
+  if (imageIndex === index) error.innerHTML = mediaFallbackHtml(detail); // still on the same image
+});
 
 // ── Media view (bounded Video/Audio) ────────────────────────────────────
 // Backs the "View Video"/"View Audio" action on repository nodes whose
@@ -2820,7 +2934,7 @@ async function refreshMediaView() {
   body.innerHTML = '<div class="media-list">' + records.map(r => {
     const key = escapeHtml(r[schema.key]);
     return `<div class="media-item"><div class="media-caption">${key}</div>` +
-      `<${tag} controls src="/api/repositories/${activeRepoId}/records/${key}/media"></${tag}></div>`;
+      `<${tag} controls src="${escapeHtml(mediaUrl(activeRepoId, r[schema.key]))}"></${tag}></div>`;
   }).join('') + '</div>';
 }
 
@@ -2838,7 +2952,7 @@ function renderMediaReplay(schema) {
   body.innerHTML =
     '<div class="media-list"><div class="media-item">' +
     `<div class="media-caption">${key}</div>` +
-    `<${tag} controls id="replay-media-el" src="/api/repositories/${activeRepoId}/records/${key}/media"></${tag}>` +
+    `<${tag} controls id="replay-media-el" src="${escapeHtml(mediaUrl(activeRepoId, clip[schema.key]))}"></${tag}>` +
     '</div></div>' +
     `<div class="floating-pagination">${renderTimelineBar()}</div>`;
   wireMediaReplay(schema);
@@ -2889,7 +3003,7 @@ function wireMediaReplay(schema) {
       const clip = activeClipFor(pos);
       if (String(clip[schema.key]) !== String(currentClip[schema.key])) {
         currentClip = clip;
-        el.src = `/api/repositories/${activeRepoId}/records/${String(clip[schema.key])}/media`;
+        el.src = mediaUrl(activeRepoId, clip[schema.key]);
         // el.currentTime is set once `loadedmetadata` fires for the new src.
       } else {
         el.currentTime = Math.min(Math.max(0, pos - clip[replayField]), el.duration || 0);

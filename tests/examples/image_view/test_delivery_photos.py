@@ -1,5 +1,5 @@
 from app.entities import DeliveryPhoto
-from app.repositories import DeliveryPhotos, synth_photo_jpeg
+from app.repositories import DeliveryPhotos
 from opendataframework import ImageView
 
 # Deliberately builds DeliveryPhotos directly rather than going through
@@ -47,10 +47,9 @@ def test_delivery_photos_data_view_is_image():
     assert photos.data_view() == ImageView(field="image")
 
 
-def test_synth_photo_jpeg_returns_distinct_nonempty_bytes():
-    first = synth_photo_jpeg(101)
-    second = synth_photo_jpeg(102)
+def test_delivery_photos_are_seeded_from_one_file_per_image_format():
+    images = [p.image for p in DeliveryPhotos().all()]
 
-    assert isinstance(first, bytes) and len(first) > 0
-    assert isinstance(second, bytes) and len(second) > 0
-    assert first != second
+    assert images[0].startswith(b"\xff\xd8\xff")  # JPEG
+    assert images[1].startswith(b"\x89PNG")
+    assert images[2][:4] == b"RIFF" and images[2][8:12] == b"WEBP"
