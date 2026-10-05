@@ -274,11 +274,11 @@ canvas{display:block;cursor:grab}
 .icon-swatch{width:44px;height:44px;border:1px solid var(--border);border-radius:2px;background:transparent;cursor:pointer;display:flex;align-items:center;justify-content:center;padding:0}
 .icon-swatch:hover{background:var(--hover-bg);border-color:var(--border-strong);box-shadow:0 0 0 1px var(--split-a),0 0 0 2px color-mix(in srgb, var(--split-b) 60%, transparent)}
 .icon-swatch.selected{border-color:var(--title-accent);box-shadow:0 0 0 1px var(--split-a),0 0 0 2px color-mix(in srgb, var(--split-b) 60%, transparent)}
-.icon-swatch.reset{grid-column:1/-1;display:flex;gap:6px;font-size:10px;color:var(--text-muted);font-family:Inter,'Segoe UI',Roboto,-apple-system,BlinkMacSystemFont,Helvetica,Arial,sans-serif;height:22px}
+.icon-swatch.reset{grid-column:1/-1;display:flex;gap:6px;font-size:10px;color:var(--text-muted);font-family:Inter,'Segoe UI',Roboto,-apple-system,BlinkMacSystemFont,Helvetica,Arial,sans-serif;height:22px;width:auto}
 .color-swatch{width:32px;height:32px;border:1px solid var(--border);border-radius:2px;cursor:pointer;padding:0}
 .color-swatch:hover{border-color:var(--border-strong);box-shadow:0 0 0 1px var(--split-a),0 0 0 2px color-mix(in srgb, var(--split-b) 60%, transparent)}
 .color-swatch.selected{border-color:var(--title-accent);box-shadow:0 0 0 1px var(--split-a),0 0 0 2px color-mix(in srgb, var(--split-b) 60%, transparent)}
-.color-swatch.reset{grid-column:1/-1;display:flex;align-items:center;gap:6px;font-size:10px;color:var(--text-muted);font-family:Inter,'Segoe UI',Roboto,-apple-system,BlinkMacSystemFont,Helvetica,Arial,sans-serif;height:22px;width:auto;background:transparent}
+.color-swatch.reset{grid-column:1/-1;display:flex;align-items:center;justify-content:center;gap:6px;font-size:10px;color:var(--text-muted);font-family:Inter,'Segoe UI',Roboto,-apple-system,BlinkMacSystemFont,Helvetica,Arial,sans-serif;height:22px;width:auto;background:transparent}
 
 /* Activity toggle + drawer — global (not tied to topology mode), floats
    above the map-panel-view so it's reachable from Data/Stream/Logs too. */
