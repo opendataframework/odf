@@ -33,7 +33,7 @@ from opendataframework.view import (
     VideoView,
 )
 
-from odf.ui import data, layout, themes
+from odf.ui import annotations, data, layout, themes
 from odf.ui.topology import TopologyView, build_topology
 
 if TYPE_CHECKING:
@@ -108,6 +108,11 @@ class UiServer:
             ``/api/layout`` endpoints become a read-only no-op — mirroring how
             ``Context``'s ``log_dir=None`` disables file logging. ``Project``
             opts in to a real path when starting the UI.
+        annotations_file: Path to persist annotations drawn in the image view
+            to, as JSON (see ``odf.ui.annotations``). ``None`` (the default)
+            disables annotation — the UI offers no drawing and the save
+            endpoint returns 404. ``Project`` opts in to a real path when
+            starting the UI.
         chat_engine: A ready ``ChatEngine`` to serve the chat window through,
             or ``None`` (the default) to disable it — the chat toggle stays
             hidden in the UI and ``POST /api/chat`` returns 404. ``Project``
@@ -146,6 +151,7 @@ class UiServer:
         host: str = "127.0.0.1",
         port: int = 4747,
         layout_file: str | Path | None = None,
+        annotations_file: str | Path | None = None,
         chat_engine: ChatEngine | None = None,
         icon_scripts: list[Path] | None = None,
         colors: dict[str, str] | None = None,
@@ -161,6 +167,9 @@ class UiServer:
         self._host = host
         self._port = port
         self._layout_path = Path(layout_file) if layout_file is not None else None
+        self._annotations_path = Path(annotations_file) if annotations_file is not None else None
+        # Saving is load-modify-write on one file, from FastAPI's thread pool.
+        self._annotations_lock = threading.Lock()
         self._chat = chat_engine
         self._icon_scripts = list(icon_scripts) if icon_scripts is not None else []
         self._colors = dict(colors) if colors is not None else {}
@@ -193,7 +202,7 @@ class UiServer:
 
         @app.get("/api/ui/extensions")
         def ui_extensions() -> dict:
-            """List registered icon scripts, extra named colors, the custom logo, and brand."""
+            """List icon scripts, extra colors, the custom logo, brand, and enabled features."""
             return {
                 "iconScripts": [
                     f"/api/ui/icon-scripts/{i}" for i in range(len(self._icon_scripts))
@@ -201,6 +210,7 @@ class UiServer:
                 "colors": self._colors,
                 "logo": "/api/ui/logo" if self._logo is not None else None,
                 "brand": self._brand,
+                "annotations": self._annotations_path is not None,
             }
 
         @app.get("/api/ui/logo")
@@ -334,6 +344,37 @@ class UiServer:
             if isinstance(view, ImageView):
                 content_type = _sniff_image_type(bytes(content[:12]))
             return Response(content=bytes(content), media_type=content_type)
+
+        @app.get("/api/repositories/{repo_id}/annotations")
+        def repository_annotations(repo_id: str) -> dict:
+            """Return an image repository's labels and per-record annotations."""
+            self._get_image_view(repo_id)
+            if self._annotations_path is None:
+                return annotations.repository({}, repo_id)
+            with self._annotations_lock:
+                return annotations.repository(self._load_annotations(), repo_id)
+
+        @app.put("/api/repositories/{repo_id}/records/{key}/annotations")
+        def put_record_annotations(repo_id: str, key: str, body: dict) -> dict:
+            """Replace one record's annotations, returning the repository's labels."""
+            self._get_image_view(repo_id)
+            if self._annotations_path is None:
+                raise HTTPException(status_code=404, detail="Annotations are not enabled")
+            with self._annotations_lock:
+                saved = self._load_annotations()
+                try:
+                    block = annotations.set_record(
+                        saved,
+                        repo_id,
+                        key,
+                        body.get("width"),
+                        body.get("height"),
+                        body.get("annotations"),
+                    )
+                except ValueError as exc:
+                    raise HTTPException(status_code=400, detail=str(exc)) from exc
+                annotations.save(self._annotations_path, saved)
+            return {"labels": block["labels"]}
 
         @app.get("/api/components/{component_id}/logs")
         def component_logs(component_id: str) -> list[dict]:
@@ -505,6 +546,20 @@ class UiServer:
         if view is None:
             raise HTTPException(status_code=403, detail="Repository has no data view")
         return view
+
+    def _get_image_view(self, repo_id: str) -> ImageView:
+        """Resolve a repository id's data view, or raise 404 if it isn't an image view."""
+        view = self._get_data_view(repo_id)
+        if not isinstance(view, ImageView):
+            raise HTTPException(status_code=404, detail="Repository has no image view")
+        return view
+
+    def _load_annotations(self) -> dict:
+        """Load the annotations file, or raise 500 if it exists but can't be read."""
+        try:
+            return annotations.load(self._annotations_path)
+        except ValueError as exc:
+            raise HTTPException(status_code=500, detail=str(exc)) from exc
 
     def _get_streaming_view(self, repo_id: str) -> StreamingVideoView | StreamingAudioView:
         """Resolve a repository id's data view, or raise 403 if it isn't streaming."""

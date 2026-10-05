@@ -88,12 +88,20 @@
       <div id="image-lightbox" class="image-lightbox" hidden>
         <div id="image-lightbox-stage" class="image-lightbox-stage">
           <button id="image-lightbox-prev" class="data-btn image-lightbox-nav" title="Previous (&larr;)">&lsaquo;</button>
-          <img id="image-lightbox-img" alt="">
+          <img id="image-lightbox-img" alt="" draggable="false">
           <div id="image-lightbox-error" class="media-fallback" hidden></div>
+          <div id="image-annotations" class="image-annotations" hidden>
+            <div id="image-boxes"></div>
+            <form id="image-label-form" class="image-label-form" hidden>
+              <input id="image-label-input" list="image-label-options" placeholder="Label, then Enter" autocomplete="off" aria-label="Box label">
+              <datalist id="image-label-options"></datalist>
+            </form>
+          </div>
           <button id="image-lightbox-next" class="data-btn image-lightbox-nav" title="Next (&rarr;)">&rsaquo;</button>
         </div>
         <div class="image-lightbox-bar">
           <div id="image-lightbox-caption" class="doc-header"></div>
+          <span id="image-lightbox-hint" class="image-lightbox-hint" hidden>Drag on the image to add a box</span>
           <a id="image-lightbox-open" class="data-btn" target="_blank" rel="noopener">Open original</a>
           <button id="image-lightbox-close" class="data-btn" title="Close (Esc)">Close</button>
         </div>

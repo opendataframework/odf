@@ -19,6 +19,14 @@
   their bytes (JPEG, PNG, GIF, WebP, BMP, TIFF, AVIF, HEIC) instead of always
   `image/jpeg`, and an image the browser can't decode, such as HEIC outside Safari, is
   labelled with its type instead of showing a broken-image icon.
+- **UI**: labelled boxes can be drawn on an open image in the image view. Drag to draw a
+  box and type its label (labels already used are suggested); select a box to delete it,
+  or select its label to change it. Boxes are saved to `annotations.json`, or the file
+  named by `[project] annotations-file` in `config.toml`, as pixel coordinates with each
+  image's size and an ordered label list per repository, for a later pipeline to read
+  with `json.load`. The
+  [`11-image-view`](https://github.com/opendataframework/odf/tree/main/examples/11-image-view)
+  example describes the format.
 
 ### Changed
 

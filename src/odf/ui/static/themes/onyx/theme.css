@@ -421,6 +421,20 @@ button.media-tile:hover,button.media-tile:focus-visible{border-color:var(--title
 .image-lightbox-bar{display:flex;align-items:center;gap:8px;padding:8px 16px;border-top:1px solid var(--border)}
 .image-lightbox-bar .doc-header{flex:1;margin:0;padding:0;border:0}
 .image-lightbox-bar .data-btn{flex:none;margin-left:0;text-decoration:none;white-space:nowrap}
+.image-lightbox-hint{flex:none;color:var(--text-muted);font-size:10.5px;white-space:nowrap}
+.image-lightbox-hint[hidden]{display:none}
+.image-lightbox-stage{position:relative}
+.image-annotations{position:absolute;cursor:crosshair;touch-action:none;user-select:none;-webkit-user-select:none}
+.image-annotations[hidden]{display:none}
+.image-box{position:absolute;box-sizing:border-box;border:2px solid var(--box-color);background:color-mix(in srgb, var(--box-color) 12%, transparent)}
+.image-box.selected{background:color-mix(in srgb, var(--box-color) 28%, transparent);box-shadow:0 0 0 1px var(--panel)}
+.image-box.draft{border-style:dashed}
+.image-box-label{position:absolute;left:-2px;bottom:100%;max-width:160px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;padding:1px 5px;background:var(--box-color);color:#111;font-size:10.5px;font-weight:600;line-height:1.4;cursor:pointer;border-radius:6px 6px 0 0}
+.image-box-delete{position:absolute;right:0;top:0;width:18px;height:18px;padding:0;border:0;background:var(--box-color);color:#111;font-family:inherit;font-size:13px;line-height:1;cursor:pointer}
+.image-label-form{position:absolute;z-index:1;margin:0}
+.image-label-form[hidden]{display:none}
+.image-label-form input{width:150px;background:var(--panel);border:1px solid var(--border-strong);color:var(--text);font-family:inherit;font-size:11.5px;padding:5px 8px;border-radius:6px}
+.image-label-form input:focus{outline:none;border-color:var(--title-accent)}
 
 /* Bounded Video/Audio view — a list of seekable clips, one per record. */
 .media-list{display:flex;flex-direction:column;gap:14px}

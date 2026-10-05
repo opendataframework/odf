@@ -64,3 +64,69 @@ odf run
 `GET /api/repositories` reports `DeliveryPhotos`' view as
 `{"kind": "image", "field": "image"}` — that's what tells the UI to render a
 grid of thumbnails instead of a table.
+
+## Annotating
+
+An open photo can be labelled with boxes, for simple cases where a separate
+annotation tool or a one-off script would be more than the job needs:
+
+- Drag on the photo to draw a box, type its label and press `Enter`. Labels
+  already used in the repository are suggested, and the last one is prefilled.
+- Select a box and press `Delete` (or its `×`) to remove it. There is no move
+  or resize: delete the box and draw it again.
+- Select a box's label to change it.
+- `Esc` backs out of the label input, then the selection, then the photo.
+
+Every change is saved to `annotations.json` in the directory `odf run` was
+started from (`[project] annotations-file` in `config.toml` names another
+path):
+
+```json
+{
+  "version": 1,
+  "repositories": {
+    "delivery-photos": {
+      "labels": ["parcel", "door"],
+      "records": {
+        "1": {
+          "width": 640,
+          "height": 480,
+          "annotations": [
+            {"type": "box", "label": "parcel", "x": 212, "y": 230, "width": 150, "height": 98}
+          ]
+        }
+      }
+    }
+  }
+}
+```
+
+- `repositories` is keyed by repository id, and `records` by record key (as a
+  string). A record with no boxes has no entry.
+- `labels` lists every label used in that repository in the order it was first
+  used, and is only ever appended to, so a label's index is a stable class id.
+- `x`, `y`, `width` and `height` are pixels in the image, with `x`/`y` the
+  box's top-left corner. `width` and `height` on the record are the image's own
+  size, so boxes can be normalised without opening the image.
+
+The file is plain JSON, so a training pipeline reads it without importing
+`odf`, and converts to whatever its model expects:
+
+```python
+import json
+
+block = json.load(open("annotations.json"))["repositories"]["delivery-photos"]
+for key, record in block["records"].items():
+    W, H = record["width"], record["height"]
+    for box in record["annotations"]:
+        class_id = block["labels"].index(box["label"])
+        x, y, w, h = box["x"], box["y"], box["width"], box["height"]
+        coco = [x, y, w, h]
+        voc = [x, y, x + w, y + h]  # xmin, ymin, xmax, ymax
+        yolo = [class_id, (x + w / 2) / W, (y + h / 2) / H, w / W, h / H]
+```
+
+Coordinates follow the photo as the browser displays it, which applies any
+EXIF rotation. A loader that ignores EXIF orientation by default (Pillow, for
+one) needs it applied (`PIL.ImageOps.exif_transpose`) for the boxes to line up
+on rotated phone photos.

@@ -117,7 +117,10 @@ class Server:
                 extra (``pip install odf[ui]``). Grid positions moved by
                 dragging a node persist to the file named by ``[project]
                 layout-file`` in config (default ``"layout.json"``, relative
-                to the current working directory). The icon/color pickers can
+                to the current working directory). Boxes drawn in the image
+                view persist to the file named by ``[project]
+                annotations-file`` (default ``"annotations.json"``, see
+                ``odf.ui.annotations``). The icon/color pickers can
                 be extended beyond the built-in set via ``[ui] icon-scripts``
                 (paths to ``.js`` files, see ``odf.ui.extensions``) and
                 ``[ui.colors]`` (name → hex) in config, merged with anything
@@ -254,6 +257,9 @@ class Server:
                 host=ui_host,
                 port=ui_port,
                 layout_file=self.config.get("project", {}).get("layout-file", "layout.json"),
+                annotations_file=self.config.get("project", {}).get(
+                    "annotations-file", "annotations.json"
+                ),
                 chat_engine=chat_engine,
                 icon_scripts=icon_scripts,
                 colors=colors,

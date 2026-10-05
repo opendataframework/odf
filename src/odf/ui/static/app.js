@@ -2433,8 +2433,9 @@ window.addEventListener('keydown', e => {
   if (imageIndex >= 0) {
     // An open image takes the keys first, so Esc returns to the grid rather
     // than all the way to the topology.
-    if (e.key === 'Escape') closeImageLightbox();
+    if (e.key === 'Escape') { if (!cancelImageAnnotationStep()) closeImageLightbox(); }
     else if (e.target.closest('input, textarea, select')) return;
+    else if ((e.key === 'Delete' || e.key === 'Backspace') && selectedBox >= 0) deleteImageBox(selectedBox);
     else if (e.key === 'ArrowLeft') stepImageLightbox(-1);
     else if (e.key === 'ArrowRight') stepImageLightbox(1);
     return;
@@ -2759,7 +2760,8 @@ function renderGeoMap(schema, records, opts = {}) {
 // ImageView — a grid of thumbnails, one per record, each sourced from
 // GET /api/repositories/{id}/records/{key}/media (see UiServer.record_media).
 // Selecting a thumbnail opens that image in #image-lightbox, which covers
-// the panel body (not the panel header) until closed.
+// the panel body (not the panel header) until closed, and where boxes can be
+// drawn on it (see "Image annotations" below).
 
 let imageRecords = []; // the grid's records, in display order
 let imageIndex = -1;   // index into imageRecords of the image open in the lightbox, -1 when closed
@@ -2792,7 +2794,7 @@ async function showImageView(repoId) {
   setMapMode('image');
   closeImageLightbox();
   document.getElementById('map-panel-title').textContent = `${schema.label} · images`;
-  await refreshImageView();
+  await Promise.all([refreshImageView(), loadImageAnnotations()]);
 }
 
 async function refreshImageView() {
@@ -2843,6 +2845,7 @@ function openImageLightbox(index) {
   const schema = repoSchemas[activeRepoId];
   const url = mediaUrl(activeRepoId, record[schema.key]);
   imageIndex = index;
+  resetImageAnnotationState();
 
   const img = document.getElementById('image-lightbox-img');
   document.getElementById('image-lightbox-error').hidden = true;
@@ -2868,6 +2871,7 @@ function closeImageLightbox() {
   if (imageIndex < 0) return;
   const tile = document.querySelector(`.media-tile[data-index="${imageIndex}"]`);
   imageIndex = -1;
+  resetImageAnnotationState();
   document.getElementById('image-lightbox').hidden = true;
   document.getElementById('image-lightbox-img').removeAttribute('src');
   if (tile) tile.focus();
@@ -2892,6 +2896,251 @@ document.getElementById('image-lightbox-img').addEventListener('error', async e 
   error.hidden = false;
   const detail = await mediaContentType(e.target.src);
   if (imageIndex === index) error.innerHTML = mediaFallbackHtml(detail); // still on the same image
+});
+
+// ── Image annotations ─────────────────────────────────────────────────────
+// Labelled boxes drawn over the image open in the lightbox, saved per record
+// through PUT /api/repositories/{id}/records/{key}/annotations into the
+// project's annotations file (see odf.ui.annotations for its format). Boxes
+// are held in image pixels and drawn in percent of the image, so they follow
+// the lightbox as it resizes. There is no move or resize: a wrong box is
+// deleted and drawn again.
+
+const BOX_COLORS = ['#ff6b6b', '#4dabf7', '#51cf66', '#fcc419', '#cc5de8', '#ff922b', '#22b8cf', '#f06595'];
+const BOX_MIN_DRAG = 4; // px a pointer must travel before a press counts as drawing rather than a click
+
+let annotationsEnabled = false; // whether the server keeps an annotations file (see loadUiExtensions)
+let imageAnnotations = { labels: [], records: {} }; // the active repository's labels and boxes
+let imageLoaded = false; // whether the lightbox image has decoded, so its natural size is known
+let selectedBox = -1;    // index of the open image's selected box, -1 for none
+let boxDrag = null;      // the press in progress on the overlay, see its pointerdown listener
+let pendingBox = null;   // a box being drawn, or drawn and waiting for its label
+let relabelBox = -1;     // index of the box whose label is being edited, -1 for none
+let lastBoxLabel = '';
+let boxSaves = Promise.resolve(); // chains saves, so they reach the server in the order they were made
+
+const imageOverlay = document.getElementById('image-annotations');
+const imageLabelForm = document.getElementById('image-label-form');
+const imageLabelInput = document.getElementById('image-label-input');
+
+async function loadImageAnnotations() {
+  imageAnnotations = { labels: [], records: {} };
+  if (!annotationsEnabled) return;
+  const repoId = activeRepoId;
+  try {
+    const res = await fetch(`/api/repositories/${repoId}/annotations`);
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    const block = await res.json();
+    if (repoId === activeRepoId) imageAnnotations = block;
+  } catch (err) {
+    addLog('Failed to load annotations', ACCENT.alert);
+  }
+  renderImageBoxes();
+}
+
+function resetImageAnnotationState() {
+  imageLoaded = false;
+  selectedBox = -1;
+  boxDrag = null;
+  pendingBox = null;
+  relabelBox = -1;
+  imageLabelForm.hidden = true;
+  imageOverlay.hidden = true;
+  document.getElementById('image-lightbox-hint').hidden = true;
+}
+
+function imageRecordKey() {
+  return String(imageRecords[imageIndex][repoSchemas[activeRepoId].key]);
+}
+
+function imageBoxes() {
+  const record = imageAnnotations.records[imageRecordKey()];
+  return record ? record.annotations : [];
+}
+
+// Fits the overlay to the image as painted, which object-fit can letterbox
+// inside the <img> element's own box.
+function layoutImageAnnotations() {
+  const img = document.getElementById('image-lightbox-img');
+  if (!annotationsEnabled || imageIndex < 0 || !imageLoaded) return;
+  const scale = Math.min(img.clientWidth / img.naturalWidth, img.clientHeight / img.naturalHeight);
+  const width = img.naturalWidth * scale;
+  const height = img.naturalHeight * scale;
+  imageOverlay.style.left = img.offsetLeft + (img.clientWidth - width) / 2 + 'px';
+  imageOverlay.style.top = img.offsetTop + (img.clientHeight - height) / 2 + 'px';
+  imageOverlay.style.width = width + 'px';
+  imageOverlay.style.height = height + 'px';
+  imageOverlay.hidden = false;
+  document.getElementById('image-lightbox-hint').hidden = false;
+}
+
+function boxColor(label) {
+  const index = imageAnnotations.labels.indexOf(label);
+  return BOX_COLORS[(index < 0 ? imageAnnotations.labels.length : index) % BOX_COLORS.length];
+}
+
+function boxStyle(box, label) {
+  const img = document.getElementById('image-lightbox-img');
+  const pct = (value, total) => value / total * 100 + '%';
+  return `left:${pct(box.x, img.naturalWidth)};top:${pct(box.y, img.naturalHeight)};` +
+    `width:${pct(box.width, img.naturalWidth)};height:${pct(box.height, img.naturalHeight)};` +
+    `--box-color:${boxColor(label)}`;
+}
+
+function renderImageBoxes() {
+  if (imageIndex < 0 || !imageLoaded) return;
+  document.getElementById('image-boxes').innerHTML = imageBoxes().map((box, i) =>
+    `<div class="image-box${i === selectedBox ? ' selected' : ''}" data-index="${i}" style="${boxStyle(box, box.label)}">` +
+    `<span class="image-box-label" title="Change label">${escapeHtml(box.label)}</span>` +
+    (i === selectedBox ? '<button type="button" class="image-box-delete" title="Delete (Del)">&times;</button>' : '') +
+    '</div>').join('') +
+    (pendingBox ? `<div class="image-box draft" style="${boxStyle(pendingBox, lastBoxLabel)}"></div>` : '');
+}
+
+// A pointer position as 0..1 fractions of the image, clamped to it.
+function overlayPoint(e) {
+  const rect = imageOverlay.getBoundingClientRect();
+  const clamp = v => Math.min(Math.max(v, 0), 1);
+  return { x: clamp((e.clientX - rect.left) / rect.width), y: clamp((e.clientY - rect.top) / rect.height) };
+}
+
+function dragToBox(from, to) {
+  const img = document.getElementById('image-lightbox-img');
+  const span = (a, b, total) => {
+    const start = Math.min(Math.round(Math.min(a, b) * total), total - 1);
+    return [start, Math.max(Math.round(Math.max(a, b) * total) - start, 1)];
+  };
+  const [x, width] = span(from.x, to.x, img.naturalWidth);
+  const [y, height] = span(from.y, to.y, img.naturalHeight);
+  return { x, y, width, height };
+}
+
+// Opens the label input under the box it is for: the one just drawn
+// (pendingBox), or an existing one being relabelled (relabelBox).
+function openImageLabelForm() {
+  const img = document.getElementById('image-lightbox-img');
+  const box = pendingBox || imageBoxes()[relabelBox];
+  document.getElementById('image-label-options').innerHTML =
+    imageAnnotations.labels.map(label => `<option value="${escapeHtml(label)}">`).join('');
+  imageLabelInput.value = pendingBox ? lastBoxLabel : box.label;
+  imageLabelForm.hidden = false;
+  const left = box.x / img.naturalWidth * imageOverlay.clientWidth;
+  const top = (box.y + box.height) / img.naturalHeight * imageOverlay.clientHeight + 4;
+  imageLabelForm.style.left = Math.max(Math.min(left, imageOverlay.clientWidth - imageLabelForm.offsetWidth), 0) + 'px';
+  imageLabelForm.style.top = Math.max(Math.min(top, imageOverlay.clientHeight - imageLabelForm.offsetHeight), 0) + 'px';
+  imageLabelInput.focus();
+  imageLabelInput.select();
+}
+
+function closeImageLabelForm() {
+  if (imageLabelForm.hidden) return false;
+  imageLabelForm.hidden = true;
+  pendingBox = null;
+  relabelBox = -1;
+  renderImageBoxes();
+  return true;
+}
+
+// Esc backs out one step at a time: the label input, then the selection.
+// Returns false when there was nothing to back out of.
+function cancelImageAnnotationStep() {
+  if (closeImageLabelForm()) return true;
+  if (selectedBox < 0) return false;
+  selectedBox = -1;
+  renderImageBoxes();
+  return true;
+}
+
+function deleteImageBox(index) {
+  selectedBox = -1;
+  saveImageBoxes(imageBoxes().filter((_, i) => i !== index));
+}
+
+// Replaces the open image's boxes, showing the change at once and reloading
+// from the server if it could not be saved.
+function saveImageBoxes(boxes) {
+  const img = document.getElementById('image-lightbox-img');
+  const repoId = activeRepoId;
+  const key = imageRecordKey();
+  const body = { width: img.naturalWidth, height: img.naturalHeight, annotations: boxes };
+  if (boxes.length) imageAnnotations.records[key] = body;
+  else delete imageAnnotations.records[key];
+  for (const box of boxes) {
+    if (!imageAnnotations.labels.includes(box.label)) imageAnnotations.labels.push(box.label);
+  }
+  renderImageBoxes();
+  boxSaves = boxSaves.then(async () => {
+    try {
+      const res = await fetch(`/api/repositories/${repoId}/records/${encodeURIComponent(key)}/annotations`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body),
+      });
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    } catch (err) {
+      addLog(`Failed to save annotations for ${key}`, ACCENT.alert);
+      if (repoId === activeRepoId) await loadImageAnnotations();
+    }
+  });
+}
+
+document.getElementById('image-lightbox-img').addEventListener('load', () => {
+  if (imageIndex < 0) return;
+  imageLoaded = true;
+  layoutImageAnnotations();
+  renderImageBoxes();
+});
+new ResizeObserver(layoutImageAnnotations).observe(document.getElementById('image-lightbox-stage'));
+
+// A press on the overlay is a click (select a box, or act on its label or
+// delete button) until the pointer travels BOX_MIN_DRAG, when it becomes a
+// new box. The overlay captures the pointer, so a box can be drawn starting
+// inside another one and finished outside the image.
+imageOverlay.addEventListener('pointerdown', e => {
+  if (e.button !== 0 || e.target.closest('.image-label-form')) return;
+  e.preventDefault();
+  closeImageLabelForm();
+  boxDrag = { from: overlayPoint(e), clientX: e.clientX, clientY: e.clientY, target: e.target, drawing: false };
+  imageOverlay.setPointerCapture(e.pointerId);
+});
+imageOverlay.addEventListener('pointermove', e => {
+  if (!boxDrag) return;
+  if (!boxDrag.drawing && Math.hypot(e.clientX - boxDrag.clientX, e.clientY - boxDrag.clientY) < BOX_MIN_DRAG) return;
+  boxDrag.drawing = true;
+  selectedBox = -1;
+  pendingBox = dragToBox(boxDrag.from, overlayPoint(e));
+  renderImageBoxes();
+});
+imageOverlay.addEventListener('pointerup', () => {
+  const drag = boxDrag;
+  if (!drag) return;
+  boxDrag = null;
+  if (drag.drawing) return openImageLabelForm();
+  const box = drag.target.closest('.image-box[data-index]');
+  const index = box ? Number(box.dataset.index) : -1;
+  if (index >= 0 && drag.target.closest('.image-box-delete')) return deleteImageBox(index);
+  selectedBox = index;
+  renderImageBoxes();
+  if (index >= 0 && drag.target.closest('.image-box-label')) {
+    relabelBox = index;
+    openImageLabelForm();
+  }
+});
+imageOverlay.addEventListener('pointercancel', () => {
+  boxDrag = null;
+  pendingBox = null;
+  renderImageBoxes();
+});
+imageLabelForm.addEventListener('submit', e => {
+  e.preventDefault();
+  const label = imageLabelInput.value.trim();
+  if (!label) return;
+  const boxes = imageBoxes().map(box => ({ ...box }));
+  if (pendingBox) boxes.push({ type: 'box', label, ...pendingBox });
+  else if (boxes[relabelBox]) boxes[relabelBox].label = label;
+  lastBoxLabel = label;
+  closeImageLabelForm();
+  saveImageBoxes(boxes);
 });
 
 // ── Media view (bounded Video/Audio) ────────────────────────────────────
@@ -3350,6 +3599,7 @@ async function loadUiExtensions() {
   } catch (err) {
     console.error('Failed to load UI extensions', err);
   }
+  annotationsEnabled = Boolean(ext.annotations);
 
   if (ext.logo) {
     const mark = document.getElementById('brand-mark');

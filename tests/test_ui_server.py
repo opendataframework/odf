@@ -707,6 +707,126 @@ def test_layout_put_overwrites_previous_save(tmp_path):
         assert client.get("/api/layout").json() == {"b": {"col": 2, "row": 2}}
 
 
+# --- annotation endpoints --------------------------------------------------
+
+
+def parcel_box(label="parcel"):
+    return {"type": "box", "label": label, "x": 1, "y": 2, "width": 3, "height": 4}
+
+
+def test_annotations_are_empty_before_anything_is_drawn(tmp_path):
+    NS = photos_namespace([Photo(name="a", image=b"jpg")])
+    with Context(namespaces={NS}) as ctx:
+        client = TestClient(UiServer(ctx, "proj", annotations_file=tmp_path / "ann.json")._app)
+
+        r = client.get("/api/repositories/photos/annotations")
+
+    assert r.status_code == 200
+    assert r.json() == {"labels": [], "records": {}}
+
+
+def test_annotations_round_trip_and_accumulate_labels(tmp_path):
+    annotations_file = tmp_path / "ann.json"
+    NS = photos_namespace(
+        [Photo(name="front door.jpg", image=b"jpg"), Photo(name="b", image=b"jpg")]
+    )
+    with Context(namespaces={NS}) as ctx:
+        client = TestClient(UiServer(ctx, "proj", annotations_file=annotations_file)._app)
+
+        first = client.put(
+            "/api/repositories/photos/records/front%20door.jpg/annotations",
+            json={"width": 10, "height": 20, "annotations": [parcel_box()]},
+        )
+        second = client.put(
+            "/api/repositories/photos/records/b/annotations",
+            json={"width": 10, "height": 20, "annotations": [parcel_box("door")]},
+        )
+        block = client.get("/api/repositories/photos/annotations").json()
+
+    assert first.json() == {"labels": ["parcel"]}
+    assert second.json() == {"labels": ["parcel", "door"]}
+    assert block == {
+        "labels": ["parcel", "door"],
+        "records": {
+            "front door.jpg": {"width": 10, "height": 20, "annotations": [parcel_box()]},
+            "b": {"width": 10, "height": 20, "annotations": [parcel_box("door")]},
+        },
+    }
+    assert json.loads(annotations_file.read_text())["repositories"]["photos"] == block
+
+
+def test_annotations_put_rejects_a_malformed_body(tmp_path):
+    annotations_file = tmp_path / "ann.json"
+    NS = photos_namespace([Photo(name="a", image=b"jpg")])
+    with Context(namespaces={NS}) as ctx:
+        client = TestClient(UiServer(ctx, "proj", annotations_file=annotations_file)._app)
+
+        r = client.put(
+            "/api/repositories/photos/records/a/annotations",
+            json={"width": 10, "height": 20, "annotations": [{"type": "box"}]},
+        )
+
+    assert r.status_code == 400
+    assert not annotations_file.exists()
+
+
+def test_annotations_refuse_to_overwrite_an_unreadable_file(tmp_path):
+    annotations_file = tmp_path / "ann.json"
+    annotations_file.write_text("not json")
+    NS = photos_namespace([Photo(name="a", image=b"jpg")])
+    with Context(namespaces={NS}) as ctx:
+        client = TestClient(UiServer(ctx, "proj", annotations_file=annotations_file)._app)
+
+        r = client.put(
+            "/api/repositories/photos/records/a/annotations",
+            json={"width": 10, "height": 20, "annotations": [parcel_box()]},
+        )
+
+    assert r.status_code == 500
+    assert annotations_file.read_text() == "not json"
+
+
+def test_annotations_are_disabled_without_a_file():
+    NS = photos_namespace([Photo(name="a", image=b"jpg")])
+    with Context(namespaces={NS}) as ctx:
+        client = TestClient(UiServer(ctx, "proj")._app)
+
+        assert client.get("/api/ui/extensions").json()["annotations"] is False
+        assert client.get("/api/repositories/photos/annotations").json() == {
+            "labels": [],
+            "records": {},
+        }
+        r = client.put(
+            "/api/repositories/photos/records/a/annotations",
+            json={"width": 10, "height": 20, "annotations": [parcel_box()]},
+        )
+
+    assert r.status_code == 404
+
+
+def test_extensions_report_annotations_enabled_with_a_file(tmp_path):
+    with Context(namespaces=set()) as ctx:
+        client = TestClient(UiServer(ctx, "proj", annotations_file=tmp_path / "ann.json")._app)
+
+        assert client.get("/api/ui/extensions").json()["annotations"] is True
+
+
+def test_annotations_are_only_served_for_image_repositories(tmp_path):
+    NS = make_ns()
+
+    @NS
+    @Repository(Item)
+    class Items:
+        def all(self):
+            return []
+
+    with Context(namespaces={NS}) as ctx:
+        client = TestClient(UiServer(ctx, "proj", annotations_file=tmp_path / "ann.json")._app)
+
+        assert client.get("/api/repositories/items/annotations").status_code == 404
+        assert client.get("/api/repositories/nope/annotations").status_code == 404
+
+
 # --- chat endpoints --------------------------------------------------------
 
 
