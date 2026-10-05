@@ -1,4 +1,5 @@
 import json
+import re
 import time
 from dataclasses import dataclass
 
@@ -883,6 +884,66 @@ def test_serves_the_shared_script():
     assert r.status_code == 200
     assert "javascript" in r.headers["content-type"]
     assert r.headers["cache-control"] == "no-cache"
+
+
+ICON_SCRIPTS = sorted(p.name for p in (themes.STATIC_DIR / "icons").glob("*.js"))
+DEFAULT_ICONS = {"config", "component", "repository", "service", "task", "pipeline"}
+
+
+@pytest.mark.parametrize("name", ICON_SCRIPTS)
+def test_serves_every_icon_group_script(name):
+    with Context(namespaces=set()) as ctx:
+        client = TestClient(UiServer(ctx, "proj")._app)
+        r = client.get(f"/icons/{name}")
+
+    assert r.status_code == 200
+    assert "javascript" in r.headers["content-type"]
+    assert r.headers["cache-control"] == "no-cache"
+    assert r.text == (themes.STATIC_DIR / "icons" / name).read_text()
+
+
+def test_unknown_icon_group_script_is_404():
+    with Context(namespaces=set()) as ctx:
+        client = TestClient(UiServer(ctx, "proj")._app)
+        r = client.get("/icons/nope.js")
+
+    assert r.status_code == 404
+
+
+def test_index_loads_every_icon_group_script_between_app_and_theme():
+    html = (themes.STATIC_DIR / "index.html").read_text()
+    positions = {name: html.index(f'src="/icons/{name}"') for name in ICON_SCRIPTS}
+
+    assert "shared.js" in ICON_SCRIPTS
+    assert html.index('src="/app.js"') < positions["shared.js"]
+    assert all(positions["shared.js"] <= pos for pos in positions.values())
+    assert max(positions.values()) < html.index('src="/theme.js"')
+
+
+def test_icon_group_scripts_register_unique_keys():
+    keys = []
+    for name in ICON_SCRIPTS:
+        script = (themes.STATIC_DIR / "icons" / name).read_text()
+        keys += re.findall(r"\badd\('([^']+)'", script)
+
+    assert len(keys) == len(set(keys))
+    assert not DEFAULT_ICONS & set(keys)
+    assert {
+        "camera",
+        "photo-camera",
+        "conveyor",
+        "conveyor-intake",
+        "podium",
+        "podium-star",
+    } <= set(keys)
+
+
+def test_app_script_keeps_only_the_default_icons():
+    script = (themes.STATIC_DIR / "app.js").read_text()
+    registry = script[script.index("const ICONS = {") :]
+    registry = registry[: registry.index("};")]
+
+    assert set(re.findall(r"^\s+'?([\w-]+)'?:\s+\{ draw:", registry, re.M)) == DEFAULT_ICONS
 
 
 @pytest.mark.parametrize("theme", themes.list_themes())

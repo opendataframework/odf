@@ -21,7 +21,8 @@ to serve that file to the browser and load it before the first render.
 
 A registered icon isn't tied to a particular exec type (repository, task,
 service, ...) — it's just one more option in the picker, assignable to any
-node. Nothing forces a node to actually use it — that's what `layout.json`
+node. The picker lists icons by group, one tab each; an icon registered
+without a `group` in its `meta` goes under the "Custom" tab. Nothing forces a node to actually use it — that's what `layout.json`
 is for (see below); `icons/lighthouse.js` alone only makes "Lighthouse" an
 available choice.
 
@@ -95,8 +96,9 @@ Open the UI — the browser tab shows the lighthouse favicon and reads
 "Beacon Watch" with the matching logo image instead of "ODF" and the
 default diamond, and `Beacons` already renders with the lighthouse tower
 in amber, no clicking required. Click the node, then **Customize**, to
-see where that came from — the icon picker highlights "Lighthouse" (a
-sweeping-beam tower) and the color picker highlights the amber swatch,
+see where that came from — the icon picker opens on its "Custom" tab with
+"Lighthouse" (a sweeping-beam tower) highlighted, and the color picker
+highlights the amber swatch,
 alongside the built-ins and the red swatch this example also registered.
 Pick a different icon/color and it persists back to `layout.json`, same
 as any other override.

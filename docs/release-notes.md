@@ -7,6 +7,11 @@
 - **UI**: `onyx` theme, a monochrome graphite take on Material Design 3, in both
   light and dark mode. Select it with `odf run --theme onyx` or
   `[ui] theme = "onyx"` in `config.toml`. See [CLI](cli.md).
+- **UI**: 51 more built-in topology icons, and an icon picker split into group tabs:
+  `Defaults`, `Devices`, `Buildings`, `Charts`, `Research`, `ML` and `Shop`. Icons added
+  through `[ui] icon-scripts` are listed under `Custom`, or under the group named by the
+  optional `group` in `ODF.registerIcon(key, draw, meta)`. The helpers the built-in icons
+  are drawn with are available to custom icon scripts as `ODF.iconKit`.
 
 ## 0.2.0
 

@@ -54,9 +54,11 @@ server.start(ui=True)
 print(server.ui_url)  # http://127.0.0.1:4747
 ```
 
-Icons and colors can be extended beyond the built-in isometric set via
-`[ui] icon-scripts` / `[ui.colors]` in config, or by packages registering
-into `odf.ui.extensions`.
+A node's icon and color can be changed from its "Customize" popover, which
+lists the built-in isometric icons by group (devices, buildings, charts,
+research, ML, shop). Icons and colors can be extended beyond the built-in
+set via `[ui] icon-scripts` / `[ui.colors]` in config, or by packages
+registering into `odf.ui.extensions`.
 
 ---
 

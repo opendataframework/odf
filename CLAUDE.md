@@ -52,7 +52,7 @@ needs a third-party dependency:
 | `cli.py`, `scaffold.py`, `templates/` | `odf init`/`odf run` CLI | `typer`, `rich` |
 | `mcp/server.py` | MCP server exposing component lifecycle + task/pipeline execution + repository data queries as tools | `mcp`, `uvicorn` |
 | `ui/server.py`, `ui/topology.py`, `ui/data.py`, `ui/layout.py`, `ui/extensions.py`, `ui/themes.py` | UI dev server | `fastapi`, `uvicorn` |
-| `ui/static/` | The UI itself: `index.html` + `app.js` shared by every theme, and `themes/<name>/` holding each theme's `theme.css`, `favicon.svg` and optional `theme.js` | (Leaflet from a CDN; no build step) |
+| `ui/static/` | The UI itself: `index.html` + `app.js` shared by every theme, `icons/` holding the built-in topology icons (one file per picker group, plus `shared.js`), and `themes/<name>/` holding each theme's `theme.css`, `favicon.svg` and optional `theme.js` | (Leaflet from a CDN; no build step) |
 | `chat/engine.py` | Chat window backing a `Server`'s UI | `ollama` |
 
 UI markup and behavior changes go in the shared `ui/static/index.html` and
@@ -62,6 +62,14 @@ drawing CSS can't express goes in its `theme.js` through
 `ODF.registerTheme()`, overriding `THEME_STYLE` in `app.js`. `app.js` must
 stay a classic script, since custom icon scripts use its top-level names as
 globals.
+
+`app.js` holds only the six exec-type default icons. Every other built-in
+icon goes in its group's file under `ui/static/icons/` (a new group is a new
+file plus a `<script>` tag in `index.html`, after `icons/shared.js`), where
+it registers through `ODF.registerIcon` with that file's `group` and draws
+with the `ODF.iconKit` helpers from `icons/shared.js`. Icon keys are stored
+in projects' `layout.json`, so renaming one resets it to the type default
+there.
 
 None of `ui`/`mcp`/`chat` are imported eagerly by `odf/__init__.py` or
 `odf/server.py` (keep it that way — `import odf` alone must not pull in

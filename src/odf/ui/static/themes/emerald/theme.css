@@ -252,7 +252,14 @@ canvas{display:block;cursor:grab}
 .style-picker-section + .style-picker-section{margin-top:8px;padding-top:8px;border-top:1px solid var(--border)}
 .style-picker-label{font-size:9px;font-weight:600;letter-spacing:.06em;text-transform:uppercase;color:var(--text-muted);font-family:'SF Mono',Consolas,monospace;margin-bottom:4px}
 .layer-color-popover{position:fixed;z-index:8}
+/* Group tabs above the icon grid, capped to the grid's own width so a
+   long row of groups wraps instead of widening the popover. */
+.icon-picker-tabs{display:flex;flex-wrap:wrap;gap:3px;max-width:188px;margin-bottom:6px}
+.icon-picker-tab{border:1px solid var(--border);border-radius:6px;background:transparent;color:var(--text-muted);font-family:'SF Mono',Consolas,monospace;font-size:9px;line-height:1;padding:3px 5px;cursor:pointer}
+.icon-picker-tab:hover{background:var(--hover-bg);border-color:var(--border-strong)}
+.icon-picker-tab.active{color:var(--title-accent);border-color:var(--border-strong);background:var(--hover-bg)}
 .icon-picker-grid,.color-picker-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:4px}
+.icon-picker-grid{max-height:236px;overflow-y:auto}
 .icon-swatch{width:44px;height:44px;border:1px solid var(--border);border-radius:6px;background:transparent;cursor:pointer;display:flex;align-items:center;justify-content:center;padding:0}
 .icon-swatch:hover{background:var(--hover-bg);border-color:var(--border-strong)}
 .icon-swatch.selected{border-color:var(--title-accent)}
@@ -433,7 +440,7 @@ canvas{display:block;cursor:grab}
 .hdr-title,.hdr-stat .k,.hdr-status,.theme-toggle,.sb-heading,.panel-heading,
 .layer-group-name,.style-picker-label,.activity-toggle,.data-btn,.map-back-btn,
 .view-mode-select,.pagination select,.timeline-bar select,#map-title,.tl-item,
-.detail-title,.detail-empty,.icon-swatch.reset,.color-swatch.reset,.data-table th{
+.detail-title,.detail-empty,.icon-swatch.reset,.color-swatch.reset,.icon-picker-tab,.data-table th{
   font-family:Inter,'Geist',-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;text-transform:none;letter-spacing:0}
 .hdr-title{font-size:14px;font-weight:600}
 .hdr-title small{text-transform:none;letter-spacing:0;font-size:11px;font-weight:400}
@@ -460,7 +467,7 @@ canvas{display:block;cursor:grab}
 .data-table input:focus,#chat-input:focus{outline:none;border-color:var(--title-accent);box-shadow:var(--focus-ring)}
 
 .sb-tab:hover,#sb-collapse:hover{color:var(--text);border-color:transparent}
-.sb-tab.active{color:var(--title-accent);border-color:transparent;background:color-mix(in srgb, var(--title-accent) 12%, transparent)}
+.sb-tab.active,.icon-picker-tab.active{color:var(--title-accent);border-color:transparent;background:color-mix(in srgb, var(--title-accent) 12%, transparent)}
 .node-item{border-left:none;border-radius:6px;margin-bottom:2px}
 .node-item.selected{box-shadow:inset 2px 0 0 var(--row-accent)}
 .layer-group-body .node-item{padding-left:22px}

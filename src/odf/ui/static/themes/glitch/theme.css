@@ -263,7 +263,14 @@ canvas{display:block;cursor:grab}
 .style-picker-section + .style-picker-section{margin-top:8px;padding-top:8px;border-top:1px solid var(--border)}
 .style-picker-label{font-size:9px;font-weight:600;letter-spacing:.06em;text-transform:uppercase;color:var(--text-muted);font-family:Inter,'Segoe UI',Roboto,-apple-system,BlinkMacSystemFont,Helvetica,Arial,sans-serif;margin-bottom:4px}
 .layer-color-popover{position:fixed;z-index:8}
+/* Group tabs above the icon grid, capped to the grid's own width so a
+   long row of groups wraps instead of widening the popover. */
+.icon-picker-tabs{display:flex;flex-wrap:wrap;gap:3px;max-width:188px;margin-bottom:6px}
+.icon-picker-tab{border:1px solid var(--border);border-radius:2px;background:transparent;color:var(--text-muted);font-family:Inter,'Segoe UI',Roboto,-apple-system,BlinkMacSystemFont,Helvetica,Arial,sans-serif;font-size:9px;line-height:1;padding:3px 5px;cursor:pointer}
+.icon-picker-tab:hover{background:var(--hover-bg);border-color:var(--border-strong);box-shadow:0 0 0 1px var(--split-a),0 0 0 2px color-mix(in srgb, var(--split-b) 60%, transparent)}
+.icon-picker-tab.active{color:var(--title-accent);border-color:var(--border-strong);background:var(--hover-bg)}
 .icon-picker-grid,.color-picker-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:4px}
+.icon-picker-grid{max-height:236px;overflow-y:auto}
 .icon-swatch{width:44px;height:44px;border:1px solid var(--border);border-radius:2px;background:transparent;cursor:pointer;display:flex;align-items:center;justify-content:center;padding:0}
 .icon-swatch:hover{background:var(--hover-bg);border-color:var(--border-strong);box-shadow:0 0 0 1px var(--split-a),0 0 0 2px color-mix(in srgb, var(--split-b) 60%, transparent)}
 .icon-swatch.selected{border-color:var(--title-accent);box-shadow:0 0 0 1px var(--split-a),0 0 0 2px color-mix(in srgb, var(--split-b) 60%, transparent)}

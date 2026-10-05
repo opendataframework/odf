@@ -352,7 +352,7 @@ class UiServer:
             )
 
         # The UI's own files are revalidated on every load: ``/theme.css`` and
-        # ``/theme.js`` change content with the selected theme, and all four
+        # ``/theme.js`` change content with the selected theme, and all of them
         # change together on upgrade, so a stale cached copy would mix them.
         no_cache = {"Cache-Control": "no-cache"}
 
@@ -366,6 +366,16 @@ class UiServer:
             """Serve the UI's script, shared by every theme."""
             return FileResponse(
                 themes.STATIC_DIR / "app.js", media_type="application/javascript", headers=no_cache
+            )
+
+        @app.get("/icons/{name}")
+        def icon_group(name: str) -> FileResponse:
+            """Serve one of the UI's built-in icon group scripts."""
+            icons_dir = themes.STATIC_DIR / "icons"
+            if name not in {p.name for p in icons_dir.glob("*.js")}:
+                raise HTTPException(status_code=404, detail=f"Unknown icon script: {name}")
+            return FileResponse(
+                icons_dir / name, media_type="application/javascript", headers=no_cache
             )
 
         @app.get("/theme.css")
