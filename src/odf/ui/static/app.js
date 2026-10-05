@@ -1,591 +1,3 @@
-<!DOCTYPE html>
-<html lang="en">
-<head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>ODF — Topology (glitch)</title>
-<link rel="icon" type="image/svg+xml" href="/favicon.svg">
-<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin="">
-<style>
-*,*::before,*::after{margin:0;padding:0;box-sizing:border-box}
-
-:root, :root[data-theme="dark"] {
-  --bg: #0e0e10;
-  --bg-canvas: #0a0a0b;
-  --panel: #18181b;
-  --panel-rgb: 24,24,27;
-  --border: #26262c;
-  --border-strong: #3a3a40;
-  --text: #efeff1;
-  --text-muted: #adadb8;
-  --text-dim: #6d6d76;
-  --hover-bg: #202024;
-  --title-accent: #ffffff;
-
-  --accent-config: #71717a;
-  --accent-component: #9147ff;
-  --accent-repository: #009cdc;
-  --accent-service: #00b7c2;
-  --accent-task: #00ad03;
-  --accent-pipeline: #f2a900;
-  --accent-alert: #eb0400;
-
-  --layer-api: #772ce8;
-  --layer-storage: #e91e8c;
-  --layer-analytics: #ffd60a;
-  --layer-messaging: #ff5c00;
-  --layer-monitoring: #5c6bc0;
-  --layer-security: #0ea5b7;
-
-  --wire: #26262c;
-  --wire-glow: #3a3a40;
-  --tile-fill: #18181b;
-  --tile-stroke: #232327;
-  --label-bg-rgb: 14,14,16;
-  --label-bg-alpha: 0.92;
-  --vignette-rgb: 5,5,6;
-  --vignette-alpha: 0.6;
-
-  /* Chromatic-split "signal glitch" channel colors — glitch-theme-local,
-     not part of the cross-theme variable contract. Reused throughout for
-     a thin RGB-misregistration fringe on shadows/rings/text instead of
-     neo's thick-border brutalism. */
-  --split-a: #00b7c2;
-  --split-b: #e91e8c;
-
-  --panel-shadow: 1px 0 0 color-mix(in srgb, var(--split-a) 28%, transparent), -1px 0 0 color-mix(in srgb, var(--split-b) 22%, transparent), inset 0 1px 0 rgba(255,255,255,.03);
-  --ok: #00ad03;
-}
-
-:root[data-theme="light"] {
-  --bg: #f7f7f8;
-  --bg-canvas: #ffffff;
-  --panel: #ffffff;
-  --panel-rgb: 255,255,255;
-  --border: #e5e5e8;
-  --border-strong: #d1d1d6;
-  --text: #0e0e10;
-  --text-muted: #53535f;
-  --text-dim: #848494;
-  --hover-bg: #efeff1;
-  --title-accent: #000000;
-
-  --accent-config: #52525b;
-  --accent-component: #7828d1;
-  --accent-repository: #0077a8;
-  --accent-service: #007a82;
-  --accent-task: #027a03;
-  --accent-pipeline: #a86e00;
-  --accent-alert: #b30300;
-
-  --layer-api: #5b1fb8;
-  --layer-storage: #b0106a;
-  --layer-analytics: #a68800;
-  --layer-messaging: #c94700;
-  --layer-monitoring: #3f4a94;
-  --layer-security: #0a7986;
-
-  --wire: #d1d1d6;
-  --wire-glow: #b5b5bd;
-  --tile-fill: #ffffff;
-  --tile-stroke: #ececee;
-  --label-bg-rgb: 255,255,255;
-  --label-bg-alpha: 0.94;
-  --vignette-rgb: 20,20,24;
-  --vignette-alpha: 0.05;
-
-  --split-a: #007a82;
-  --split-b: #b0106a;
-
-  --panel-shadow: 1px 0 0 color-mix(in srgb, var(--split-a) 22%, transparent), -1px 0 0 color-mix(in srgb, var(--split-b) 18%, transparent), inset 0 1px 0 rgba(0,0,0,.03);
-  --ok: #027a03;
-}
-
-*{scrollbar-width:thin;scrollbar-color:var(--border-strong) transparent}
-*::-webkit-scrollbar{width:8px;height:8px}
-*::-webkit-scrollbar-track{background:transparent}
-*::-webkit-scrollbar-thumb{background:linear-gradient(180deg, var(--split-a), var(--split-b))}
-
-html,body{background:var(--bg)}
-
-body{
-  color:var(--text);
-  font-family:Inter,'Segoe UI',Roboto,-apple-system,BlinkMacSystemFont,Helvetica,Arial,sans-serif;
-  height:100vh;display:flex;flex-direction:column;overflow:hidden;user-select:none;
-}
-
-.mono{font-family:'SF Mono','IBM Plex Mono','JetBrains Mono',Consolas,'Courier New',monospace}
-
-#topbar{height:3px;flex-shrink:0;background:linear-gradient(90deg,var(--split-a),transparent 50%),linear-gradient(270deg,var(--split-b),transparent 50%);opacity:.8}
-
-#shell{flex:1;min-height:0;display:flex;flex-direction:column;gap:8px;padding:8px}
-
-/* Faint static scanline texture over the whole app — one insertion point
-   instead of repeating it per panel; below every popup/drawer's z-index
-   (6+) so it never obscures them, and pointer-events:none so it can't
-   intercept clicks. Static (no animation), so it's unaffected by
-   prefers-reduced-motion. */
-#shell::after{content:"";position:fixed;inset:0;z-index:1;pointer-events:none;background-image:repeating-linear-gradient(0deg, rgba(0,0,0,.045) 0, rgba(0,0,0,.045) 1px, transparent 1px, transparent 3px)}
-
-.panel{background:var(--panel);border:1px solid var(--border);border-radius:2px;box-shadow:var(--panel-shadow)}
-
-#hdr{padding:0 16px;height:46px;display:flex;align-items:center;gap:0;flex-shrink:0}
-.brand{display:flex;align-items:center;gap:10px;margin-right:18px;padding-right:18px;border-right:1px solid var(--border)}
-.brand-mark{width:18px;height:18px;flex-shrink:0;border:1.5px solid var(--accent-component);position:relative;transform:rotate(45deg);box-shadow:1.5px 0 0 color-mix(in srgb, var(--split-a) 55%, transparent),-1.5px 0 0 color-mix(in srgb, var(--split-b) 55%, transparent)}
-.brand-mark::after{content:"";position:absolute;inset:4px;background:var(--accent-component);opacity:.85}
-.brand-mark.has-logo{border:none;transform:none}
-.brand-mark.has-logo::after{content:none}
-.brand-mark img{width:100%;height:100%;object-fit:contain;display:block}
-.hdr-title{font-family:Inter,'Segoe UI',Roboto,-apple-system,BlinkMacSystemFont,Helvetica,Arial,sans-serif;color:var(--text);font-size:13px;font-weight:600;letter-spacing:.04em;text-shadow:1px 0 color-mix(in srgb, var(--split-a) 50%, transparent),-1px 0 color-mix(in srgb, var(--split-b) 50%, transparent)}
-.hdr-title small{display:block;color:var(--text-dim);font-size:9.5px;font-weight:500;letter-spacing:.09em;text-transform:uppercase;margin-top:2px}
-
-.hdr-stats{display:flex;align-items:center;gap:0;height:100%}
-.hdr-stat{display:flex;flex-direction:column;gap:3px;padding:0 18px;border-right:1px solid var(--border);justify-content:center}
-.hdr-stat:last-child{border-right:none}
-.hdr-stat .k{color:var(--text-dim);font-size:9px;letter-spacing:.1em;text-transform:uppercase;font-family:Inter,'Segoe UI',Roboto,-apple-system,BlinkMacSystemFont,Helvetica,Arial,sans-serif}
-.hdr-stat .v{font-family:Inter,'Segoe UI',Roboto,-apple-system,BlinkMacSystemFont,Helvetica,Arial,sans-serif;font-size:13px;font-weight:600;font-variant-numeric:tabular-nums}
-
-.hdr-status{display:flex;align-items:center;gap:7px;margin-left:auto;padding:0 16px;font-family:Inter,'Segoe UI',Roboto,-apple-system,BlinkMacSystemFont,Helvetica,Arial,sans-serif;font-size:10px;letter-spacing:.08em;text-transform:uppercase;color:var(--text-muted)}
-.hdr-status .dot{width:6px;height:6px;background:var(--ok);box-shadow:0 0 0 2px color-mix(in srgb, var(--ok) 20%, transparent),1px 0 0 color-mix(in srgb, var(--split-a) 55%, transparent),-1px 0 0 color-mix(in srgb, var(--split-b) 55%, transparent);animation:pulse-dot 2.4s ease-in-out infinite}
-.hdr-clock{font-family:Inter,'Segoe UI',Roboto,-apple-system,BlinkMacSystemFont,Helvetica,Arial,sans-serif;font-size:11px;color:var(--text-dim);font-variant-numeric:tabular-nums;padding:0 16px;border-left:1px solid var(--border)}
-@keyframes pulse-dot{0%,100%{opacity:1}50%{opacity:.35}}
-
-.theme-toggle{background:transparent;border:1px solid var(--border);color:var(--text-muted);font-family:Inter,'Segoe UI',Roboto,-apple-system,BlinkMacSystemFont,Helvetica,Arial,sans-serif;font-size:10px;font-weight:600;letter-spacing:.06em;text-transform:uppercase;padding:6px 11px;border-radius:2px;cursor:pointer;display:flex;align-items:center;gap:6px;transition:background .12s,color .12s,border-color .12s}
-.theme-toggle:hover{background:var(--hover-bg);color:var(--title-accent);border-color:var(--border-strong);box-shadow:0 0 0 1px var(--split-a),0 0 0 2px color-mix(in srgb, var(--split-b) 60%, transparent)}
-.theme-toggle .glyph{font-size:12px}
-
-#body{display:flex;flex:1;min-height:0;gap:8px}
-
-/* Sidebar: an always-visible icon rail (#sb-rail, one .sb-tab per SIDEBAR_TABS
-   entry + a collapse chevron) beside the active tab's panel (#sb-panels).
-   .collapsed hides only the panel, so the rail stays as the way back in. */
-#sidebar{width:312px;flex-shrink:0;display:flex;flex-direction:row;overflow:hidden}
-#sidebar.collapsed{width:auto}
-#sb-rail{width:40px;flex-shrink:0;display:flex;flex-direction:column;align-items:center;gap:4px;padding:8px 0;border-right:1px solid var(--border)}
-#sidebar.collapsed #sb-rail{border-right:none}
-.sb-tab,#sb-collapse{width:28px;height:28px;padding:0;background:transparent;border:1px solid transparent;border-radius:2px;color:var(--text-muted);cursor:pointer;display:flex;align-items:center;justify-content:center;transition:background .12s,color .12s,border-color .12s}
-.sb-tab:hover,#sb-collapse:hover{background:var(--hover-bg);color:var(--title-accent);border-color:var(--border-strong)}
-.sb-tab.active{color:var(--title-accent);border-color:var(--border-strong);background:var(--hover-bg)}
-.sb-tab svg,#sb-collapse svg{width:16px;height:16px;fill:none;stroke:currentColor;stroke-width:1.6;stroke-linecap:round;stroke-linejoin:round}
-#sb-collapse{margin-top:auto}
-#sidebar.collapsed #sb-collapse svg{transform:rotate(180deg)}
-#sb-panels{flex:1;min-width:0;overflow-y:auto;display:flex;flex-direction:column}
-#sidebar.collapsed #sb-panels{display:none}
-.sb-panel{display:none}
-.sb-panel.active{display:flex;flex-direction:column;flex:1;min-height:0}
-.sb-section{padding:14px 16px}
-.sb-section + .sb-section{border-top:1px solid var(--border)}
-.sb-heading{color:var(--text-dim);font-family:Inter,'Segoe UI',Roboto,-apple-system,BlinkMacSystemFont,Helvetica,Arial,sans-serif;font-size:9.5px;font-weight:600;letter-spacing:.1em;text-transform:uppercase;margin-bottom:11px;display:flex;align-items:center;justify-content:space-between;text-shadow:1px 0 color-mix(in srgb, var(--split-a) 45%, transparent),-1px 0 color-mix(in srgb, var(--split-b) 45%, transparent)}
-.sb-heading .count{color:var(--text-dim);font-weight:500}
-.node-item{--row-accent:var(--text-dim);display:flex;align-items:center;gap:8px;padding:6px 8px;cursor:pointer;margin-bottom:1px;border-left:2px solid transparent;transition:background .12s,border-color .12s,box-shadow .12s}
-.node-item:hover{background:var(--hover-bg);box-shadow:1px 0 0 color-mix(in srgb, var(--split-a) 40%, transparent),-1px 0 0 color-mix(in srgb, var(--split-b) 40%, transparent)}
-.node-item.selected{background:color-mix(in srgb, var(--row-accent) 12%, transparent);border-left-color:var(--row-accent)}
-.node-tag{font-family:Inter,'Segoe UI',Roboto,-apple-system,BlinkMacSystemFont,Helvetica,Arial,sans-serif;font-size:8px;font-weight:700;padding:2px 5px;text-transform:uppercase;letter-spacing:.03em;flex-shrink:0;white-space:nowrap;border-radius:1px}
-.node-lbl{font-size:11.5px;color:var(--text);font-family:'SF Mono',Consolas,monospace}
-.layer-badge{font-family:Inter,'Segoe UI',Roboto,-apple-system,BlinkMacSystemFont,Helvetica,Arial,sans-serif;font-size:8px;font-weight:700;padding:2px 5px;text-transform:uppercase;letter-spacing:.03em;flex-shrink:0;white-space:nowrap;border-radius:1px}
-
-.layer-group{margin-bottom:2px}
-.layer-group-header{display:flex;align-items:center;gap:7px;padding:6px 8px;cursor:pointer;user-select:none;border-radius:1px}
-.layer-group-header:hover{background:var(--hover-bg);box-shadow:1px 0 0 color-mix(in srgb, var(--split-a) 40%, transparent),-1px 0 0 color-mix(in srgb, var(--split-b) 40%, transparent)}
-.layer-caret{width:8px;height:8px;flex-shrink:0;color:var(--text-dim);transition:transform .12s;display:flex;align-items:center;justify-content:center}
-.layer-group.collapsed .layer-caret{transform:rotate(-90deg)}
-.layer-swatch-btn{width:10px;height:10px;border-radius:50%;border:1px solid rgba(0,0,0,.2);flex-shrink:0;cursor:pointer;padding:0}
-.layer-swatch-btn:hover{box-shadow:0 0 0 1px var(--split-a),0 0 0 2px color-mix(in srgb, var(--split-b) 60%, transparent)}
-.layer-group-name{font-size:10.5px;font-weight:600;letter-spacing:.03em;text-transform:uppercase;font-family:Inter,'Segoe UI',Roboto,-apple-system,BlinkMacSystemFont,Helvetica,Arial,sans-serif;color:var(--text-muted);flex:1}
-.layer-group-count{font-size:9.5px;color:var(--text-dim);font-family:Inter,'Segoe UI',Roboto,-apple-system,BlinkMacSystemFont,Helvetica,Arial,sans-serif}
-.layer-group-body{display:flex;flex-direction:column}
-.layer-group.collapsed .layer-group-body{display:none}
-.layer-group-body .node-item{padding-left:22px}
-
-#map{flex:1;min-width:0;position:relative;overflow:hidden}
-canvas{display:block;cursor:grab}
-
-.corner-bracket{position:absolute;width:14px;height:14px;border-color:var(--border-strong);pointer-events:none;z-index:3;opacity:.9}
-.corner-bracket.tl{top:8px;left:8px;border-top:1.5px solid;border-left:1.5px solid}
-.corner-bracket.tr{top:8px;right:8px;border-top:1.5px solid;border-right:1.5px solid}
-.corner-bracket.bl{bottom:8px;left:8px;border-bottom:1.5px solid;border-left:1.5px solid}
-.corner-bracket.br{bottom:8px;right:8px;border-bottom:1.5px solid;border-right:1.5px solid}
-
-#coord-readout{position:absolute;left:14px;bottom:14px;z-index:2;font-family:'SF Mono',Consolas,monospace;font-size:10px;letter-spacing:.05em;color:var(--text-dim);background:rgba(var(--panel-rgb),.75);border:1px solid var(--border);padding:4px 9px;pointer-events:none}
-#coord-readout b{color:var(--text-muted);font-weight:600}
-
-#map-title{position:absolute;top:12px;left:16px;z-index:2;font-family:Inter,'Segoe UI',Roboto,-apple-system,BlinkMacSystemFont,Helvetica,Arial,sans-serif;font-size:9.5px;letter-spacing:.12em;text-transform:uppercase;color:var(--text-dim);pointer-events:none}
-
-#zoom-controls{position:absolute;right:14px;bottom:14px;display:flex;flex-direction:column;gap:3px;z-index:2}
-#zoom-controls button{width:28px;height:28px;background:rgba(var(--panel-rgb),0.9);border:1px solid var(--border);color:var(--text-muted);font-family:Inter,'Segoe UI',Roboto,-apple-system,BlinkMacSystemFont,Helvetica,Arial,sans-serif;font-size:14px;line-height:1;border-radius:2px;cursor:pointer;display:flex;align-items:center;justify-content:center;transition:background .12s,color .12s,border-color .12s}
-#zoom-controls button:hover{background:var(--hover-bg);color:var(--title-accent);border-color:var(--border-strong);box-shadow:0 0 0 1px var(--split-a),0 0 0 2px color-mix(in srgb, var(--split-b) 60%, transparent)}
-#zoom-controls button:active{background:var(--border)}
-#zoom-controls .zc-sep{height:1px;background:var(--border);margin:2px 3px}
-
-/* Grid-expansion D-pad — adds empty cells along one diamond edge per click
-   (see expandGrid()/gridExpand in the script below). Sits just left of
-   zoom-controls, same footprint/style. */
-#grid-controls{position:absolute;right:50px;bottom:14px;display:grid;grid-template-columns:repeat(2,28px);grid-template-rows:repeat(2,28px);gap:3px;z-index:2}
-#grid-controls button{background:rgba(var(--panel-rgb),0.9);border:1px solid var(--border);color:var(--text-muted);font-family:Inter,'Segoe UI',Roboto,-apple-system,BlinkMacSystemFont,Helvetica,Arial,sans-serif;font-size:13px;line-height:1;border-radius:2px;cursor:pointer;display:flex;align-items:center;justify-content:center;transition:background .12s,color .12s,border-color .12s}
-#grid-controls button:hover{background:var(--hover-bg);color:var(--title-accent);border-color:var(--border-strong);box-shadow:0 0 0 1px var(--split-a),0 0 0 2px color-mix(in srgb, var(--split-b) 60%, transparent)}
-#grid-controls button:active{background:var(--border)}
-
-/* Object-type legend — floats over the topology grid like a chart legend,
-   replacing the old fixed "Object Types" section in the sidebar. */
-#type-legend{position:absolute;left:50%;bottom:14px;transform:translateX(-50%);z-index:2;display:flex;align-items:center;justify-content:center;flex-wrap:wrap;gap:4px 16px;max-width:calc(100% - 220px);background:rgba(var(--panel-rgb),.75);border:1px solid var(--border);border-radius:2px;padding:6px 14px;pointer-events:none}
-.tl-item{display:flex;align-items:center;gap:6px;font-size:11px;color:var(--text);font-family:Inter,'Segoe UI',Roboto,-apple-system,BlinkMacSystemFont,Helvetica,Arial,sans-serif;white-space:nowrap}
-.tl-pip{width:8px;height:8px;border:1.3px solid currentColor;background:color-mix(in srgb, currentColor 18%, transparent);flex-shrink:0}
-
-.panel-heading{color:var(--text-dim);font-family:Inter,'Segoe UI',Roboto,-apple-system,BlinkMacSystemFont,Helvetica,Arial,sans-serif;font-size:9.5px;font-weight:600;letter-spacing:.1em;text-transform:uppercase;margin-bottom:9px}
-
-.detail-empty{font-size:12px;color:var(--text-dim);font-family:Inter,'Segoe UI',Roboto,-apple-system,BlinkMacSystemFont,Helvetica,Arial,sans-serif}
-.detail-title{font-family:Inter,'Segoe UI',Roboto,-apple-system,BlinkMacSystemFont,Helvetica,Arial,sans-serif;font-size:14px;font-weight:700;letter-spacing:.01em;margin-bottom:6px;text-shadow:1px 0 color-mix(in srgb, var(--split-a) 50%, transparent),-1px 0 color-mix(in srgb, var(--split-b) 50%, transparent)}
-.detail-meta{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:8px}
-.detail-meta .deco{font-family:Inter,'Segoe UI',Roboto,-apple-system,BlinkMacSystemFont,Helvetica,Arial,sans-serif;font-size:10.5px;color:var(--text-muted)}
-.detail-meta .file{font-family:'SF Mono','Fira Code',Consolas,'Courier New',monospace;font-size:10.5px;color:var(--text-dim);background:var(--hover-bg);border:1px solid var(--border);padding:2px 6px;border-radius:1px}
-.detail-desc{font-size:12px;line-height:1.6;color:var(--text-muted)}
-
-.log-line{display:flex;align-items:flex-start;gap:7px;font-size:11px;color:var(--text-muted);line-height:1.4}
-.log-line .dot{width:5px;height:5px;flex-shrink:0;margin-top:4px}
-.log-line .ts{font-family:'SF Mono',Consolas,monospace;color:var(--text-dim);flex-shrink:0}
-
-/* flex+gap (not the .data-btn margin-left/:first-child pattern used
-   elsewhere) so wrapped rows stay left-aligned instead of drifting right by
-   a stray margin once there are enough buttons to wrap */
-.detail-actions{margin-top:10px;display:flex;flex-wrap:wrap;gap:6px}
-.detail-actions .data-btn{margin-left:0}
-
-/* Inspector popup — anchored to the clicked building's screen position at
-   selection time (not live-tracked; pan/zoom/resize close it instead, see
-   closeInspectorPopup()), replacing the old fixed bottom panel so a new
-   selection is visually obvious rather than silently updating off to the
-   side. */
-.inspector-popup{position:absolute;z-index:6;display:none;width:300px;max-width:calc(100% - 16px);max-height:calc(100% - 16px);overflow-y:auto;background:var(--panel);border:1px solid var(--border-strong);border-radius:2px;box-shadow:0 8px 20px rgba(0,0,0,.3),var(--panel-shadow);padding:14px 16px}
-.inspector-popup.open{display:block}
-#map:not(.mode-topology) .inspector-popup{display:none}
-.inspector-popup-close{position:absolute;top:8px;right:8px;background:transparent;border:1px solid var(--border);color:var(--text-muted);width:20px;height:20px;border-radius:2px;cursor:pointer;font-size:12px;line-height:1;display:flex;align-items:center;justify-content:center}
-.inspector-popup-close:hover{background:var(--hover-bg);color:var(--text)}
-
-/* Style picker — single popover anchored under the inspector popup's
-   compact "Customize" button, bundling the shape (icon) and color pickers
-   into one place instead of two separate action buttons, so the inspector's
-   action row doesn't accumulate a button per customization axis. Reuses the
-   inspector popup's panel/border/shadow language. */
-.style-picker-popover{position:absolute;z-index:7;display:none;background:var(--panel);border:1px solid var(--border-strong);border-radius:2px;box-shadow:0 8px 20px rgba(0,0,0,.3),var(--panel-shadow);padding:8px}
-.style-picker-popover.open{display:block}
-.style-picker-section + .style-picker-section{margin-top:8px;padding-top:8px;border-top:1px solid var(--border)}
-.style-picker-label{font-size:9px;font-weight:600;letter-spacing:.06em;text-transform:uppercase;color:var(--text-muted);font-family:Inter,'Segoe UI',Roboto,-apple-system,BlinkMacSystemFont,Helvetica,Arial,sans-serif;margin-bottom:4px}
-.layer-color-popover{position:fixed;z-index:8}
-.icon-picker-grid,.color-picker-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:4px}
-.icon-swatch{width:44px;height:44px;border:1px solid var(--border);border-radius:2px;background:transparent;cursor:pointer;display:flex;align-items:center;justify-content:center;padding:0}
-.icon-swatch:hover{background:var(--hover-bg);border-color:var(--border-strong);box-shadow:0 0 0 1px var(--split-a),0 0 0 2px color-mix(in srgb, var(--split-b) 60%, transparent)}
-.icon-swatch.selected{border-color:var(--title-accent);box-shadow:0 0 0 1px var(--split-a),0 0 0 2px color-mix(in srgb, var(--split-b) 60%, transparent)}
-.icon-swatch.reset{grid-column:1/-1;display:flex;gap:6px;font-size:10px;color:var(--text-muted);font-family:Inter,'Segoe UI',Roboto,-apple-system,BlinkMacSystemFont,Helvetica,Arial,sans-serif;height:22px}
-.color-swatch{width:32px;height:32px;border:1px solid var(--border);border-radius:2px;cursor:pointer;padding:0}
-.color-swatch:hover{border-color:var(--border-strong);box-shadow:0 0 0 1px var(--split-a),0 0 0 2px color-mix(in srgb, var(--split-b) 60%, transparent)}
-.color-swatch.selected{border-color:var(--title-accent);box-shadow:0 0 0 1px var(--split-a),0 0 0 2px color-mix(in srgb, var(--split-b) 60%, transparent)}
-.color-swatch.reset{grid-column:1/-1;display:flex;align-items:center;gap:6px;font-size:10px;color:var(--text-muted);font-family:Inter,'Segoe UI',Roboto,-apple-system,BlinkMacSystemFont,Helvetica,Arial,sans-serif;height:22px;width:auto;background:transparent}
-
-/* Activity toggle + drawer — global (not tied to topology mode), floats
-   above the map-panel-view so it's reachable from Data/Stream/Logs too. */
-.activity-toggle{position:absolute;top:12px;right:14px;z-index:8;background:rgba(var(--panel-rgb),0.9);border:1px solid var(--border);color:var(--text-muted);font-family:Inter,'Segoe UI',Roboto,-apple-system,BlinkMacSystemFont,Helvetica,Arial,sans-serif;font-size:10px;font-weight:600;letter-spacing:.05em;text-transform:uppercase;padding:6px 10px;border-radius:2px;cursor:pointer;transition:background .12s,color .12s,border-color .12s}
-.activity-toggle:hover{background:var(--hover-bg);color:var(--title-accent);border-color:var(--border-strong);box-shadow:0 0 0 1px var(--split-a),0 0 0 2px color-mix(in srgb, var(--split-b) 60%, transparent)}
-
-#activity-drawer{position:absolute;top:0;right:0;bottom:0;width:300px;max-width:80%;z-index:9;background:var(--panel);border-left:1px solid var(--border-strong);box-shadow:-1px 0 0 color-mix(in srgb, var(--split-a) 35%, transparent),-2px 0 0 color-mix(in srgb, var(--split-b) 25%, transparent),-8px 0 20px rgba(0,0,0,.25);transform:translateX(100%);transition:transform .18s ease;display:flex;flex-direction:column}
-#activity-drawer.open{transform:translateX(0)}
-.activity-drawer-hdr{display:flex;align-items:center;justify-content:space-between;padding:12px 16px;border-bottom:1px solid var(--border);flex-shrink:0}
-.activity-drawer-hdr .panel-heading{margin-bottom:0}
-#log-lines{flex:1;overflow-y:auto;display:flex;flex-direction:column;gap:6px;padding:12px 16px}
-
-/* Toggle buttons row (Activity / Chat) — top right, above the map. */
-.map-toggle-group{position:absolute;top:12px;right:14px;z-index:8;display:flex;gap:6px}
-.map-toggle-group .activity-toggle{position:static}
-#chat-toggle{display:none}
-#chat-toggle.visible{display:inline-flex}
-
-/* Chat drawer — same slide-in-from-right treatment as #activity-drawer. */
-#chat-drawer{position:absolute;top:0;right:0;bottom:0;width:360px;max-width:88%;z-index:9;background:var(--panel);border-left:1px solid var(--border-strong);box-shadow:-1px 0 0 color-mix(in srgb, var(--split-a) 35%, transparent),-2px 0 0 color-mix(in srgb, var(--split-b) 25%, transparent),-8px 0 20px rgba(0,0,0,.25);transform:translateX(100%);transition:transform .18s ease;display:flex;flex-direction:column}
-#chat-drawer.open{transform:translateX(0)}
-#chat-messages{flex:1;overflow-y:auto;display:flex;flex-direction:column;gap:10px;padding:12px 16px;font-family:Inter,'Segoe UI',Roboto,-apple-system,BlinkMacSystemFont,Helvetica,Arial,sans-serif;font-size:11.5px}
-.chat-msg{max-width:92%;padding:7px 10px;border-radius:3px;line-height:1.4;white-space:pre-wrap;word-break:break-word}
-.chat-msg.user{align-self:flex-end;background:color-mix(in srgb, var(--title-accent) 16%, transparent);border:1px solid color-mix(in srgb, var(--title-accent) 40%, transparent);color:var(--text)}
-.chat-msg.assistant{align-self:flex-start;background:var(--hover-bg);border:1px solid var(--border);color:var(--text)}
-.chat-msg.tool{align-self:flex-start;background:transparent;border:1px dashed var(--border-strong);color:var(--text-dim);font-size:10.5px}
-.chat-msg.error{align-self:flex-start;background:color-mix(in srgb, var(--accent-alert) 14%, transparent);border:1px solid var(--accent-alert);color:var(--accent-alert)}
-#chat-footer{display:flex;gap:8px;padding:12px 16px;border-top:1px solid var(--border);flex-shrink:0;position:relative}
-#chat-input{flex:1;resize:none;height:38px;background:var(--hover-bg);border:1px solid var(--border-strong);color:var(--text);font-family:inherit;font-size:11.5px;padding:8px 10px;border-radius:2px}
-#chat-input:focus{outline:none;border-color:var(--title-accent);box-shadow:0 0 0 1px var(--split-a),0 0 0 2px color-mix(in srgb, var(--split-b) 60%, transparent)}
-#chat-send{flex-shrink:0}
-.mention-menu{position:absolute;left:16px;right:16px;bottom:100%;margin-bottom:6px;max-height:160px;overflow-y:auto;background:var(--panel);border:1px solid var(--border-strong);border-radius:2px;box-shadow:0 0 0 1px var(--split-a),0 0 0 2px color-mix(in srgb, var(--split-b) 60%, transparent);z-index:10}
-.mention-menu[hidden]{display:none}
-.mention-item{display:flex;justify-content:space-between;gap:8px;padding:6px 10px;font-family:Inter,'Segoe UI',Roboto,-apple-system,BlinkMacSystemFont,Helvetica,Arial,sans-serif;font-size:11px;cursor:pointer;color:var(--text)}
-.mention-item:hover,.mention-item.active{background:var(--hover-bg);color:var(--title-accent)}
-.mention-label{color:var(--text-dim);font-size:10px}
-
-.data-btn{background:transparent;border:1px solid var(--border);color:var(--text-muted);font-family:Inter,'Segoe UI',Roboto,-apple-system,BlinkMacSystemFont,Helvetica,Arial,sans-serif;font-size:10px;font-weight:600;letter-spacing:.03em;padding:3px 8px;border-radius:2px;cursor:pointer;margin-left:4px;transition:background .12s,color .12s,border-color .12s}
-.data-btn:first-child{margin-left:0}
-.data-btn:hover{background:var(--hover-bg);color:var(--text);box-shadow:0 0 0 1px var(--split-a),0 0 0 2px color-mix(in srgb, var(--split-b) 60%, transparent)}
-.data-btn.primary{color:var(--title-accent);border-color:var(--title-accent)}
-.data-btn.danger{color:var(--accent-alert);border-color:var(--accent-alert)}
-.data-btn.block{display:block;margin:10px 0 0}
-
-.data-table{width:100%;border-collapse:collapse;font-family:'SF Mono',Consolas,monospace;font-size:11.5px}
-.data-table th{text-align:left;color:var(--text-dim);font-size:9.5px;letter-spacing:.08em;text-transform:uppercase;padding:6px 8px;border-bottom:1px solid var(--border-strong)}
-.data-table td{padding:6px 8px;border-bottom:1px solid var(--border);color:var(--text);vertical-align:middle}
-.data-table td.actions{white-space:nowrap;text-align:right}
-.data-table td.detail-empty{padding:6px 8px}
-.data-table input{width:100%;background:var(--hover-bg);border:1px solid var(--border-strong);color:var(--text);font-family:inherit;font-size:inherit;padding:3px 6px;border-radius:1px}
-.data-table .empty-row td{color:var(--text-dim);padding:12px 8px;text-align:center}
-.filter-row th{padding-top:0}
-.filter-row input{text-transform:none;letter-spacing:normal;font-weight:400}
-
-.pagination{display:flex;align-items:center;gap:8px;margin-top:10px;font-family:Inter,'Segoe UI',Roboto,-apple-system,BlinkMacSystemFont,Helvetica,Arial,sans-serif}
-.pagination-range{color:var(--text-dim);font-size:10.5px;margin-right:auto}
-.pagination select{background:transparent;border:1px solid var(--border);color:var(--text-muted);font-family:inherit;font-size:10px;font-weight:600;padding:3px 6px;border-radius:2px;cursor:pointer}
-.data-btn:disabled{opacity:.4;cursor:default;pointer-events:none}
-
-/* Map panel view — replaces the topology canvas in-place for Edit Data /
-   View Stream / Show Logs, instead of a floating modal overlay. */
-#map-panel-view{position:absolute;inset:0;z-index:5;display:none;flex-direction:column;background:var(--panel)}
-#map.mode-topology #map-panel-view{display:none}
-#map:not(.mode-topology) #map-panel-view{display:flex}
-#map:not(.mode-topology) #canvas,
-#map:not(.mode-topology) #map-title,
-#map:not(.mode-topology) .corner-bracket,
-#map:not(.mode-topology) #coord-readout,
-#map:not(.mode-topology) #zoom-controls,
-#map:not(.mode-topology) #grid-controls,
-#map:not(.mode-topology) #type-legend{display:none}
-
-.map-panel-hdr{display:flex;align-items:center;gap:12px;padding:12px 100px 12px 16px;border-bottom:1px solid var(--border);flex-shrink:0}
-#map-panel-title{font-family:Inter,'Segoe UI',Roboto,-apple-system,BlinkMacSystemFont,Helvetica,Arial,sans-serif;font-size:12.5px;font-weight:700;letter-spacing:.02em;color:var(--title-accent);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;text-shadow:1px 0 color-mix(in srgb, var(--split-a) 50%, transparent),-1px 0 color-mix(in srgb, var(--split-b) 50%, transparent)}
-.map-back-btn{background:transparent;border:1px solid var(--border);color:var(--text-muted);font-family:Inter,'Segoe UI',Roboto,-apple-system,BlinkMacSystemFont,Helvetica,Arial,sans-serif;font-size:10.5px;font-weight:600;letter-spacing:.03em;padding:5px 10px;border-radius:2px;cursor:pointer;transition:background .12s,color .12s,border-color .12s}
-.map-back-btn:hover{background:var(--hover-bg);color:var(--title-accent);border-color:var(--border-strong);box-shadow:0 0 0 1px var(--split-a),0 0 0 2px color-mix(in srgb, var(--split-b) 60%, transparent)}
-#map-panel-hdr-extra{margin-left:auto;display:flex;align-items:center;gap:8px}
-.view-mode-select{background:transparent;border:1px solid var(--border);color:var(--text-muted);font-family:Inter,'Segoe UI',Roboto,-apple-system,BlinkMacSystemFont,Helvetica,Arial,sans-serif;font-size:10px;font-weight:600;letter-spacing:.05em;text-transform:uppercase;padding:5px 8px;border-radius:2px;cursor:pointer}
-.view-mode-select:hover{border-color:var(--border-strong);color:var(--title-accent);box-shadow:0 0 0 1px var(--split-a),0 0 0 2px color-mix(in srgb, var(--split-b) 60%, transparent)}
-
-#map-panel-body{flex:1;overflow-y:auto;padding:12px 16px}
-#map.mode-stream #map-panel-body{padding:0;display:flex;align-items:center;justify-content:center;background:#000}
-#map.mode-stream #map-panel-body img{display:block;max-width:100%;max-height:100%;object-fit:contain}
-
-#map.mode-chart #map-panel-body{padding:0;overflow:hidden}
-#chart-frame{width:100%;height:100%;border:0;display:block}
-.stream-placeholder{padding:32px;color:var(--text-dim);font-family:Inter,'Segoe UI',Roboto,-apple-system,BlinkMacSystemFont,Helvetica,Arial,sans-serif;font-size:11.5px}
-.stream-audio-bar{display:flex;align-items:center;gap:10px;padding:20px 28px;font-family:Inter,'Segoe UI',Roboto,-apple-system,BlinkMacSystemFont,Helvetica,Arial,sans-serif}
-.stream-live-dot{flex:none;width:7px;height:7px;border-radius:50%;background:var(--accent-alert);box-shadow:0 0 0 3px color-mix(in srgb, var(--accent-alert) 25%, transparent),1px 0 0 color-mix(in srgb, var(--split-a) 55%, transparent),-1px 0 0 color-mix(in srgb, var(--split-b) 55%, transparent);animation:pulse-dot 1.4s ease-in-out infinite}
-.stream-live-dot.buffering{background:#6a6d72;box-shadow:none;animation:none}
-.stream-live-label{color:#e8e6e3;font-size:11px;font-weight:700;letter-spacing:.1em}
-.stream-audio-bar .data-btn{color:#c7c9cc;border-color:#3a3d42}
-.stream-audio-bar .data-btn:hover{background:rgba(255,255,255,.08);color:#fff}
-
-#map.mode-geo #map-panel-body{padding:0;overflow:hidden;position:relative}
-#geo-map{width:100%;height:100%;background:var(--bg-canvas)}
-.floating-pagination{position:absolute;left:50%;bottom:14px;transform:translateX(-50%);z-index:1000;background:rgba(var(--panel-rgb),0.92);border:1px solid var(--border);border-radius:4px;padding:6px 10px;box-shadow:var(--panel-shadow)}
-.floating-pagination:empty{display:none}
-.floating-pagination .pagination{margin-top:0}
-.timeline-bar{display:flex;align-items:center;gap:8px;font-family:Inter,'Segoe UI',Roboto,-apple-system,BlinkMacSystemFont,Helvetica,Arial,sans-serif}
-.timeline-elapsed,.timeline-total{color:var(--text-dim);font-size:10.5px;font-variant-numeric:tabular-nums;white-space:nowrap}
-.timeline-bar input[type=range]{flex:1;min-width:160px;accent-color:var(--title-accent)}
-.timeline-bar select{background:transparent;border:1px solid var(--border);color:var(--text-muted);font-family:inherit;font-size:10px;font-weight:600;padding:3px 6px;border-radius:2px;cursor:pointer}
-#geo-map .leaflet-tile-pane{transition:filter .12s}
-:root[data-theme="dark"] #geo-map .leaflet-tile-pane{filter:invert(1) hue-rotate(180deg) brightness(0.94) contrast(0.88) saturate(0.9)}
-#geo-map .leaflet-popup-content-wrapper{background:var(--panel);color:var(--text);border:1px solid var(--border-strong);border-radius:2px;box-shadow:0 8px 20px rgba(0,0,0,.3),var(--panel-shadow)}
-#geo-map .leaflet-popup-tip{background:var(--panel);border:1px solid var(--border-strong)}
-#geo-map .leaflet-popup-close-button{color:var(--text-muted)!important}
-#geo-map .leaflet-popup-close-button:hover{color:var(--text)!important}
-#geo-map .leaflet-container{font-family:Inter,'Segoe UI',Roboto,-apple-system,BlinkMacSystemFont,Helvetica,Arial,sans-serif;background:var(--bg-canvas)}
-#geo-map .leaflet-control-zoom a{background:rgba(var(--panel-rgb),0.9);color:var(--text-muted);border-color:var(--border)!important}
-#geo-map .leaflet-control-zoom a:hover{background:var(--hover-bg);color:var(--title-accent)}
-#geo-map .leaflet-control-attribution{background:rgba(var(--panel-rgb),0.85);color:var(--text-dim);font-size:9.5px}
-#geo-map .leaflet-control-attribution a{color:var(--text-muted)}
-.geo-popup .detail-title{font-size:12px;margin-bottom:6px}
-.geo-popup .data-table{font-size:10.5px}
-.geo-popup .data-table th,.geo-popup .data-table td{padding:4px 6px}
-
-.map-logs-lines{display:flex;flex-direction:column;gap:5px;font-family:Inter,'Segoe UI',Roboto,-apple-system,BlinkMacSystemFont,Helvetica,Arial,sans-serif}
-.map-logs-lines .log-line{font-size:11.5px}
-.map-logs-lines .log-line span:last-child{white-space:pre-wrap;word-break:break-word}
-
-/* Image view — grid of thumbnails, one per record. */
-.media-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(140px,1fr));gap:10px}
-.media-tile{border:1px solid var(--border);border-radius:2px;overflow:hidden;background:var(--hover-bg)}
-.media-tile img{display:block;width:100%;height:120px;object-fit:cover}
-.media-tile .media-caption{padding:4px 6px;font-size:10px;color:var(--text-dim);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-
-/* Bounded Video/Audio view — a list of seekable clips, one per record. */
-.media-list{display:flex;flex-direction:column;gap:14px}
-.media-item{border:1px solid var(--border);border-radius:2px;padding:8px;background:var(--hover-bg)}
-.media-item video{display:block;width:100%;max-height:360px;background:#000}
-.media-item audio{display:block;width:100%}
-.media-item .media-caption{font-size:10.5px;color:var(--text-dim);margin-bottom:6px}
-
-/* Document view — one collapsible JSON tree per record. */
-.doc-list{display:flex;flex-direction:column;gap:14px}
-.doc-record{border:1px solid var(--border);border-radius:2px;padding:10px 12px;background:var(--hover-bg)}
-.doc-header{display:flex;flex-wrap:wrap;gap:10px;font-size:10.5px;color:var(--text-dim);margin-bottom:8px;padding-bottom:8px;border-bottom:1px solid var(--border)}
-.doc-header b{color:var(--text-muted);font-weight:600}
-.doc-tree{font-family:'SF Mono',Consolas,monospace;font-size:11.5px;line-height:1.5}
-.doc-children{margin-left:16px;border-left:1px dashed var(--border-strong);padding-left:10px}
-.doc-key{color:var(--title-accent)}
-.doc-string{color:var(--text)}
-.doc-scalar{color:var(--accent-service)}
-.doc-null{color:var(--text-dim);font-style:italic}
-.doc-punct{color:var(--text-dim)}
-
-/* Timeseries view — inline SVG line chart, no charting dependency. */
-#map.mode-timeseries #map-panel-body{position:relative;padding-bottom:52px}
-.ts-legend{display:flex;flex-wrap:wrap;gap:14px;font-size:10.5px;color:var(--text-dim);margin-bottom:10px}
-.ts-legend-item{display:flex;align-items:center;gap:5px;cursor:pointer;user-select:none;transition:opacity .12s}
-.ts-legend-item:hover{color:var(--title-accent)}
-.ts-legend-item.hidden{opacity:.4;text-decoration:line-through}
-.ts-swatch{width:9px;height:9px;border-radius:1px;display:inline-block}
-.timeseries-chart{width:100%;height:calc(100% - 30px)}
-
-/* One-shot hover jitter — the only motion this theme adds beyond the
-   shared pulse-dot animation. Gated behind prefers-reduced-motion so a
-   reduced-motion viewer still gets the static chromatic hover ring
-   defined above, just without the movement. */
-@keyframes glitch-jitter{
-  0%{transform:translateX(0)}
-  25%{transform:translateX(-1px)}
-  50%{transform:translateX(1px)}
-  75%{transform:translateX(-1px)}
-  100%{transform:translateX(0)}
-}
-@media (prefers-reduced-motion: no-preference){
-  .theme-toggle:hover,
-  .data-btn:hover,
-  #zoom-controls button:hover,
-  #grid-controls button:hover,
-  .map-back-btn:hover,
-  .activity-toggle:hover,
-  .view-mode-select:hover,
-  #hdr:hover{
-    animation:glitch-jitter .16s steps(2,end) 1;
-  }
-}
-</style>
-</head>
-<body>
-
-<div id="topbar"></div>
-
-<div id="shell">
-<div id="hdr" class="panel">
-  <div class="brand">
-    <div class="brand-mark" id="brand-mark"></div>
-    <span class="hdr-title"><span id="hdr-brand">ODF</span><small id="hdr-subtitle">Topology · loading…</small></span>
-  </div>
-  <div class="hdr-stats">
-    <div class="hdr-stat"><span class="k">Project</span><span class="v" id="stat-project" style="color:var(--title-accent)">—</span></div>
-    <div class="hdr-stat"><span class="k">Objects</span><span class="v" id="stat-objects">—</span></div>
-    <div class="hdr-stat"><span class="k">Links</span><span class="v" id="stat-links">—</span></div>
-    <div class="hdr-stat"><span class="k">Services</span><span class="v" id="stat-services" style="color:var(--accent-service)">—</span></div>
-    <div class="hdr-stat"><span class="k">Tasks</span><span class="v" id="stat-tasks" style="color:var(--accent-task)">—</span></div>
-    <div class="hdr-stat"><span class="k">Pipelines</span><span class="v" id="stat-pipelines" style="color:var(--accent-pipeline)">—</span></div>
-  </div>
-  <div class="hdr-status"><span class="dot"></span>System Nominal</div>
-  <div class="hdr-clock mono" id="hdr-clock">--:--:--</div>
-  <button id="theme-toggle" class="theme-toggle" title="Toggle light / dark theme" aria-label="Toggle theme" style="margin-left:10px"></button>
-</div>
-
-<div id="body">
-  <div id="sidebar" class="panel">
-    <div id="sb-rail" role="tablist" aria-orientation="vertical" aria-label="Sidebar">
-      <button id="sb-collapse" title="Collapse sidebar" aria-label="Collapse sidebar" aria-controls="sb-panels" aria-expanded="true"><svg viewBox="0 0 16 16"><path d="M10 3 5 8l5 5"/></svg></button>
-    </div>
-    <div id="sb-panels">
-      <div class="sb-panel active" id="sb-panel-objects" data-panel="objects" role="tabpanel">
-        <div class="sb-section" style="flex:1">
-          <div class="sb-heading">Objects <span class="count" id="node-count">00</span></div>
-          <div id="node-list"></div>
-        </div>
-      </div>
-    </div>
-  </div>
-
-  <div id="map" class="panel mode-topology">
-    <canvas id="canvas"></canvas>
-    <div id="map-title">Topology</div>
-    <div class="corner-bracket tl"></div>
-    <div class="corner-bracket tr"></div>
-    <div class="corner-bracket bl"></div>
-    <div class="corner-bracket br"></div>
-    <div id="coord-readout">CELL <b id="cr-cell">—:—</b> &nbsp;ZOOM <b id="cr-zoom">100%</b></div>
-    <div id="type-legend">
-      <div class="tl-item" style="color:var(--accent-config)" title="platform"><span class="tl-pip"></span>Config</div>
-      <div class="tl-item" style="color:var(--accent-component)" title="warehouse"><span class="tl-pip"></span>@Component</div>
-      <div class="tl-item" style="color:var(--accent-repository)" title="server rack"><span class="tl-pip"></span>@Repository</div>
-      <div class="tl-item" style="color:var(--accent-service)" title="antenna"><span class="tl-pip"></span>@Service</div>
-      <div class="tl-item" style="color:var(--accent-task)" title="factory cube"><span class="tl-pip"></span>@Task</div>
-      <div class="tl-item" style="color:var(--accent-pipeline)" title="conveyor"><span class="tl-pip"></span>@Pipeline</div>
-    </div>
-    <div id="zoom-controls">
-      <button id="zoom-in"    title="Zoom in">+</button>
-      <button id="zoom-out"   title="Zoom out">&minus;</button>
-      <div class="zc-sep"></div>
-      <button id="zoom-reset" title="Reset view">&#8962;</button>
-    </div>
-    <div id="grid-controls">
-      <button id="grid-nw" title="Add cells (top-left edge)">&#8598;</button>
-      <button id="grid-ne" title="Add cells (top-right edge)">&#8599;</button>
-      <button id="grid-sw" title="Add cells (bottom-left edge)">&#8601;</button>
-      <button id="grid-se" title="Add cells (bottom-right edge)">&#8600;</button>
-    </div>
-    <div id="map-panel-view">
-      <div class="map-panel-hdr">
-        <button id="map-back-btn" class="map-back-btn">&larr; Topology</button>
-        <span id="map-panel-title">—</span>
-        <div id="map-panel-hdr-extra"></div>
-      </div>
-      <div id="map-panel-body"></div>
-    </div>
-    <div id="inspector-popup" class="inspector-popup">
-      <button id="inspector-popup-close" class="inspector-popup-close" title="Close">&times;</button>
-      <div id="inspector-popup-body"></div>
-    </div>
-    <div id="style-picker-popover" class="style-picker-popover">
-      <div class="style-picker-section">
-        <div class="style-picker-label">Shape</div>
-        <div class="icon-picker-grid" id="icon-picker-grid"></div>
-      </div>
-      <div class="style-picker-section">
-        <div class="style-picker-label">Color</div>
-        <div class="color-picker-grid" id="color-picker-grid"></div>
-      </div>
-    </div>
-    <div class="map-toggle-group">
-      <button id="activity-toggle" class="activity-toggle" title="Toggle activity log">Activity</button>
-      <button id="chat-toggle" class="activity-toggle" title="Toggle chat">Chat</button>
-    </div>
-    <div id="activity-drawer">
-      <div class="activity-drawer-hdr">
-        <span class="panel-heading">Activity</span>
-        <button id="activity-drawer-close" class="map-back-btn">Close</button>
-      </div>
-      <div id="log-lines"></div>
-    </div>
-    <div id="chat-drawer">
-      <div class="activity-drawer-hdr">
-        <span class="panel-heading">Chat</span>
-        <button id="chat-drawer-close" class="map-back-btn">Close</button>
-      </div>
-      <div id="chat-messages"></div>
-      <div id="chat-footer">
-        <div id="chat-mention-menu" class="mention-menu" hidden></div>
-        <textarea id="chat-input" placeholder="Ask about this project… (@ to address a component)"></textarea>
-        <button id="chat-send" class="data-btn primary">Send</button>
-      </div>
-    </div>
-  </div>
-</div>
-</div>
-
-<div id="layer-color-popover" class="style-picker-popover layer-color-popover">
-  <div class="style-picker-section">
-    <div class="style-picker-label">Layer Color</div>
-    <div class="color-picker-grid" id="layer-color-picker-grid"></div>
-  </div>
-</div>
-
-<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
-<script>
 // ── Constants ────────────────────────────────────────────────────────────
 
 const TW = 80, TH = 48;   // tile width / height (diamond)
@@ -671,7 +83,6 @@ function resize() {
 let BG_CANVAS, TILE_FILL, TILE_STROKE, WIRE, WIRE_GLOW;
 let LABEL_BG_RGB, LABEL_BG_ALPHA, VIGNETTE_RGB, VIGNETTE_ALPHA;
 let TEXT_MUTED, TITLE_ACCENT;
-let SPLIT_A, SPLIT_B;
 
 function readTheme() {
   const s = getComputedStyle(document.documentElement);
@@ -691,8 +102,45 @@ function readTheme() {
   VIGNETTE_ALPHA = v('--vignette-alpha');
   TEXT_MUTED     = v('--text-muted');
   TITLE_ACCENT   = v('--title-accent');
-  SPLIT_A        = v('--split-a');
-  SPLIT_B        = v('--split-b');
+
+  if (THEME_STYLE.onReadTheme) THEME_STYLE.onReadTheme(v);
+}
+
+// Canvas drawing knobs a theme can't express in CSS. The values here are the
+// default look; a theme's optional theme.js overrides any of them through
+// ODF.registerTheme(). `part` is 'tile', 'face' or 'top'.
+const THEME_STYLE = {
+  emptyTileLine: 0.6,
+  tickSize: 1,
+  tileLine: lit => lit ? 1.1 : 0.8,
+  faceLine: 0.8,
+  topLine: lit => lit ? 1.3 : 1,
+  // Shadow applied to the stroke of a lit shape.
+  litShadow(part, accent) {
+    ctx.shadowColor = accent;
+    ctx.shadowBlur = { tile: 7, face: 9, top: 12.6 }[part];
+  },
+  // Optional (buildPath, part, sMul) => void: extra strokes drawn under a lit
+  // shape's own stroke.
+  litFringe: null,
+  // Optional (v) => void, called at the end of readTheme() with its CSS
+  // custom-property reader, for themes that mirror extra variables.
+  onReadTheme: null,
+};
+
+// Strokes the outline of a tile or box face with the caller's strokeStyle and
+// lineWidth, adding the theme's lit fringe and shadow, and leaves the shadow
+// state reset so it can't leak into later drawing calls.
+function strokeShape(buildPath, part, accent, lit, sMul = 1) {
+  if (lit && THEME_STYLE.litFringe) {
+    THEME_STYLE.litFringe(buildPath, part, sMul);
+    buildPath();
+  }
+  if (lit) THEME_STYLE.litShadow(part, accent);
+  ctx.stroke();
+  ctx.shadowBlur = 0;
+  ctx.shadowOffsetX = 0;
+  ctx.shadowOffsetY = 0;
 }
 
 function updateThemeButton(theme) {
@@ -752,7 +200,7 @@ function layerLabel(name) {
 function layerBadgeHtml(name) {
   if (!name) return '';
   const c = layerColor(name);
-  return `<span class="layer-badge" style="background:color-mix(in srgb, ${c} 16%, transparent);color:${c};border:1px solid color-mix(in srgb, ${c} 45%, transparent);box-shadow:1px 0 0 color-mix(in srgb, var(--split-a) 50%, transparent),-1px 0 0 color-mix(in srgb, var(--split-b) 50%, transparent)">${layerLabel(name)}</span>`;
+  return `<span class="layer-badge" style="background:color-mix(in srgb, ${c} 16%, transparent);color:${c};border:var(--tag-border-width,1px) solid color-mix(in srgb, ${c} 45%, transparent);box-shadow:var(--tag-shadow,none)">${layerLabel(name)}</span>`;
 }
 
 // Persists a layer color override to /api/layout, alongside node positions
@@ -914,32 +362,18 @@ function tilePath(sx, sy) {
   ctx.closePath();
 }
 
-// Chromatic-split fringe stroke — rebuilds `buildPath`'s path offset by
-// dx/dy (via a transform, since an already-recorded path can't be
-// re-offset after the fact) and strokes it in one channel color. Used on
-// "lit" shapes to give the canvas the same RGB-misregistration fringe as
-// the CSS chrome, instead of neo's hard offset drop-shadow.
-function fringeStroke(buildPath, dx, dy, color, alpha, width) {
-  ctx.save();
-  ctx.translate(dx, dy);
-  buildPath();
-  ctx.strokeStyle = rgba(color, alpha);
-  ctx.lineWidth = width;
-  ctx.stroke();
-  ctx.restore();
-}
-
 function drawEmptyTile(sx, sy) {
   tilePath(sx, sy);
   ctx.fillStyle   = TILE_FILL;
   ctx.fill();
   ctx.strokeStyle = TILE_STROKE;
-  ctx.lineWidth   = 0.6;
+  ctx.lineWidth   = THEME_STYLE.emptyTileLine;
   ctx.stroke();
 
   // blueprint tick at tile center
+  const tick = THEME_STYLE.tickSize;
   ctx.fillStyle = TILE_STROKE;
-  ctx.fillRect(sx - 0.5, sy - 0.5, 1, 1);
+  ctx.fillRect(sx - tick / 2, sy - tick / 2, tick, tick);
 }
 
 function drawOccupiedTile(sx, sy, accent, lit) {
@@ -947,16 +381,9 @@ function drawOccupiedTile(sx, sy, accent, lit) {
   path();
   ctx.fillStyle = rgba(accent, lit ? 0.09 : 0.04);
   ctx.fill();
-  if (lit) {
-    fringeStroke(path, 1, 0, SPLIT_A, 0.45, 1);
-    fringeStroke(path, -1, 0, SPLIT_B, 0.45, 1);
-  }
-  path();
   ctx.strokeStyle = rgba(accent, lit ? 0.75 : 0.35);
-  ctx.lineWidth = lit ? 1.1 : 0.8;
-  if (lit) { ctx.shadowColor = accent; ctx.shadowBlur = 7; }
-  ctx.stroke();
-  ctx.shadowBlur = 0;
+  ctx.lineWidth = THEME_STYLE.tileLine(lit);
+  strokeShape(path, 'tile', accent, lit);
 }
 
 // ── Base building primitive (a box, footprint scaled per type) ────────────
@@ -967,7 +394,6 @@ function drawOccupiedTile(sx, sy, accent, lit) {
 // ever drawing the single ground-footprint pad. `drawBox` below is the
 // pad-shaped special case used throughout as the tile-occupancy footprint.
 function isoBox(sx, sy, w2, h2, bh, accent, lit, opts = {}) {
-  const glow = lit ? 9 : 0;
   const fMul = opts.fillAlpha ?? 1;
   const sMul = opts.strokeAlpha ?? 1;
 
@@ -983,16 +409,9 @@ function isoBox(sx, sy, w2, h2, bh, accent, lit, opts = {}) {
   rightFace();
   ctx.fillStyle   = rgba(accent, 0.05 * fMul);
   ctx.fill();
-  if (lit) {
-    fringeStroke(rightFace, 1, 0, SPLIT_A, 0.35 * sMul, 0.8);
-    fringeStroke(rightFace, -1, 0, SPLIT_B, 0.35 * sMul, 0.8);
-  }
-  rightFace();
   ctx.strokeStyle = rgba(accent, (lit ? 0.55 : 0.35) * sMul);
-  ctx.lineWidth   = 0.8;
-  if (glow) { ctx.shadowColor = accent; ctx.shadowBlur = glow; }
-  ctx.stroke();
-  ctx.shadowBlur = 0;
+  ctx.lineWidth   = THEME_STYLE.faceLine;
+  strokeShape(rightFace, 'face', accent, lit, sMul);
 
   // ── Left face ──
   const leftFace = () => {
@@ -1006,16 +425,9 @@ function isoBox(sx, sy, w2, h2, bh, accent, lit, opts = {}) {
   leftFace();
   ctx.fillStyle   = rgba(accent, 0.08 * fMul);
   ctx.fill();
-  if (lit) {
-    fringeStroke(leftFace, 1, 0, SPLIT_A, 0.35 * sMul, 0.8);
-    fringeStroke(leftFace, -1, 0, SPLIT_B, 0.35 * sMul, 0.8);
-  }
-  leftFace();
   ctx.strokeStyle = rgba(accent, (lit ? 0.65 : 0.4) * sMul);
-  ctx.lineWidth   = 0.8;
-  if (glow) { ctx.shadowColor = accent; ctx.shadowBlur = glow; }
-  ctx.stroke();
-  ctx.shadowBlur = 0;
+  ctx.lineWidth   = THEME_STYLE.faceLine;
+  strokeShape(leftFace, 'face', accent, lit, sMul);
 
   // ── Top face ──
   const topFace = () => {
@@ -1029,16 +441,9 @@ function isoBox(sx, sy, w2, h2, bh, accent, lit, opts = {}) {
   topFace();
   ctx.fillStyle   = rgba(accent, (lit ? 0.16 : 0.1) * fMul);
   ctx.fill();
-  if (lit) {
-    fringeStroke(topFace, 1, 0, SPLIT_A, 0.4 * sMul, lit ? 1.3 : 1);
-    fringeStroke(topFace, -1, 0, SPLIT_B, 0.4 * sMul, lit ? 1.3 : 1);
-  }
-  topFace();
   ctx.strokeStyle = rgba(accent, (lit ? 1.0 : 0.6) * sMul);
-  ctx.lineWidth   = lit ? 1.3 : 1;
-  if (glow) { ctx.shadowColor = accent; ctx.shadowBlur = glow * 1.4; }
-  ctx.stroke();
-  ctx.shadowBlur = 0;
+  ctx.lineWidth   = THEME_STYLE.topLine(lit);
+  strokeShape(topFace, 'top', accent, lit, sMul);
 
   return { w2, h2, topY: sy - bh };
 }
@@ -1638,6 +1043,12 @@ window.ODF = {
   registerIcon(key, draw, meta = {}) {
     ICONS[key] = { draw, bh: 0, scale: 1, extraTop: 0, label: key, ...meta };
     finalizeIconEntry(key);
+  },
+  // Called by a theme's optional theme.js to override THEME_STYLE entries.
+  registerTheme(overrides) {
+    Object.assign(THEME_STYLE, overrides);
+    readTheme();
+    vignetteDirty = true;
   },
 };
 
@@ -2493,7 +1904,7 @@ function buildNodeItem(node) {
   item.dataset.id = node.id;
   item.style.setProperty('--row-accent', cVar);
   item.innerHTML  =
-    `<span class="node-tag" style="background:color-mix(in srgb, ${cVar} 14%, transparent);color:${cVar};border:1px solid color-mix(in srgb, ${cVar} 40%, transparent);box-shadow:1px 0 0 color-mix(in srgb, var(--split-a) 50%, transparent),-1px 0 0 color-mix(in srgb, var(--split-b) 50%, transparent)">${lbl.replace('@','')}</span>` +
+    `<span class="node-tag" style="background:color-mix(in srgb, ${cVar} 14%, transparent);color:${cVar};border:var(--tag-border-width,1px) solid color-mix(in srgb, ${cVar} 40%, transparent);box-shadow:var(--tag-shadow,none)">${lbl.replace('@','')}</span>` +
     `<span class="node-lbl">${node.label}</span>`;
   item.addEventListener('click', () => selectFromSidebar(node.id));
   return item;
@@ -4262,6 +3673,3 @@ async function init() {
 }
 
 init();
-</script>
-</body>
-</html>

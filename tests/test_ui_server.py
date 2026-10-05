@@ -816,13 +816,13 @@ def test_unknown_theme_raises_value_error_at_construction():
 def test_selecting_a_different_theme_serves_different_content(tmp_path, monkeypatch):
     alt = tmp_path / "alt"
     alt.mkdir()
-    (alt / "index.html").write_text("<html><body>alt theme marker</body></html>")
+    (alt / "theme.css").write_text("/* alt theme marker */")
     (alt / "favicon.svg").write_text("<svg><title>alt favicon</title></svg>")
     monkeypatch.setattr(themes, "_THEMES_DIR", tmp_path)
 
     with Context(namespaces=set()) as ctx:
         client = TestClient(UiServer(ctx, "proj", theme="alt")._app)
-        r = client.get("/")
+        r = client.get("/theme.css")
 
     assert "alt theme marker" in r.text
 
@@ -847,27 +847,81 @@ def test_list_themes_finds_the_built_in_onyx_theme():
     assert "onyx" in themes.list_themes()
 
 
-@pytest.mark.parametrize("theme", themes.list_themes())
-def test_every_theme_has_the_collapsible_sidebar_rail(theme):
-    html = (themes.theme_dir(theme) / "index.html").read_text()
+def test_ui_has_the_collapsible_sidebar_rail():
+    html = (themes.STATIC_DIR / "index.html").read_text()
+    script = (themes.STATIC_DIR / "app.js").read_text()
 
     assert 'id="sb-rail"' in html
-    assert "odf-ui-sidebar" in html
+    assert "odf-ui-sidebar" in script
+
+
+def test_ui_takes_node_cells_from_the_topology_payload():
+    script = (themes.STATIC_DIR / "app.js").read_text()
+
+    assert "nodeMap[id].col = pos.col" not in script
+    assert "nodeMap[id].row = pos.row" not in script
+    assert "nodeMap[id].icon = pos.icon" in script
+
+
+def test_index_loads_the_shared_script_and_the_theme_files():
+    html = (themes.STATIC_DIR / "index.html").read_text()
+
+    assert 'href="/theme.css"' in html
+    assert html.index('src="/app.js"') < html.index('src="/theme.js"')
 
 
 @pytest.mark.parametrize("theme", themes.list_themes())
-def test_every_theme_takes_node_cells_from_the_topology_payload(theme):
-    html = (themes.theme_dir(theme) / "index.html").read_text()
+def test_no_theme_ships_its_own_index_html(theme):
+    assert not (themes.theme_dir(theme) / "index.html").exists()
 
-    assert "nodeMap[id].col = pos.col" not in html
-    assert "nodeMap[id].row = pos.row" not in html
-    assert "nodeMap[id].icon = pos.icon" in html
+
+def test_serves_the_shared_script():
+    with Context(namespaces=set()) as ctx:
+        client = TestClient(UiServer(ctx, "proj")._app)
+        r = client.get("/app.js")
+
+    assert r.status_code == 200
+    assert "javascript" in r.headers["content-type"]
+    assert r.headers["cache-control"] == "no-cache"
+
+
+@pytest.mark.parametrize("theme", themes.list_themes())
+def test_serves_every_theme_stylesheet(theme):
+    with Context(namespaces=set()) as ctx:
+        client = TestClient(UiServer(ctx, "proj", theme=theme)._app)
+        r = client.get("/theme.css")
+
+    assert r.status_code == 200
+    assert "text/css" in r.headers["content-type"]
+    assert r.headers["cache-control"] == "no-cache"
+    assert r.text == (themes.theme_dir(theme) / "theme.css").read_text()
+
+
+def test_theme_script_is_empty_for_a_theme_without_one():
+    with Context(namespaces=set()) as ctx:
+        client = TestClient(UiServer(ctx, "proj", theme="default")._app)
+        r = client.get("/theme.js")
+
+    assert r.status_code == 200
+    assert "javascript" in r.headers["content-type"]
+    assert r.text == ""
+
+
+@pytest.mark.parametrize("theme", ["glitch", "neo"])
+def test_theme_script_is_served_for_a_theme_that_has_one(theme):
+    with Context(namespaces=set()) as ctx:
+        client = TestClient(UiServer(ctx, "proj", theme=theme)._app)
+        r = client.get("/theme.js")
+
+    assert r.status_code == 200
+    assert "javascript" in r.headers["content-type"]
+    assert "ODF.registerTheme(" in r.text
 
 
 def test_theme_dir_resolves_the_default_theme():
     path = themes.theme_dir("default")
 
-    assert (path / "index.html").is_file()
+    assert (path / "theme.css").is_file()
     assert (path / "favicon.svg").is_file()
 
 
@@ -883,7 +937,7 @@ def test_serves_glitch_theme_explicitly():
 def test_theme_dir_resolves_the_glitch_theme():
     path = themes.theme_dir("glitch")
 
-    assert (path / "index.html").is_file()
+    assert (path / "theme.css").is_file()
     assert (path / "favicon.svg").is_file()
 
 
@@ -899,7 +953,7 @@ def test_serves_neo_theme_explicitly():
 def test_theme_dir_resolves_the_neo_theme():
     path = themes.theme_dir("neo")
 
-    assert (path / "index.html").is_file()
+    assert (path / "theme.css").is_file()
     assert (path / "favicon.svg").is_file()
 
 
@@ -915,7 +969,7 @@ def test_serves_emerald_theme_explicitly():
 def test_theme_dir_resolves_the_emerald_theme():
     path = themes.theme_dir("emerald")
 
-    assert (path / "index.html").is_file()
+    assert (path / "theme.css").is_file()
     assert (path / "favicon.svg").is_file()
 
 
@@ -931,7 +985,7 @@ def test_serves_onyx_theme_explicitly():
 def test_theme_dir_resolves_the_onyx_theme():
     path = themes.theme_dir("onyx")
 
-    assert (path / "index.html").is_file()
+    assert (path / "theme.css").is_file()
     assert (path / "favicon.svg").is_file()
 
 

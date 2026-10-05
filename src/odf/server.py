@@ -137,7 +137,7 @@ class Server:
                 components).
             ui_host: Interface for the UI server to bind to.
             ui_port: Port for the UI server to bind to.
-            theme: Which UI theme (visual/layout file-set) to serve —
+            theme: Which UI theme (visual file-set) to serve —
                 orthogonal to the UI's own client-side light/dark
                 color-mode toggle. An explicit value here wins; otherwise
                 falls back to ``[ui] theme`` in config, then ``"default"``.

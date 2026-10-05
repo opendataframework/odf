@@ -51,8 +51,17 @@ needs a third-party dependency:
 | `server.py` | `Server` — composes an `opendataframework.Project` and adds `start(ui=, mcp=, chat=)` orchestration on top | (imports the rest of this table lazily) |
 | `cli.py`, `scaffold.py`, `templates/` | `odf init`/`odf run` CLI | `typer`, `rich` |
 | `mcp/server.py` | MCP server exposing component lifecycle + task/pipeline execution + repository data queries as tools | `mcp`, `uvicorn` |
-| `ui/server.py`, `ui/topology.py`, `ui/data.py`, `ui/layout.py`, `ui/extensions.py` | UI dev server | `fastapi`, `uvicorn` |
+| `ui/server.py`, `ui/topology.py`, `ui/data.py`, `ui/layout.py`, `ui/extensions.py`, `ui/themes.py` | UI dev server | `fastapi`, `uvicorn` |
+| `ui/static/` | The UI itself: `index.html` + `app.js` shared by every theme, and `themes/<name>/` holding each theme's `theme.css`, `favicon.svg` and optional `theme.js` | (Leaflet from a CDN; no build step) |
 | `chat/engine.py` | Chat window backing a `Server`'s UI | `ollama` |
+
+UI markup and behavior changes go in the shared `ui/static/index.html` and
+`ui/static/app.js`, never in a theme. A theme only restyles: all of its CSS
+lives in its own `theme.css` (themes share no stylesheet), and canvas
+drawing CSS can't express goes in its `theme.js` through
+`ODF.registerTheme()`, overriding `THEME_STYLE` in `app.js`. `app.js` must
+stay a classic script, since custom icon scripts use its top-level names as
+globals.
 
 None of `ui`/`mcp`/`chat` are imported eagerly by `odf/__init__.py` or
 `odf/server.py` (keep it that way — `import odf` alone must not pull in

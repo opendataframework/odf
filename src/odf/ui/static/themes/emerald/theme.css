@@ -1,0 +1,476 @@
+*,*::before,*::after{margin:0;padding:0;box-sizing:border-box}
+
+:root, :root[data-theme="dark"] {
+  --bg: #171717;
+  --bg-canvas: #121212;
+  --panel: #1c1c1c;
+  --panel-rgb: 28,28,28;
+  --border: #2e2e2e;
+  --border-strong: #3e3e3e;
+  --text: #ededed;
+  --text-muted: #a1a1a1;
+  --text-dim: #6b6b6b;
+  --hover-bg: #232323;
+  /* The one brand hue: everything interactive (active tab, focus ring,
+     primary button, links) is emerald; the rest of the chrome is neutral. */
+  --title-accent: #3ecf8e;
+
+  --accent-config: #8f8f8f;
+  --accent-component: #f5a524;
+  --accent-repository: #5b9cf5;
+  --accent-service: #3ecfcf;
+  --accent-task: #3ecf8e;
+  --accent-pipeline: #e8c547;
+  --accent-alert: #f06a6a;
+
+  --layer-api: #8b7cf6;
+  --layer-storage: #f472b6;
+  --layer-analytics: #c3d44a;
+  --layer-messaging: #4ade80;
+  --layer-monitoring: #fbbf24;
+  --layer-security: #fb7c5c;
+
+  --wire: #2e2e2e;
+  --wire-glow: #2f5e47;
+  --tile-fill: #1c1c1c;
+  --tile-stroke: #2a2a2a;
+  --label-bg-rgb: 23,23,23;
+  --label-bg-alpha: 0.92;
+  --vignette-rgb: 0,0,0;
+  --vignette-alpha: 0.45;
+
+  --panel-shadow: 0 1px 2px rgba(0,0,0,.25);
+  --popover-shadow: 0 8px 24px rgba(0,0,0,.35);
+  --focus-ring: 0 0 0 3px color-mix(in srgb, var(--title-accent) 20%, transparent);
+  --ok: #3ecf8e;
+}
+
+:root[data-theme="light"] {
+  --bg: #f8f9fa;
+  --bg-canvas: #f1f3f5;
+  --panel: #ffffff;
+  --panel-rgb: 255,255,255;
+  --border: #e6e8eb;
+  --border-strong: #d1d5db;
+  --text: #11181c;
+  --text-muted: #687076;
+  --text-dim: #9ba1a6;
+  --hover-bg: #f1f3f5;
+  /* Darker emerald than dark mode's so text/borders in it keep contrast
+     against white panels. */
+  --title-accent: #15a36a;
+
+  --accent-config: #6b7280;
+  --accent-component: #c27803;
+  --accent-repository: #2f6fd6;
+  --accent-service: #0e9494;
+  --accent-task: #15a36a;
+  --accent-pipeline: #a37f00;
+  --accent-alert: #dc3e3e;
+
+  --layer-api: #6d5bd0;
+  --layer-storage: #d0457f;
+  --layer-analytics: #7f8c12;
+  --layer-messaging: #1f9d55;
+  --layer-monitoring: #c27803;
+  --layer-security: #d9542e;
+
+  --wire: #d1d5db;
+  --wire-glow: #8fd9b6;
+  --tile-fill: #ffffff;
+  --tile-stroke: #e6e8eb;
+  --label-bg-rgb: 255,255,255;
+  --label-bg-alpha: 0.94;
+  --vignette-rgb: 16,24,40;
+  --vignette-alpha: 0.035;
+
+  --panel-shadow: 0 1px 2px rgba(16,24,40,.05);
+  --popover-shadow: 0 8px 24px rgba(16,24,40,.08);
+  --focus-ring: 0 0 0 3px color-mix(in srgb, var(--title-accent) 20%, transparent);
+  --ok: #15a36a;
+}
+
+*{scrollbar-width:thin;scrollbar-color:var(--border-strong) transparent}
+*::-webkit-scrollbar{width:8px;height:8px}
+*::-webkit-scrollbar-track{background:transparent}
+*::-webkit-scrollbar-thumb{background:var(--border-strong)}
+
+html,body{background:var(--bg)}
+
+body{
+  color:var(--text);
+  font-family:Inter,'Geist',-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;-webkit-font-smoothing:antialiased;
+  height:100vh;display:flex;flex-direction:column;overflow:hidden;user-select:none;
+}
+
+.mono{font-family:'SF Mono','IBM Plex Mono','JetBrains Mono',Consolas,'Courier New',monospace}
+
+#topbar{height:3px;flex-shrink:0;background:linear-gradient(90deg,var(--title-accent),transparent 85%);opacity:.8}
+
+#shell{flex:1;min-height:0;display:flex;flex-direction:column;gap:8px;padding:8px}
+
+.panel{background:var(--panel);border:1px solid var(--border);border-radius:8px;box-shadow:var(--panel-shadow)}
+
+#hdr{padding:0 16px;height:46px;display:flex;align-items:center;gap:0;flex-shrink:0}
+.brand{display:flex;align-items:center;gap:10px;margin-right:18px;padding-right:18px;border-right:1px solid var(--border)}
+.brand-mark{width:18px;height:18px;flex-shrink:0;border:1.5px solid var(--title-accent);position:relative;transform:rotate(45deg)}
+.brand-mark::after{content:"";position:absolute;inset:4px;background:var(--title-accent);opacity:.85}
+.brand-mark.has-logo{border:none;transform:none}
+.brand-mark.has-logo::after{content:none}
+.brand-mark img{width:100%;height:100%;object-fit:contain;display:block}
+.hdr-title{font-family:'SF Mono','IBM Plex Mono',Consolas,monospace;color:var(--text);font-size:13px;font-weight:600;letter-spacing:.04em}
+.hdr-title small{display:block;color:var(--text-dim);font-size:9.5px;font-weight:500;letter-spacing:.09em;text-transform:uppercase;margin-top:2px}
+
+.hdr-stats{display:flex;align-items:center;gap:0;height:100%}
+.hdr-stat{display:flex;flex-direction:column;gap:3px;padding:0 18px;border-right:1px solid var(--border);justify-content:center}
+.hdr-stat:last-child{border-right:none}
+.hdr-stat .k{color:var(--text-dim);font-size:9px;letter-spacing:.1em;text-transform:uppercase;font-family:'SF Mono',Consolas,monospace}
+.hdr-stat .v{font-family:'SF Mono','IBM Plex Mono',Consolas,monospace;font-size:13px;font-weight:600;font-variant-numeric:tabular-nums}
+
+.hdr-status{display:flex;align-items:center;gap:7px;margin-left:auto;padding:0 16px;font-family:'SF Mono',Consolas,monospace;font-size:10px;letter-spacing:.08em;text-transform:uppercase;color:var(--text-muted)}
+.hdr-status .dot{width:6px;height:6px;background:var(--ok);box-shadow:0 0 0 2px color-mix(in srgb, var(--ok) 20%, transparent);animation:pulse-dot 2.4s ease-in-out infinite}
+.hdr-clock{font-family:'SF Mono',Consolas,monospace;font-size:11px;color:var(--text-dim);font-variant-numeric:tabular-nums;padding:0 16px;border-left:1px solid var(--border)}
+@keyframes pulse-dot{0%,100%{opacity:1}50%{opacity:.35}}
+
+.theme-toggle{background:transparent;border:1px solid var(--border);color:var(--text-muted);font-family:'SF Mono',Consolas,monospace;font-size:10px;font-weight:600;letter-spacing:.06em;text-transform:uppercase;padding:6px 11px;border-radius:6px;cursor:pointer;display:flex;align-items:center;gap:6px;transition:background .12s,color .12s,border-color .12s}
+.theme-toggle:hover{background:var(--hover-bg);color:var(--title-accent);border-color:var(--border-strong)}
+.theme-toggle .glyph{font-size:12px}
+
+#body{display:flex;flex:1;min-height:0;gap:8px}
+
+/* Sidebar: an always-visible icon rail (#sb-rail, one .sb-tab per SIDEBAR_TABS
+   entry + a collapse chevron) beside the active tab's panel (#sb-panels).
+   .collapsed hides only the panel, so the rail stays as the way back in. */
+#sidebar{width:312px;flex-shrink:0;display:flex;flex-direction:row;overflow:hidden}
+#sidebar.collapsed{width:auto}
+#sb-rail{width:40px;flex-shrink:0;display:flex;flex-direction:column;align-items:center;gap:4px;padding:8px 0;border-right:1px solid var(--border)}
+#sidebar.collapsed #sb-rail{border-right:none}
+.sb-tab,#sb-collapse{width:28px;height:28px;padding:0;background:transparent;border:1px solid transparent;border-radius:6px;color:var(--text-muted);cursor:pointer;display:flex;align-items:center;justify-content:center;transition:background .12s,color .12s,border-color .12s}
+.sb-tab:hover,#sb-collapse:hover{background:var(--hover-bg);color:var(--title-accent);border-color:var(--border-strong)}
+.sb-tab.active{color:var(--title-accent);border-color:var(--border-strong);background:var(--hover-bg)}
+.sb-tab svg,#sb-collapse svg{width:16px;height:16px;fill:none;stroke:currentColor;stroke-width:1.6;stroke-linecap:round;stroke-linejoin:round}
+#sb-collapse{margin-top:auto}
+#sidebar.collapsed #sb-collapse svg{transform:rotate(180deg)}
+#sb-panels{flex:1;min-width:0;overflow-y:auto;display:flex;flex-direction:column}
+#sidebar.collapsed #sb-panels{display:none}
+.sb-panel{display:none}
+.sb-panel.active{display:flex;flex-direction:column;flex:1;min-height:0}
+.sb-section{padding:14px 16px}
+.sb-section + .sb-section{border-top:1px solid var(--border)}
+.sb-heading{color:var(--text-dim);font-family:'SF Mono',Consolas,monospace;font-size:9.5px;font-weight:600;letter-spacing:.1em;text-transform:uppercase;margin-bottom:11px;display:flex;align-items:center;justify-content:space-between}
+.sb-heading .count{color:var(--text-dim);font-weight:500}
+.node-item{--row-accent:var(--text-dim);display:flex;align-items:center;gap:8px;padding:6px 8px;cursor:pointer;margin-bottom:1px;border-left:2px solid transparent;transition:background .12s,border-color .12s}
+.node-item:hover{background:var(--hover-bg)}
+.node-item.selected{background:color-mix(in srgb, var(--row-accent) 12%, transparent);border-left-color:var(--row-accent)}
+.node-tag{font-family:'SF Mono',Consolas,monospace;font-size:8px;font-weight:700;padding:2px 5px;text-transform:uppercase;letter-spacing:.03em;flex-shrink:0;white-space:nowrap;border-radius:4px}
+.node-lbl{font-size:11.5px;color:var(--text);font-family:'SF Mono',Consolas,monospace}
+.layer-badge{font-family:'SF Mono',Consolas,monospace;font-size:8px;font-weight:700;padding:2px 5px;text-transform:uppercase;letter-spacing:.03em;flex-shrink:0;white-space:nowrap;border-radius:4px}
+
+.layer-group{margin-bottom:2px}
+.layer-group-header{display:flex;align-items:center;gap:7px;padding:6px 8px;cursor:pointer;user-select:none;border-radius:6px}
+.layer-group-header:hover{background:var(--hover-bg)}
+.layer-caret{width:8px;height:8px;flex-shrink:0;color:var(--text-dim);transition:transform .12s;display:flex;align-items:center;justify-content:center}
+.layer-group.collapsed .layer-caret{transform:rotate(-90deg)}
+.layer-swatch-btn{width:10px;height:10px;border-radius:50%;border:1px solid rgba(0,0,0,.2);flex-shrink:0;cursor:pointer;padding:0}
+.layer-group-name{font-size:10.5px;font-weight:600;letter-spacing:.03em;text-transform:uppercase;font-family:'SF Mono',Consolas,monospace;color:var(--text-muted);flex:1}
+.layer-group-count{font-size:9.5px;color:var(--text-dim);font-family:'SF Mono',Consolas,monospace}
+.layer-group-body{display:flex;flex-direction:column}
+.layer-group.collapsed .layer-group-body{display:none}
+.layer-group-body .node-item{padding-left:22px}
+
+#map{flex:1;min-width:0;position:relative;overflow:hidden}
+canvas{display:block;cursor:grab}
+
+.corner-bracket{position:absolute;width:14px;height:14px;border-color:var(--border-strong);pointer-events:none;z-index:3;opacity:.9}
+.corner-bracket.tl{top:8px;left:8px;border-top:1.5px solid;border-left:1.5px solid}
+.corner-bracket.tr{top:8px;right:8px;border-top:1.5px solid;border-right:1.5px solid}
+.corner-bracket.bl{bottom:8px;left:8px;border-bottom:1.5px solid;border-left:1.5px solid}
+.corner-bracket.br{bottom:8px;right:8px;border-bottom:1.5px solid;border-right:1.5px solid}
+
+#coord-readout{position:absolute;left:14px;bottom:14px;z-index:2;font-family:'SF Mono',Consolas,monospace;font-size:10px;letter-spacing:.05em;color:var(--text-dim);background:rgba(var(--panel-rgb),.75);border:1px solid var(--border);padding:4px 9px;pointer-events:none}
+#coord-readout b{color:var(--text-muted);font-weight:600}
+
+#map-title{position:absolute;top:12px;left:16px;z-index:2;font-family:'SF Mono',Consolas,monospace;font-size:9.5px;letter-spacing:.12em;text-transform:uppercase;color:var(--text-dim);pointer-events:none}
+
+#zoom-controls{position:absolute;right:14px;bottom:14px;display:flex;flex-direction:column;gap:3px;z-index:2}
+#zoom-controls button{width:28px;height:28px;background:rgba(var(--panel-rgb),0.9);border:1px solid var(--border);color:var(--text-muted);font-family:'SF Mono',Consolas,monospace;font-size:14px;line-height:1;border-radius:6px;cursor:pointer;display:flex;align-items:center;justify-content:center;transition:background .12s,color .12s,border-color .12s}
+#zoom-controls button:hover{background:var(--hover-bg);color:var(--title-accent);border-color:var(--border-strong)}
+#zoom-controls button:active{background:var(--border)}
+#zoom-controls .zc-sep{height:1px;background:var(--border);margin:2px 3px}
+
+/* Grid-expansion D-pad — adds empty cells along one diamond edge per click
+   (see expandGrid()/gridExpand in the script below). Sits just left of
+   zoom-controls, same footprint/style. */
+#grid-controls{position:absolute;right:50px;bottom:14px;display:grid;grid-template-columns:repeat(2,28px);grid-template-rows:repeat(2,28px);gap:3px;z-index:2}
+#grid-controls button{background:rgba(var(--panel-rgb),0.9);border:1px solid var(--border);color:var(--text-muted);font-family:'SF Mono',Consolas,monospace;font-size:13px;line-height:1;border-radius:6px;cursor:pointer;display:flex;align-items:center;justify-content:center;transition:background .12s,color .12s,border-color .12s}
+#grid-controls button:hover{background:var(--hover-bg);color:var(--title-accent);border-color:var(--border-strong)}
+#grid-controls button:active{background:var(--border)}
+
+/* Object-type legend — floats over the topology grid like a chart legend,
+   replacing the old fixed "Object Types" section in the sidebar. */
+#type-legend{position:absolute;left:50%;bottom:14px;transform:translateX(-50%);z-index:2;display:flex;align-items:center;justify-content:center;flex-wrap:wrap;gap:4px 16px;max-width:calc(100% - 220px);background:rgba(var(--panel-rgb),.75);border:1px solid var(--border);border-radius:8px;padding:6px 14px;pointer-events:none}
+.tl-item{display:flex;align-items:center;gap:6px;font-size:11px;color:var(--text);font-family:'SF Mono',Consolas,monospace;white-space:nowrap}
+.tl-pip{width:8px;height:8px;border:1.3px solid currentColor;background:color-mix(in srgb, currentColor 18%, transparent);flex-shrink:0}
+
+.panel-heading{color:var(--text-dim);font-family:'SF Mono',Consolas,monospace;font-size:9.5px;font-weight:600;letter-spacing:.1em;text-transform:uppercase;margin-bottom:9px}
+
+.detail-empty{font-size:12px;color:var(--text-dim);font-family:'SF Mono',Consolas,monospace}
+.detail-title{font-family:'SF Mono',Consolas,monospace;font-size:14px;font-weight:700;letter-spacing:.01em;margin-bottom:6px}
+.detail-meta{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:8px}
+.detail-meta .deco{font-family:'SF Mono',Consolas,monospace;font-size:10.5px;color:var(--text-muted)}
+.detail-meta .file{font-family:'SF Mono','Fira Code',Consolas,'Courier New',monospace;font-size:10.5px;color:var(--text-dim);background:var(--hover-bg);border:1px solid var(--border);padding:2px 6px;border-radius:4px}
+.detail-desc{font-size:12px;line-height:1.6;color:var(--text-muted)}
+
+.log-line{display:flex;align-items:flex-start;gap:7px;font-size:11px;color:var(--text-muted);line-height:1.4}
+.log-line .dot{width:5px;height:5px;flex-shrink:0;margin-top:4px}
+.log-line .ts{font-family:'SF Mono',Consolas,monospace;color:var(--text-dim);flex-shrink:0}
+
+/* flex+gap (not the .data-btn margin-left/:first-child pattern used
+   elsewhere) so wrapped rows stay left-aligned instead of drifting right by
+   a stray margin once there are enough buttons to wrap */
+.detail-actions{margin-top:10px;display:flex;flex-wrap:wrap;gap:6px}
+.detail-actions .data-btn{margin-left:0}
+
+/* Inspector popup — anchored to the clicked building's screen position at
+   selection time (not live-tracked; pan/zoom/resize close it instead, see
+   closeInspectorPopup()), replacing the old fixed bottom panel so a new
+   selection is visually obvious rather than silently updating off to the
+   side. */
+.inspector-popup{position:absolute;z-index:6;display:none;width:300px;max-width:calc(100% - 16px);max-height:calc(100% - 16px);overflow-y:auto;background:var(--panel);border:1px solid var(--border-strong);border-radius:8px;box-shadow:var(--popover-shadow);padding:14px 16px}
+.inspector-popup.open{display:block}
+#map:not(.mode-topology) .inspector-popup{display:none}
+.inspector-popup-close{position:absolute;top:8px;right:8px;background:transparent;border:1px solid var(--border);color:var(--text-muted);width:20px;height:20px;border-radius:6px;cursor:pointer;font-size:12px;line-height:1;display:flex;align-items:center;justify-content:center}
+.inspector-popup-close:hover{background:var(--hover-bg);color:var(--text)}
+
+/* Style picker — single popover anchored under the inspector popup's
+   compact "Customize" button, bundling the shape (icon) and color pickers
+   into one place instead of two separate action buttons, so the inspector's
+   action row doesn't accumulate a button per customization axis. Reuses the
+   inspector popup's panel/border/shadow language. */
+.style-picker-popover{position:absolute;z-index:7;display:none;background:var(--panel);border:1px solid var(--border-strong);border-radius:8px;box-shadow:var(--popover-shadow);padding:8px}
+.style-picker-popover.open{display:block}
+.style-picker-section + .style-picker-section{margin-top:8px;padding-top:8px;border-top:1px solid var(--border)}
+.style-picker-label{font-size:9px;font-weight:600;letter-spacing:.06em;text-transform:uppercase;color:var(--text-muted);font-family:'SF Mono',Consolas,monospace;margin-bottom:4px}
+.layer-color-popover{position:fixed;z-index:8}
+.icon-picker-grid,.color-picker-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:4px}
+.icon-swatch{width:44px;height:44px;border:1px solid var(--border);border-radius:6px;background:transparent;cursor:pointer;display:flex;align-items:center;justify-content:center;padding:0}
+.icon-swatch:hover{background:var(--hover-bg);border-color:var(--border-strong)}
+.icon-swatch.selected{border-color:var(--title-accent)}
+.icon-swatch.reset{grid-column:1/-1;display:flex;gap:6px;font-size:10px;color:var(--text-muted);font-family:'SF Mono',Consolas,monospace;height:22px}
+.color-swatch{width:32px;height:32px;border:1px solid var(--border);border-radius:6px;cursor:pointer;padding:0}
+.color-swatch:hover{border-color:var(--border-strong)}
+.color-swatch.selected{border-color:var(--title-accent);box-shadow:0 0 0 1px var(--title-accent)}
+.color-swatch.reset{grid-column:1/-1;display:flex;align-items:center;gap:6px;font-size:10px;color:var(--text-muted);font-family:'SF Mono',Consolas,monospace;height:22px;width:auto;background:transparent}
+
+/* Activity toggle + drawer — global (not tied to topology mode), floats
+   above the map-panel-view so it's reachable from Data/Stream/Logs too. */
+.activity-toggle{position:absolute;top:12px;right:14px;z-index:8;background:rgba(var(--panel-rgb),0.9);border:1px solid var(--border);color:var(--text-muted);font-family:'SF Mono',Consolas,monospace;font-size:10px;font-weight:600;letter-spacing:.05em;text-transform:uppercase;padding:6px 10px;border-radius:6px;cursor:pointer;transition:background .12s,color .12s,border-color .12s}
+.activity-toggle:hover{background:var(--hover-bg);color:var(--title-accent);border-color:var(--border-strong)}
+
+#activity-drawer{position:absolute;top:0;right:0;bottom:0;width:300px;max-width:80%;z-index:9;background:var(--panel);border-left:1px solid var(--border-strong);box-shadow:var(--popover-shadow);transform:translateX(100%);transition:transform .18s ease;display:flex;flex-direction:column}
+#activity-drawer.open{transform:translateX(0)}
+.activity-drawer-hdr{display:flex;align-items:center;justify-content:space-between;padding:12px 16px;border-bottom:1px solid var(--border);flex-shrink:0}
+.activity-drawer-hdr .panel-heading{margin-bottom:0}
+#log-lines{flex:1;overflow-y:auto;display:flex;flex-direction:column;gap:6px;padding:12px 16px}
+
+/* Toggle buttons row (Activity / Chat) — top right, above the map. */
+.map-toggle-group{position:absolute;top:12px;right:14px;z-index:8;display:flex;gap:6px}
+.map-toggle-group .activity-toggle{position:static}
+#chat-toggle{display:none}
+#chat-toggle.visible{display:inline-flex}
+
+/* Chat drawer — same slide-in-from-right treatment as #activity-drawer. */
+#chat-drawer{position:absolute;top:0;right:0;bottom:0;width:360px;max-width:88%;z-index:9;background:var(--panel);border-left:1px solid var(--border-strong);box-shadow:var(--popover-shadow);transform:translateX(100%);transition:transform .18s ease;display:flex;flex-direction:column}
+#chat-drawer.open{transform:translateX(0)}
+#chat-messages{flex:1;overflow-y:auto;display:flex;flex-direction:column;gap:10px;padding:12px 16px;font-family:'SF Mono',Consolas,monospace;font-size:11.5px}
+.chat-msg{max-width:92%;padding:7px 10px;border-radius:8px;line-height:1.4;white-space:pre-wrap;word-break:break-word}
+.chat-msg.user{align-self:flex-end;background:color-mix(in srgb, var(--title-accent) 16%, transparent);border:1px solid color-mix(in srgb, var(--title-accent) 40%, transparent);color:var(--text)}
+.chat-msg.assistant{align-self:flex-start;background:var(--hover-bg);border:1px solid var(--border);color:var(--text)}
+.chat-msg.tool{align-self:flex-start;background:transparent;border:1px dashed var(--border-strong);color:var(--text-dim);font-size:10.5px}
+.chat-msg.error{align-self:flex-start;background:color-mix(in srgb, var(--accent-alert) 14%, transparent);border:1px solid var(--accent-alert);color:var(--accent-alert)}
+#chat-footer{display:flex;gap:8px;padding:12px 16px;border-top:1px solid var(--border);flex-shrink:0;position:relative}
+#chat-input{flex:1;resize:none;height:38px;background:var(--hover-bg);border:1px solid var(--border-strong);color:var(--text);font-family:inherit;font-size:11.5px;padding:8px 10px;border-radius:6px}
+#chat-input:focus{outline:none;border-color:var(--title-accent)}
+#chat-send{flex-shrink:0}
+.mention-menu{position:absolute;left:16px;right:16px;bottom:100%;margin-bottom:6px;max-height:160px;overflow-y:auto;background:var(--panel);border:1px solid var(--border-strong);border-radius:8px;box-shadow:var(--popover-shadow);z-index:10}
+.mention-menu[hidden]{display:none}
+.mention-item{display:flex;justify-content:space-between;gap:8px;padding:6px 10px;font-family:'SF Mono',Consolas,monospace;font-size:11px;cursor:pointer;color:var(--text)}
+.mention-item:hover,.mention-item.active{background:var(--hover-bg);color:var(--title-accent)}
+.mention-label{color:var(--text-dim);font-size:10px}
+
+.data-btn{background:transparent;border:1px solid var(--border);color:var(--text-muted);font-family:'SF Mono',Consolas,monospace;font-size:10px;font-weight:600;letter-spacing:.03em;padding:3px 8px;border-radius:6px;cursor:pointer;margin-left:4px;transition:background .12s,color .12s,border-color .12s}
+.data-btn:first-child{margin-left:0}
+.data-btn:hover{background:var(--hover-bg);color:var(--text)}
+.data-btn.primary{color:var(--title-accent);border-color:var(--title-accent)}
+.data-btn.danger{color:var(--accent-alert);border-color:var(--accent-alert)}
+.data-btn.block{display:block;margin:10px 0 0}
+
+.data-table{width:100%;border-collapse:collapse;font-family:'SF Mono',Consolas,monospace;font-size:11.5px}
+.data-table th{text-align:left;color:var(--text-dim);font-size:9.5px;letter-spacing:.08em;text-transform:uppercase;padding:6px 8px;border-bottom:1px solid var(--border-strong)}
+.data-table td{padding:6px 8px;border-bottom:1px solid var(--border);color:var(--text);vertical-align:middle}
+.data-table td.actions{white-space:nowrap;text-align:right}
+.data-table td.detail-empty{padding:6px 8px}
+.data-table input{width:100%;background:var(--hover-bg);border:1px solid var(--border-strong);color:var(--text);font-family:inherit;font-size:inherit;padding:3px 6px;border-radius:6px}
+.data-table .empty-row td{color:var(--text-dim);padding:12px 8px;text-align:center}
+.filter-row th{padding-top:0}
+.filter-row input{text-transform:none;letter-spacing:normal;font-weight:400}
+
+.pagination{display:flex;align-items:center;gap:8px;margin-top:10px;font-family:'SF Mono',Consolas,monospace}
+.pagination-range{color:var(--text-dim);font-size:10.5px;margin-right:auto}
+.pagination select{background:transparent;border:1px solid var(--border);color:var(--text-muted);font-family:inherit;font-size:10px;font-weight:600;padding:3px 6px;border-radius:6px;cursor:pointer}
+.data-btn:disabled{opacity:.4;cursor:default;pointer-events:none}
+
+/* Map panel view — replaces the topology canvas in-place for Edit Data /
+   View Stream / Show Logs, instead of a floating modal overlay. */
+#map-panel-view{position:absolute;inset:0;z-index:5;display:none;flex-direction:column;background:var(--panel)}
+#map.mode-topology #map-panel-view{display:none}
+#map:not(.mode-topology) #map-panel-view{display:flex}
+#map:not(.mode-topology) #canvas,
+#map:not(.mode-topology) #map-title,
+#map:not(.mode-topology) .corner-bracket,
+#map:not(.mode-topology) #coord-readout,
+#map:not(.mode-topology) #zoom-controls,
+#map:not(.mode-topology) #grid-controls,
+#map:not(.mode-topology) #type-legend{display:none}
+
+.map-panel-hdr{display:flex;align-items:center;gap:12px;padding:12px 100px 12px 16px;border-bottom:1px solid var(--border);flex-shrink:0}
+#map-panel-title{font-family:'SF Mono',Consolas,monospace;font-size:12.5px;font-weight:700;letter-spacing:.02em;color:var(--title-accent);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.map-back-btn{background:transparent;border:1px solid var(--border);color:var(--text-muted);font-family:'SF Mono',Consolas,monospace;font-size:10.5px;font-weight:600;letter-spacing:.03em;padding:5px 10px;border-radius:6px;cursor:pointer;transition:background .12s,color .12s,border-color .12s}
+.map-back-btn:hover{background:var(--hover-bg);color:var(--title-accent);border-color:var(--border-strong)}
+#map-panel-hdr-extra{margin-left:auto;display:flex;align-items:center;gap:8px}
+.view-mode-select{background:transparent;border:1px solid var(--border);color:var(--text-muted);font-family:'SF Mono',Consolas,monospace;font-size:10px;font-weight:600;letter-spacing:.05em;text-transform:uppercase;padding:5px 8px;border-radius:6px;cursor:pointer}
+.view-mode-select:hover{border-color:var(--border-strong);color:var(--title-accent)}
+
+#map-panel-body{flex:1;overflow-y:auto;padding:12px 16px}
+#map.mode-stream #map-panel-body{padding:0;display:flex;align-items:center;justify-content:center;background:#000}
+#map.mode-stream #map-panel-body img{display:block;max-width:100%;max-height:100%;object-fit:contain}
+
+#map.mode-chart #map-panel-body{padding:0;overflow:hidden}
+#chart-frame{width:100%;height:100%;border:0;display:block}
+.stream-placeholder{padding:32px;color:var(--text-dim);font-family:'SF Mono',Consolas,monospace;font-size:11.5px}
+.stream-audio-bar{display:flex;align-items:center;gap:10px;padding:20px 28px;font-family:'SF Mono',Consolas,monospace}
+.stream-live-dot{flex:none;width:7px;height:7px;border-radius:50%;background:var(--accent-alert);box-shadow:0 0 0 3px color-mix(in srgb, var(--accent-alert) 25%, transparent);animation:pulse-dot 1.4s ease-in-out infinite}
+.stream-live-dot.buffering{background:#6a6d72;box-shadow:none;animation:none}
+.stream-live-label{color:#e8e6e3;font-size:11px;font-weight:700;letter-spacing:.1em}
+.stream-audio-bar .data-btn{color:#c7c9cc;border-color:#3a3d42}
+.stream-audio-bar .data-btn:hover{background:rgba(255,255,255,.08);color:#fff}
+
+#map.mode-geo #map-panel-body{padding:0;overflow:hidden;position:relative}
+#geo-map{width:100%;height:100%;background:var(--bg-canvas)}
+.floating-pagination{position:absolute;left:50%;bottom:14px;transform:translateX(-50%);z-index:1000;background:rgba(var(--panel-rgb),0.92);border:1px solid var(--border);border-radius:8px;padding:6px 10px;box-shadow:var(--panel-shadow)}
+.floating-pagination:empty{display:none}
+.floating-pagination .pagination{margin-top:0}
+.timeline-bar{display:flex;align-items:center;gap:8px;font-family:'SF Mono',Consolas,monospace}
+.timeline-elapsed,.timeline-total{color:var(--text-dim);font-size:10.5px;font-variant-numeric:tabular-nums;white-space:nowrap}
+.timeline-bar input[type=range]{flex:1;min-width:160px;accent-color:var(--title-accent)}
+.timeline-bar select{background:transparent;border:1px solid var(--border);color:var(--text-muted);font-family:inherit;font-size:10px;font-weight:600;padding:3px 6px;border-radius:6px;cursor:pointer}
+#geo-map .leaflet-tile-pane{transition:filter .12s}
+:root[data-theme="dark"] #geo-map .leaflet-tile-pane{filter:invert(1) hue-rotate(180deg) brightness(0.94) contrast(0.88) saturate(0.9)}
+#geo-map .leaflet-popup-content-wrapper{background:var(--panel);color:var(--text);border:1px solid var(--border-strong);border-radius:8px;box-shadow:var(--popover-shadow)}
+#geo-map .leaflet-popup-tip{background:var(--panel);border:1px solid var(--border-strong)}
+#geo-map .leaflet-popup-close-button{color:var(--text-muted)!important}
+#geo-map .leaflet-popup-close-button:hover{color:var(--text)!important}
+#geo-map .leaflet-container{font-family:'SF Mono',Consolas,monospace;background:var(--bg-canvas)}
+#geo-map .leaflet-control-zoom a{background:rgba(var(--panel-rgb),0.9);color:var(--text-muted);border-color:var(--border)!important}
+#geo-map .leaflet-control-zoom a:hover{background:var(--hover-bg);color:var(--title-accent)}
+#geo-map .leaflet-control-attribution{background:rgba(var(--panel-rgb),0.85);color:var(--text-dim);font-size:9.5px}
+#geo-map .leaflet-control-attribution a{color:var(--text-muted)}
+.geo-popup .detail-title{font-size:12px;margin-bottom:6px}
+.geo-popup .data-table{font-size:10.5px}
+.geo-popup .data-table th,.geo-popup .data-table td{padding:4px 6px}
+
+.map-logs-lines{display:flex;flex-direction:column;gap:5px;font-family:'SF Mono',Consolas,monospace}
+.map-logs-lines .log-line{font-size:11.5px}
+.map-logs-lines .log-line span:last-child{white-space:pre-wrap;word-break:break-word}
+
+/* Image view — grid of thumbnails, one per record. */
+.media-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(140px,1fr));gap:10px}
+.media-tile{border:1px solid var(--border);border-radius:6px;overflow:hidden;background:var(--hover-bg)}
+.media-tile img{display:block;width:100%;height:120px;object-fit:cover}
+.media-tile .media-caption{padding:4px 6px;font-size:10px;color:var(--text-dim);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+
+/* Bounded Video/Audio view — a list of seekable clips, one per record. */
+.media-list{display:flex;flex-direction:column;gap:14px}
+.media-item{border:1px solid var(--border);border-radius:6px;padding:8px;background:var(--hover-bg)}
+.media-item video{display:block;width:100%;max-height:360px;background:#000}
+.media-item audio{display:block;width:100%}
+.media-item .media-caption{font-size:10.5px;color:var(--text-dim);margin-bottom:6px}
+
+/* Document view — one collapsible JSON tree per record. */
+.doc-list{display:flex;flex-direction:column;gap:14px}
+.doc-record{border:1px solid var(--border);border-radius:6px;padding:10px 12px;background:var(--hover-bg)}
+.doc-header{display:flex;flex-wrap:wrap;gap:10px;font-size:10.5px;color:var(--text-dim);margin-bottom:8px;padding-bottom:8px;border-bottom:1px solid var(--border)}
+.doc-header b{color:var(--text-muted);font-weight:600}
+.doc-tree{font-family:'SF Mono',Consolas,monospace;font-size:11.5px;line-height:1.5}
+.doc-children{margin-left:16px;border-left:1px dashed var(--border-strong);padding-left:10px}
+.doc-key{color:var(--title-accent)}
+.doc-string{color:var(--text)}
+.doc-scalar{color:var(--accent-service)}
+.doc-null{color:var(--text-dim);font-style:italic}
+.doc-punct{color:var(--text-dim)}
+
+/* Timeseries view — inline SVG line chart, no charting dependency. */
+#map.mode-timeseries #map-panel-body{position:relative;padding-bottom:52px}
+.ts-legend{display:flex;flex-wrap:wrap;gap:14px;font-size:10.5px;color:var(--text-dim);margin-bottom:10px}
+.ts-legend-item{display:flex;align-items:center;gap:5px;cursor:pointer;user-select:none;transition:opacity .12s}
+.ts-legend-item:hover{color:var(--title-accent)}
+.ts-legend-item.hidden{opacity:.4;text-decoration:line-through}
+.ts-swatch{width:9px;height:9px;border-radius:4px;display:inline-block}
+.timeseries-chart{width:100%;height:calc(100% - 30px)}
+
+/* ---- emerald: SaaS-dashboard chrome ------------------------------------
+   Sans-serif sentence-case UI labels (mono is kept for data: values, ids,
+   tables, logs, JSON), soft radii, no decorative top bar or corner brackets,
+   and emerald reserved for the active/focused/primary state. */
+*::-webkit-scrollbar-thumb{border-radius:8px}
+#topbar{display:none}
+.corner-bracket{display:none}
+
+.brand-mark{border:none;transform:none;border-radius:6px;background:var(--title-accent)}
+.brand-mark::after{inset:5px 4px auto;height:3px;border-radius:2px;background:var(--panel);opacity:1;box-shadow:0 5px 0 var(--panel)}
+.brand-mark.has-logo{background:none;border-radius:0}
+
+.hdr-title,.hdr-stat .k,.hdr-status,.theme-toggle,.sb-heading,.panel-heading,
+.layer-group-name,.style-picker-label,.activity-toggle,.data-btn,.map-back-btn,
+.view-mode-select,.pagination select,.timeline-bar select,#map-title,.tl-item,
+.detail-title,.detail-empty,.icon-swatch.reset,.color-swatch.reset,.data-table th{
+  font-family:Inter,'Geist',-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;text-transform:none;letter-spacing:0}
+.hdr-title{font-size:14px;font-weight:600}
+.hdr-title small{text-transform:none;letter-spacing:0;font-size:11px;font-weight:400}
+.hdr-stat .k{font-size:11px}
+.hdr-status{font-size:12px}
+.hdr-status .dot{border-radius:50%}
+.sb-heading,.panel-heading{font-size:12px;font-weight:500;color:var(--text-muted)}
+.layer-group-name{font-size:12px;font-weight:500}
+#map-title{font-size:12px;font-weight:500}
+.detail-title{font-size:15px;font-weight:600}
+.data-table th{font-size:11.5px;font-weight:500;color:var(--text-muted);background:var(--hover-bg)}
+.data-table tbody tr:hover td{background:var(--hover-bg)}
+.chat-msg,#chat-messages{font-family:Inter,'Geist',-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;font-size:12.5px}
+
+.theme-toggle,.activity-toggle,.data-btn,.map-back-btn,.view-mode-select,
+.pagination select,.timeline-bar select{font-size:12px;font-weight:500;background:var(--panel);border-color:var(--border-strong);transition:background .15s,color .15s,border-color .15s,box-shadow .15s}
+.data-btn{padding:4px 10px}
+.theme-toggle:hover,.activity-toggle:hover,.map-back-btn:hover,.view-mode-select:hover{color:var(--text)}
+.data-btn.primary{background:var(--title-accent);border-color:var(--title-accent);color:#0b1f15}
+.data-btn.primary:hover{background:color-mix(in srgb, var(--title-accent) 88%, #fff);color:#0b1f15}
+.data-btn.danger:hover{background:color-mix(in srgb, var(--accent-alert) 12%, transparent)}
+.theme-toggle:focus-visible,.activity-toggle:focus-visible,.data-btn:focus-visible,
+.map-back-btn:focus-visible,.view-mode-select:focus-visible,.sb-tab:focus-visible,
+.data-table input:focus,#chat-input:focus{outline:none;border-color:var(--title-accent);box-shadow:var(--focus-ring)}
+
+.sb-tab:hover,#sb-collapse:hover{color:var(--text);border-color:transparent}
+.sb-tab.active{color:var(--title-accent);border-color:transparent;background:color-mix(in srgb, var(--title-accent) 12%, transparent)}
+.node-item{border-left:none;border-radius:6px;margin-bottom:2px}
+.node-item.selected{box-shadow:inset 2px 0 0 var(--row-accent)}
+.layer-group-body .node-item{padding-left:22px}
+.node-tag,.layer-badge{letter-spacing:.02em}
+.tl-pip{border-radius:3px}
+
+#coord-readout,#type-legend{border-radius:8px;box-shadow:var(--panel-shadow)}
+#zoom-controls button,#grid-controls button{background:var(--panel);box-shadow:var(--panel-shadow)}
+#zoom-controls button:hover,#grid-controls button:hover{color:var(--text)}
+
+.chat-msg.user{background:color-mix(in srgb, var(--title-accent) 12%, transparent);border-color:color-mix(in srgb, var(--title-accent) 30%, transparent)}
+#chat-input{background:var(--panel);font-size:12.5px}
+.media-tile,.media-item,.doc-record{border-radius:8px}

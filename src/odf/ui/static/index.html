@@ -1,0 +1,137 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>ODF — Topology</title>
+<link rel="icon" type="image/svg+xml" href="/favicon.svg">
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin="">
+<link rel="stylesheet" href="/theme.css">
+</head>
+<body>
+
+<div id="topbar"></div>
+
+<div id="shell">
+<div id="hdr" class="panel">
+  <div class="brand">
+    <div class="brand-mark" id="brand-mark"></div>
+    <span class="hdr-title"><span id="hdr-brand">ODF</span><small id="hdr-subtitle">Topology · loading…</small></span>
+  </div>
+  <div class="hdr-stats">
+    <div class="hdr-stat"><span class="k">Project</span><span class="v" id="stat-project" style="color:var(--title-accent)">—</span></div>
+    <div class="hdr-stat"><span class="k">Objects</span><span class="v" id="stat-objects">—</span></div>
+    <div class="hdr-stat"><span class="k">Links</span><span class="v" id="stat-links">—</span></div>
+    <div class="hdr-stat"><span class="k">Services</span><span class="v" id="stat-services" style="color:var(--accent-service)">—</span></div>
+    <div class="hdr-stat"><span class="k">Tasks</span><span class="v" id="stat-tasks" style="color:var(--accent-task)">—</span></div>
+    <div class="hdr-stat"><span class="k">Pipelines</span><span class="v" id="stat-pipelines" style="color:var(--accent-pipeline)">—</span></div>
+  </div>
+  <div class="hdr-status"><span class="dot"></span>System Nominal</div>
+  <div class="hdr-clock mono" id="hdr-clock">--:--:--</div>
+  <button id="theme-toggle" class="theme-toggle" title="Toggle light / dark theme" aria-label="Toggle theme" style="margin-left:10px"></button>
+</div>
+
+<div id="body">
+  <div id="sidebar" class="panel">
+    <div id="sb-rail" role="tablist" aria-orientation="vertical" aria-label="Sidebar">
+      <button id="sb-collapse" title="Collapse sidebar" aria-label="Collapse sidebar" aria-controls="sb-panels" aria-expanded="true"><svg viewBox="0 0 16 16"><path d="M10 3 5 8l5 5"/></svg></button>
+    </div>
+    <div id="sb-panels">
+      <div class="sb-panel active" id="sb-panel-objects" data-panel="objects" role="tabpanel">
+        <div class="sb-section" style="flex:1">
+          <div class="sb-heading">Objects <span class="count" id="node-count">00</span></div>
+          <div id="node-list"></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div id="map" class="panel mode-topology">
+    <canvas id="canvas"></canvas>
+    <div id="map-title">Topology</div>
+    <div class="corner-bracket tl"></div>
+    <div class="corner-bracket tr"></div>
+    <div class="corner-bracket bl"></div>
+    <div class="corner-bracket br"></div>
+    <div id="coord-readout">CELL <b id="cr-cell">—:—</b> &nbsp;ZOOM <b id="cr-zoom">100%</b></div>
+    <div id="type-legend">
+      <div class="tl-item" style="color:var(--accent-config)" title="platform"><span class="tl-pip"></span>Config</div>
+      <div class="tl-item" style="color:var(--accent-component)" title="warehouse"><span class="tl-pip"></span>@Component</div>
+      <div class="tl-item" style="color:var(--accent-repository)" title="server rack"><span class="tl-pip"></span>@Repository</div>
+      <div class="tl-item" style="color:var(--accent-service)" title="antenna"><span class="tl-pip"></span>@Service</div>
+      <div class="tl-item" style="color:var(--accent-task)" title="factory cube"><span class="tl-pip"></span>@Task</div>
+      <div class="tl-item" style="color:var(--accent-pipeline)" title="conveyor"><span class="tl-pip"></span>@Pipeline</div>
+    </div>
+    <div id="zoom-controls">
+      <button id="zoom-in"    title="Zoom in">+</button>
+      <button id="zoom-out"   title="Zoom out">&minus;</button>
+      <div class="zc-sep"></div>
+      <button id="zoom-reset" title="Reset view">&#8962;</button>
+    </div>
+    <div id="grid-controls">
+      <button id="grid-nw" title="Add cells (top-left edge)">&#8598;</button>
+      <button id="grid-ne" title="Add cells (top-right edge)">&#8599;</button>
+      <button id="grid-sw" title="Add cells (bottom-left edge)">&#8601;</button>
+      <button id="grid-se" title="Add cells (bottom-right edge)">&#8600;</button>
+    </div>
+    <div id="map-panel-view">
+      <div class="map-panel-hdr">
+        <button id="map-back-btn" class="map-back-btn">&larr; Topology</button>
+        <span id="map-panel-title">—</span>
+        <div id="map-panel-hdr-extra"></div>
+      </div>
+      <div id="map-panel-body"></div>
+    </div>
+    <div id="inspector-popup" class="inspector-popup">
+      <button id="inspector-popup-close" class="inspector-popup-close" title="Close">&times;</button>
+      <div id="inspector-popup-body"></div>
+    </div>
+    <div id="style-picker-popover" class="style-picker-popover">
+      <div class="style-picker-section">
+        <div class="style-picker-label">Shape</div>
+        <div class="icon-picker-grid" id="icon-picker-grid"></div>
+      </div>
+      <div class="style-picker-section">
+        <div class="style-picker-label">Color</div>
+        <div class="color-picker-grid" id="color-picker-grid"></div>
+      </div>
+    </div>
+    <div class="map-toggle-group">
+      <button id="activity-toggle" class="activity-toggle" title="Toggle activity log">Activity</button>
+      <button id="chat-toggle" class="activity-toggle" title="Toggle chat">Chat</button>
+    </div>
+    <div id="activity-drawer">
+      <div class="activity-drawer-hdr">
+        <span class="panel-heading">Activity</span>
+        <button id="activity-drawer-close" class="map-back-btn">Close</button>
+      </div>
+      <div id="log-lines"></div>
+    </div>
+    <div id="chat-drawer">
+      <div class="activity-drawer-hdr">
+        <span class="panel-heading">Chat</span>
+        <button id="chat-drawer-close" class="map-back-btn">Close</button>
+      </div>
+      <div id="chat-messages"></div>
+      <div id="chat-footer">
+        <div id="chat-mention-menu" class="mention-menu" hidden></div>
+        <textarea id="chat-input" placeholder="Ask about this project… (@ to address a component)"></textarea>
+        <button id="chat-send" class="data-btn primary">Send</button>
+      </div>
+    </div>
+  </div>
+</div>
+</div>
+
+<div id="layer-color-popover" class="style-picker-popover layer-color-popover">
+  <div class="style-picker-section">
+    <div class="style-picker-label">Layer Color</div>
+    <div class="color-picker-grid" id="layer-color-picker-grid"></div>
+  </div>
+</div>
+
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
+<script src="/app.js"></script>
+<script src="/theme.js"></script>
+</body>
+</html>

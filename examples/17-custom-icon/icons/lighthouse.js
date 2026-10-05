@@ -2,7 +2,7 @@
 // config.toml (`[ui] icon-scripts`). Draws a lighthouse — tapered tower,
 // lamp room, and a beam that sweeps a full turn over time — using the same
 // shared primitives (drawBox/isoBox, rgba, ctx, animT) and `(sx, sy, accent,
-// lit)` signature as every built-in icon in odf/ui/static/index.html, so it
+// lit)` signature as every built-in icon in odf/ui/static/app.js, so it
 // renders at the same fidelity and reacts to the same lit/theme state.
 //
 // Once loaded, "lighthouse" shows up as a swatch in every node's icon

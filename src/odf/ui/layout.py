@@ -2,7 +2,7 @@
 
 Backs the "drag a node to a new cell", "change a node's icon", "change a
 node's color", and "add cells to the grid" interactions in the UI
-(see ``index.html``'s drag handling, icon/color pickers, and grid-controls
+(see ``app.js``'s drag handling, icon/color pickers, and grid-controls
 buttons) so layout customizations survive a page refresh. Scoped to whatever
 ``Path`` a ``UiServer`` is constructed with — not process-global state, so
 multiple ``Project`` instances never share a file unless explicitly

@@ -88,7 +88,7 @@ class UiServer:
             (the default) keeps the built-in ``"ODF"`` label. Distinct from
             ``project`` — that's the specific project being visualized;
             this is the product/tool name wrapping around it.
-        theme: Name of the UI theme (visual/layout file-set) to serve — see
+        theme: Name of the UI theme (visual file-set) to serve — see
             ``odf.ui.themes``. Defaults to ``"default"``. Orthogonal to the
             UI's own client-side light/dark color-mode toggle, which each
             theme keeps working independently.
@@ -351,10 +351,37 @@ class UiServer:
                 self._chat_events(body.get("messages", [])), media_type="application/x-ndjson"
             )
 
+        # The UI's own files are revalidated on every load: ``/theme.css`` and
+        # ``/theme.js`` change content with the selected theme, and all four
+        # change together on upgrade, so a stale cached copy would mix them.
+        no_cache = {"Cache-Control": "no-cache"}
+
         @app.get("/")
         def index() -> FileResponse:
-            """Serve the selected theme's ``index.html``."""
-            return FileResponse(self._theme_dir / "index.html")
+            """Serve the UI's ``index.html``, shared by every theme."""
+            return FileResponse(themes.STATIC_DIR / "index.html", headers=no_cache)
+
+        @app.get("/app.js")
+        def app_js() -> FileResponse:
+            """Serve the UI's script, shared by every theme."""
+            return FileResponse(
+                themes.STATIC_DIR / "app.js", media_type="application/javascript", headers=no_cache
+            )
+
+        @app.get("/theme.css")
+        def theme_css() -> FileResponse:
+            """Serve the selected theme's stylesheet."""
+            return FileResponse(
+                self._theme_dir / "theme.css", media_type="text/css", headers=no_cache
+            )
+
+        @app.get("/theme.js")
+        def theme_js() -> Response:
+            """Serve the selected theme's script — empty if it doesn't have one."""
+            path = self._theme_dir / "theme.js"
+            if not path.is_file():
+                return Response("", media_type="application/javascript", headers=no_cache)
+            return FileResponse(path, media_type="application/javascript", headers=no_cache)
 
         @app.get("/favicon.svg")
         def favicon() -> FileResponse:
