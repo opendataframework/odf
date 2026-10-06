@@ -3388,10 +3388,16 @@ function wireMediaReplay(schema) {
 // one (a dict, say) is a collapsible tree, a string is text, and bytes are a
 // file, a PDF or plain text, fetched from the same .../media endpoint as an
 // image. Bytes arrive as null in the records themselves (see
-// odf.ui.data.to_json_safe_dict), which is how a file is told apart.
+// odf.ui.data.to_json_safe_dict), which is how a file is told apart. Text
+// that reads as Markdown is rendered, see looksLikeMarkdown().
 
 // pdf.js draws PDFs. It is only fetched once a PDF is on screen.
 const PDFJS_URL = 'https://unpkg.com/pdfjs-dist@4.10.38/build/';
+// marked renders Markdown and DOMPurify strips what it lets through that
+// could run, since Markdown may carry raw HTML. Fetched with the first
+// Markdown document.
+const MARKED_URL = 'https://unpkg.com/marked@16.4.1/lib/marked.esm.js';
+const DOMPURIFY_URL = 'https://unpkg.com/dompurify@3.2.6/dist/purify.es.mjs';
 const DOC_SNIPPET_BYTES = 2048;             // how much of a text file a card's preview fetches
 const DOC_SNIPPET_LINES = 14;               // lines of a document that fit on a card
 const DOC_TEXT_MAX_BYTES = 2 * 1024 * 1024; // the reader shows this much of a text file, the rest through "Open original"
@@ -3400,6 +3406,8 @@ let pdfJs = null;       // the pdf.js module, or the promise loading it
 let docLoadToken = 0;   // bumped whenever the reader is emptied, so a slow load can tell it was superseded
 let openPdf = null;     // the pdf.js document open in the reader
 let pdfPageObserver = null; // draws the open PDF's pages as they scroll into view
+let markdownRenderer = null; // text => safe HTML, or the promise loading it
+let openText = null;    // the text document open in the reader: { text, note, rendered }
 
 function loadPdfJs() {
   if (!pdfJs) {
@@ -3410,6 +3418,38 @@ function loadPdfJs() {
     pdfJs.catch(() => { pdfJs = null; }); // offline, say: try again on the next PDF
   }
   return pdfJs;
+}
+
+function loadMarkdownRenderer() {
+  if (!markdownRenderer) {
+    markdownRenderer = Promise.all([import(MARKED_URL), import(DOMPURIFY_URL)]).then(([{ marked }, { default: purify }]) => {
+      // A link leaves the UI in place, and can't reach back into it.
+      purify.addHook('afterSanitizeAttributes', node => {
+        if (node.tagName !== 'A') return;
+        node.setAttribute('target', '_blank');
+        node.setAttribute('rel', 'noopener noreferrer');
+      });
+      return text => purify.sanitize(marked.parse(text, { gfm: true }), { FORBID_TAGS: ['style', 'form'] });
+    });
+    markdownRenderer.catch(() => { markdownRenderer = null; }); // offline, say: try again on the next document
+  }
+  return markdownRenderer;
+}
+
+// Whether text reads as Markdown. A document carries no file name or type to
+// go by, so this weighs the syntax on its lines: a heading, a code fence, a
+// link or a table rule counts for more than a list item or bold text, which
+// plain text has too. The reader's source toggle is there for a wrong guess.
+function looksLikeMarkdown(text) {
+  if (text.startsWith('#!')) return false; // a script, whose comments would pass for headings
+  let score = 0;
+  for (const line of text.split('\n', 200)) {
+    if (/^#{1,6} \S/.test(line) || /^(```|~~~)/.test(line) || /^\|?\s*:?-{3,}:?\s*\|/.test(line)) score += 2;
+    else if (/\[[^\]]+\]\([^)\s]+\)/.test(line)) score += 2;
+    else if (/^\s*([-*+]|\d+\.) \S/.test(line) || /^> /.test(line) || /\*\*[^*\s][^*]*\*\*/.test(line)) score += 1;
+    if (score >= 4) return true;
+  }
+  return false;
 }
 
 async function showDocumentView(repoId) {
@@ -3427,7 +3467,7 @@ async function refreshDocumentView() {
 }
 
 function docSnippet(text) {
-  return text.replace(/�+$/, '').split('\n', DOC_SNIPPET_LINES).join('\n');
+  return text.replace(/\uFFFD+$/, '').split('\n', DOC_SNIPPET_LINES).join('\n');
 }
 
 // Fills in the cards: the inline documents at once, then the files one at a
@@ -3488,10 +3528,46 @@ function unloadDocumentReader() {
   pdfPageObserver = null;
   if (openPdf) openPdf.destroy();
   openPdf = null;
+  openText = null;
+  document.getElementById('media-lightbox-source').hidden = true;
   const reader = document.getElementById('media-lightbox-doc');
   reader.hidden = true;
   reader.innerHTML = '';
 }
+
+// Shows a text document in the reader, rendered if it reads as Markdown.
+// `note` is HTML to put under it.
+function showDocumentText(text, note) {
+  openText = { text, note, rendered: looksLikeMarkdown(text) };
+  renderDocumentText();
+}
+
+async function renderDocumentText() {
+  const token = docLoadToken;
+  const doc = openText;
+  const reader = document.getElementById('media-lightbox-doc');
+  const toggle = document.getElementById('media-lightbox-source');
+  let html = null;
+  if (doc.rendered) {
+    try {
+      html = (await loadMarkdownRenderer())(doc.text);
+    } catch (err) {
+      doc.rendered = false; // the renderer couldn't be fetched: the source is still readable
+    }
+    if (token !== docLoadToken) return;
+  }
+  reader.innerHTML = (html === null
+    ? `<pre class="doc-text">${escapeHtml(doc.text)}</pre>`
+    : `<div class="doc-markdown">${html}</div>`) + doc.note;
+  toggle.textContent = doc.rendered ? 'View source' : 'View as Markdown';
+  toggle.hidden = false;
+}
+
+document.getElementById('media-lightbox-source').addEventListener('click', () => {
+  if (!openText) return;
+  openText.rendered = !openText.rendered;
+  renderDocumentText();
+});
 
 function showDocumentError(detail) {
   const error = document.getElementById('media-lightbox-error');
@@ -3510,9 +3586,8 @@ async function openDocument(record, url) {
   if (value !== null && value !== undefined) {
     // Held in the record itself, so there is no file to open.
     document.getElementById('media-lightbox-open').hidden = true;
-    reader.innerHTML = typeof value === 'string'
-      ? `<pre class="doc-text">${escapeHtml(value)}</pre>`
-      : `<div class="doc-tree">${renderJsonTree(value)}</div>`;
+    if (typeof value === 'string') showDocumentText(value, '');
+    else reader.innerHTML = `<div class="doc-tree">${renderJsonTree(value)}</div>`;
     return;
   }
   reader.innerHTML = '<span class="detail-empty">// loading</span>';
@@ -3524,8 +3599,8 @@ async function openDocument(record, url) {
       const text = await res.text();
       if (token !== docLoadToken) return;
       const size = Number((res.headers.get('Content-Range') || '').split('/')[1]);
-      reader.innerHTML = `<pre class="doc-text">${escapeHtml(text.replace(/�+$/, ''))}</pre>` +
-        (size > DOC_TEXT_MAX_BYTES ? '<div class="doc-note">Only the start of this document is shown. Open the original for the rest.</div>' : '');
+      showDocumentText(text.replace(/\uFFFD+$/, ''),
+        size > DOC_TEXT_MAX_BYTES ? '<div class="doc-note">Only the start of this document is shown. Open the original for the rest.</div>' : '');
       return;
     }
     if (res.body) res.body.cancel();

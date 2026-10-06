@@ -13,9 +13,9 @@ What a document opens as follows from the value of `OrderReceipt`'s
 | Value | Shown as | Card preview |
 |---|---|---|
 | a `dict` or `list` | a collapsible JSON tree, Postman-style | its first lines as JSON |
-| a `str` | text | its first lines |
+| a `str` | text, rendered if it reads as Markdown | its first lines |
 | `bytes` of a PDF | its pages | its first page, with the page count |
-| `bytes` of UTF-8 text (plain text, Markdown, CSV, ...) | text | its first lines |
+| `bytes` of UTF-8 text (plain text, Markdown, CSV, ...) | text, rendered if it reads as Markdown | its first lines |
 
 File bytes are told apart by their content, not by a file name, and are
 served by `GET /api/repositories/{id}/records/{key}/media`, which **Open
@@ -25,13 +25,22 @@ say) can't be displayed: the card and the reader name the type instead, and
 [pdf.js](https://mozilla.github.io/pdf.js/), loaded from a CDN the first
 time a PDF is shown, so displaying one needs network access.
 
+A record carries no file name or type to say that its text is Markdown, so
+the UI goes by the text itself: headings, code fences, links and tables
+count for more than list items and bold text, and enough of them make it
+Markdown. It is then rendered by [marked](https://marked.js.org/), with
+[DOMPurify](https://github.com/cure53/DOMPurify) removing any markup that
+could run, both loaded from a CDN with the first Markdown document. **View
+source** and **View as Markdown** in the reader switch between the two, for
+when the guess is wrong.
+
 This isolates the `DocumentView` variant covered in
 [`opendataframework`'s view docs](https://opendataframework.github.io/opendataframework/view/).
 
-`OrderReceipts` comes pre-seeded in-memory with four receipts (see
-`app/repositories.py`'s `_SEED_RECEIPTS`): two as dicts, one read from a
-text file and one from a PDF, both under `data/receipts/` — a document view
-is a lot more useful to look at with something already in it.
+`OrderReceipts` comes pre-seeded in-memory with five receipts (see
+`app/repositories.py`'s `_SEED_RECEIPTS`): two as dicts, and one each read
+from a text file, a PDF and a Markdown file under `data/receipts/` — a
+document view is a lot more useful to look at with something already in it.
 
 ## Structure
 
@@ -40,7 +49,7 @@ is a lot more useful to look at with something already in it.
 ├── config.toml          # no custom keys needed for this example
 ├── main.py              # entry point — reads back the pre-seeded receipts, prints data_view()
 ├── data/
-│   └── receipts/        # order-103.txt, order-104.pdf — the receipts kept as files
+│   └── receipts/        # order-103.txt, order-104.pdf, order-105.md — the receipts kept as files
 └── app/
     ├── __init__.py      # imports both modules so decorators register at startup
     ├── entities.py       # OrderReceipt(id, order_id, document, issued_at) — @Entity
@@ -66,6 +75,7 @@ All receipts:
   OrderReceipt(id=2, order_id=102, document={'order_id': 102, 'line_items': [{'sku': 'SKU-0102', 'quantity': 2, 'price': 12.5}, {'sku': 'SKU-0318', 'quantity': 1, 'price': 25.0}], 'subtotal': 50.0, 'tax': 4.0, 'total': 54.0})
   OrderReceipt(id=3, order_id=103, document=<258 bytes>)
   OrderReceipt(id=4, order_id=104, document=<1676 bytes>)
+  OrderReceipt(id=5, order_id=105, document=<407 bytes>)
 
 data_view() -> DocumentView(field='document')
 ```

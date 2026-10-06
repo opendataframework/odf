@@ -10,7 +10,7 @@ from app.entities import OrderReceipt
 _RECEIPTS_DIR = Path(__file__).resolve().parent.parent / "data" / "receipts"
 
 # (order_id, receipt document) — one receipt per kind of document the view
-# shows (JSON, a text file, a PDF), so there are real receipts to look at
+# shows (JSON, a text file, a PDF, Markdown), so there are real receipts to look at
 # without hand-triggering a save() first.
 _SEED_RECEIPTS: tuple[tuple[int, dict | str | bytes], ...] = (
     (
@@ -38,6 +38,7 @@ _SEED_RECEIPTS: tuple[tuple[int, dict | str | bytes], ...] = (
     ),
     (103, (_RECEIPTS_DIR / "order-103.txt").read_bytes()),
     (104, (_RECEIPTS_DIR / "order-104.pdf").read_bytes()),
+    (105, (_RECEIPTS_DIR / "order-105.md").read_bytes()),
 )
 
 
