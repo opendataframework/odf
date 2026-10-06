@@ -1,8 +1,9 @@
 # 08 — Video View
 
 A single `SecurityClips` repository implementing `data_view() -> VideoView`
-instead of getting the default table. The topology UI renders it as a list
-of seekable video clips, one per record, instead of a grid of columns.
+instead of getting the default table. The topology UI renders it as a grid
+of cards, one per record, each previewing a frame of its clip with the clip's
+length. Selecting a card opens the clip in a player and starts it.
 
 This isolates the bounded, `ReadableProtocol` half of the concept covered in
 [`opendataframework`'s view docs](https://opendataframework.github.io/opendataframework/view/):
@@ -62,4 +63,10 @@ odf run
 
 `GET /api/repositories` reports `SecurityClips`' view as
 `{"kind": "video", "field": "clip"}` — that's what tells the UI to render a
-list of seekable clips instead of a table.
+grid of playable clips instead of a table.
+
+Each clip is served from
+`GET /api/repositories/security-clips/records/{id}/media` with the media type
+detected from its bytes (MP4, QuickTime, WebM, Ogg, AVI), so `clip` isn't
+limited to mp4, and with `Range` requests honored, which is what lets the
+player seek.

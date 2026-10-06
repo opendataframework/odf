@@ -85,11 +85,13 @@
         <div id="map-panel-hdr-extra"></div>
       </div>
       <div id="map-panel-body"></div>
-      <div id="image-lightbox" class="image-lightbox" hidden>
-        <div id="image-lightbox-stage" class="image-lightbox-stage">
-          <button id="image-lightbox-prev" class="data-btn image-lightbox-nav" title="Previous (&larr;)">&lsaquo;</button>
-          <img id="image-lightbox-img" alt="" draggable="false">
-          <div id="image-lightbox-error" class="media-fallback" hidden></div>
+      <div id="media-lightbox" class="media-lightbox" hidden>
+        <div id="media-lightbox-stage" class="media-lightbox-stage">
+          <button id="media-lightbox-prev" class="data-btn media-lightbox-nav" title="Previous (&larr;)">&lsaquo;</button>
+          <img id="media-lightbox-img" alt="" draggable="false">
+          <video id="media-lightbox-video" controls playsinline hidden></video>
+          <audio id="media-lightbox-audio" controls hidden></audio>
+          <div id="media-lightbox-error" class="media-fallback" hidden></div>
           <div id="image-annotations" class="image-annotations" hidden>
             <div id="image-boxes"></div>
             <form id="image-label-form" class="image-label-form" hidden>
@@ -97,13 +99,13 @@
               <datalist id="image-label-options"></datalist>
             </form>
           </div>
-          <button id="image-lightbox-next" class="data-btn image-lightbox-nav" title="Next (&rarr;)">&rsaquo;</button>
+          <button id="media-lightbox-next" class="data-btn media-lightbox-nav" title="Next (&rarr;)">&rsaquo;</button>
         </div>
-        <div class="image-lightbox-bar">
-          <div id="image-lightbox-caption" class="doc-header"></div>
-          <span id="image-lightbox-hint" class="image-lightbox-hint" hidden>Drag on the image to add a box</span>
-          <a id="image-lightbox-open" class="data-btn" target="_blank" rel="noopener">Open original</a>
-          <button id="image-lightbox-close" class="data-btn" title="Close (Esc)">Close</button>
+        <div class="media-lightbox-bar">
+          <div id="media-lightbox-caption" class="doc-header"></div>
+          <span id="media-lightbox-hint" class="media-lightbox-hint" hidden>Drag on the image to add a box</span>
+          <a id="media-lightbox-open" class="data-btn" target="_blank" rel="noopener">Open original</a>
+          <button id="media-lightbox-close" class="data-btn" title="Close (Esc)">Close</button>
         </div>
       </div>
     </div>

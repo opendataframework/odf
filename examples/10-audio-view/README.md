@@ -1,8 +1,9 @@
 # 10 — Audio View
 
 A single `VoiceMemos` repository implementing `data_view() -> AudioView`
-instead of getting the default table. The topology UI renders it as a list
-of seekable audio clips, one per record, instead of a grid of columns.
+instead of getting the default table. The topology UI renders it as a grid
+of cards, one per record, each showing its clip's waveform and length.
+Selecting a card opens the clip in a player and starts it.
 
 This is the bounded, `ReadableProtocol` counterpart to
 [`09-streaming-audio-view`](../09-streaming-audio-view)'s
@@ -58,4 +59,11 @@ odf run
 
 `GET /api/repositories` reports `VoiceMemos`' view as
 `{"kind": "audio", "field": "clip"}` — that's what tells the UI to render a
-list of seekable clips instead of a table.
+grid of playable clips instead of a table.
+
+Each clip is served from
+`GET /api/repositories/voice-memos/records/{id}/media` with the media type
+detected from its bytes (WAV, MP3, AAC, M4A, FLAC, Ogg, WebM), so `clip` isn't
+limited to WAV, and with `Range` requests honored, which is what lets the
+player seek. The waveform is drawn for clips up to 10 MB; a larger one shows
+its length only.

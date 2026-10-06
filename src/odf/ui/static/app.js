@@ -1907,7 +1907,7 @@ function setMapMode(mode) {
     }
   }
   if (mapMode === 'geo' && mode !== 'geo') destroyGeoMap();
-  if (mapMode === 'image' && mode !== 'image') closeImageLightbox();
+  if ((mapMode === 'image' || mapMode === 'media') && mode !== mapMode) closeLightbox();
   if (mapMode === 'chart' && mode !== 'chart') {
     const frame = document.getElementById('chart-frame');
     if (frame) frame.src = 'about:blank';
@@ -2430,14 +2430,15 @@ async function deleteRow(tr, schema) {
 }
 
 window.addEventListener('keydown', e => {
-  if (imageIndex >= 0) {
-    // An open image takes the keys first, so Esc returns to the grid rather
-    // than all the way to the topology.
-    if (e.key === 'Escape') { if (!cancelImageAnnotationStep()) closeImageLightbox(); }
+  if (lightboxIndex >= 0) {
+    // An open image or clip takes the keys first, so Esc returns to the grid
+    // rather than all the way to the topology.
+    if (e.key === 'Escape') { if (!cancelImageAnnotationStep()) closeLightbox(); }
+    else if (mapMode !== 'image') return; // the arrow keys seek within an open clip's own player
     else if (e.target.closest('input, textarea, select')) return;
     else if ((e.key === 'Delete' || e.key === 'Backspace') && selectedBox >= 0) deleteImageBox(selectedBox);
-    else if (e.key === 'ArrowLeft') stepImageLightbox(-1);
-    else if (e.key === 'ArrowRight') stepImageLightbox(1);
+    else if (e.key === 'ArrowLeft') stepLightbox(-1);
+    else if (e.key === 'ArrowRight') stepLightbox(1);
     return;
   }
   if (e.key !== 'Escape') return;
@@ -2759,12 +2760,20 @@ function renderGeoMap(schema, records, opts = {}) {
 // Backs the "View Images" action on repository nodes whose DataView is an
 // ImageView — a grid of thumbnails, one per record, each sourced from
 // GET /api/repositories/{id}/records/{key}/media (see UiServer.record_media).
-// Selecting a thumbnail opens that image in #image-lightbox, which covers
+// Selecting a thumbnail opens that image in #media-lightbox, which covers
 // the panel body (not the panel header) until closed, and where boxes can be
-// drawn on it (see "Image annotations" below).
+// drawn on it (see "Image annotations" below). The Video/Audio "Media view"
+// further down shares the grid and the lightbox.
 
-let imageRecords = []; // the grid's records, in display order
-let imageIndex = -1;   // index into imageRecords of the image open in the lightbox, -1 when closed
+let lightboxRecords = []; // the grid's records, in display order
+let lightboxIndex = -1;   // index into lightboxRecords of the record open in the lightbox, -1 when closed
+
+// The lightbox element that shows each media view kind.
+const LIGHTBOX_PLAYERS = {
+  image: document.getElementById('media-lightbox-img'),
+  video: document.getElementById('media-lightbox-video'),
+  audio: document.getElementById('media-lightbox-audio'),
+};
 
 function mediaUrl(repoId, key) {
   return `/api/repositories/${repoId}/records/${encodeURIComponent(key)}/media`;
@@ -2784,23 +2793,30 @@ async function mediaContentType(url) {
 }
 
 function mediaFallbackHtml(detail) {
-  return "<span>Can't display this image</span>" +
+  const kind = repoSchemas[activeRepoId].view.kind;
+  return `<span>Can't ${kind === 'image' ? 'display' : 'play'} this ${kind}</span>` +
     (detail ? `<span class="media-fallback-detail">${escapeHtml(detail)}</span>` : '');
 }
 
-async function showImageView(repoId) {
-  activeRepoId = repoId;
-  const schema = repoSchemas[repoId];
-  setMapMode('image');
-  closeImageLightbox();
-  document.getElementById('map-panel-title').textContent = `${schema.label} · images`;
-  await Promise.all([refreshImageView(), loadImageAnnotations()]);
+// Swaps a card's preview for a note naming the media type it failed on. The
+// card stays a button, so media that won't preview can still be opened.
+async function showTileFallback(preview, url) {
+  const fallback = document.createElement('div');
+  fallback.className = 'media-fallback';
+  fallback.innerHTML = mediaFallbackHtml('');
+  preview.replaceWith(fallback);
+  const detail = await mediaContentType(url);
+  if (fallback.isConnected) fallback.innerHTML = mediaFallbackHtml(detail);
 }
 
-async function refreshImageView() {
+// Fetches the active repository's records and renders them as a grid of
+// cards, each opening its record in the lightbox. `previewHtml(url, key)`
+// gives a card's preview, with both arguments already HTML-escaped. Returns
+// the grid element, or null when there was nothing to render.
+async function renderMediaGrid(previewHtml) {
   const schema = repoSchemas[activeRepoId];
   const body = document.getElementById('map-panel-body');
-  imageRecords = [];
+  lightboxRecords = [];
   let records;
   try {
     const res = await fetch(`/api/repositories/${activeRepoId}/records`);
@@ -2808,95 +2824,117 @@ async function refreshImageView() {
     records = await res.json();
   } catch (err) {
     body.innerHTML = '<span class="detail-empty">// failed to load records</span>';
-    return;
+    return null;
   }
   if (!records.length) {
     body.innerHTML = '<span class="detail-empty">// no records</span>';
-    return;
+    return null;
   }
-  imageRecords = records;
+  lightboxRecords = records;
   body.innerHTML = '<div class="media-grid">' + records.map((r, i) => {
     const key = escapeHtml(r[schema.key]);
     return `<button class="media-tile" data-index="${i}" title="Open ${key}">` +
-      `<img loading="lazy" src="${escapeHtml(mediaUrl(activeRepoId, r[schema.key]))}" alt="${key}">` +
-      `<div class="media-caption">${key}</div></button>`;
+      previewHtml(escapeHtml(mediaUrl(activeRepoId, r[schema.key])), key) +
+      `<span class="media-duration"></span><div class="media-caption">${key}</div></button>`;
   }).join('') + '</div>';
   const grid = body.querySelector('.media-grid');
   grid.addEventListener('click', e => {
     const tile = e.target.closest('.media-tile');
-    if (tile) openImageLightbox(Number(tile.dataset.index));
+    if (tile) openLightbox(Number(tile.dataset.index));
   });
-  // `error` doesn't bubble, hence the capturing listener. The tile stays a
-  // button, so an image that won't render can still be opened.
-  grid.addEventListener('error', async e => {
-    if (e.target.tagName !== 'IMG') return;
-    const url = e.target.src;
-    const fallback = document.createElement('div');
-    fallback.className = 'media-fallback';
-    fallback.innerHTML = mediaFallbackHtml('');
-    e.target.replaceWith(fallback);
-    fallback.innerHTML = mediaFallbackHtml(await mediaContentType(url));
+  // `error` doesn't bubble, hence the capturing listener.
+  grid.addEventListener('error', e => {
+    if (e.target.tagName === 'IMG' || e.target.tagName === 'VIDEO') showTileFallback(e.target, e.target.src);
   }, true);
+  return grid;
 }
 
-function openImageLightbox(index) {
-  const record = imageRecords[index];
+async function showImageView(repoId) {
+  activeRepoId = repoId;
+  const schema = repoSchemas[repoId];
+  setMapMode('image');
+  closeLightbox();
+  document.getElementById('map-panel-title').textContent = `${schema.label} · images`;
+  await Promise.all([refreshImageView(), loadImageAnnotations()]);
+}
+
+async function refreshImageView() {
+  await renderMediaGrid((url, key) => `<img loading="lazy" src="${url}" alt="${key}">`);
+}
+
+// Empties every lightbox element. A <video>/<audio> keeps downloading and
+// playing its old source until it is reloaded without one.
+function unloadLightboxPlayers() {
+  for (const player of Object.values(LIGHTBOX_PLAYERS)) {
+    player.hidden = true;
+    if (!player.hasAttribute('src')) continue;
+    player.removeAttribute('src');
+    if (player.load) player.load();
+  }
+}
+
+function openLightbox(index) {
+  const record = lightboxRecords[index];
   if (!record) return;
   const schema = repoSchemas[activeRepoId];
   const url = mediaUrl(activeRepoId, record[schema.key]);
-  imageIndex = index;
+  lightboxIndex = index;
   resetImageAnnotationState();
+  unloadLightboxPlayers();
 
-  const img = document.getElementById('image-lightbox-img');
-  document.getElementById('image-lightbox-error').hidden = true;
-  img.hidden = false;
-  img.alt = String(record[schema.key]);
-  img.src = url;
-  document.getElementById('image-lightbox-open').href = url;
-  document.getElementById('image-lightbox-caption').innerHTML =
-    `<span>${index + 1} / ${imageRecords.length}</span>` +
+  const player = LIGHTBOX_PLAYERS[schema.view.kind];
+  document.getElementById('media-lightbox-error').hidden = true;
+  player.hidden = false;
+  if (player.tagName === 'IMG') player.alt = String(record[schema.key]);
+  player.src = url;
+  if (player.play) player.play().catch(() => {}); // blocked autoplay leaves the controls to start it
+  document.getElementById('media-lightbox-open').href = url;
+  document.getElementById('media-lightbox-caption').innerHTML =
+    `<span>${index + 1} / ${lightboxRecords.length}</span>` +
     Object.entries(record)
       .filter(([k]) => k !== schema.view.field)
       .map(([k, v]) => `<span><b>${escapeHtml(k)}</b>: ${escapeHtml(v ?? '')}</span>`)
       .join('');
-  document.getElementById('image-lightbox-prev').disabled = index === 0;
-  document.getElementById('image-lightbox-next').disabled = index === imageRecords.length - 1;
+  document.getElementById('media-lightbox-prev').disabled = index === 0;
+  document.getElementById('media-lightbox-next').disabled = index === lightboxRecords.length - 1;
 
-  const lightbox = document.getElementById('image-lightbox');
+  const lightbox = document.getElementById('media-lightbox');
   lightbox.style.top = document.getElementById('map-panel-body').offsetTop + 'px';
   lightbox.hidden = false;
 }
 
-function closeImageLightbox() {
-  if (imageIndex < 0) return;
-  const tile = document.querySelector(`.media-tile[data-index="${imageIndex}"]`);
-  imageIndex = -1;
+function closeLightbox() {
+  if (lightboxIndex < 0) return;
+  const tile = document.querySelector(`.media-tile[data-index="${lightboxIndex}"]`);
+  lightboxIndex = -1;
   resetImageAnnotationState();
-  document.getElementById('image-lightbox').hidden = true;
-  document.getElementById('image-lightbox-img').removeAttribute('src');
+  document.getElementById('media-lightbox').hidden = true;
+  unloadLightboxPlayers();
   if (tile) tile.focus();
 }
 
-function stepImageLightbox(delta) {
-  openImageLightbox(imageIndex + delta);
+function stepLightbox(delta) {
+  openLightbox(lightboxIndex + delta);
 }
 
-document.getElementById('image-lightbox-prev').addEventListener('click', () => stepImageLightbox(-1));
-document.getElementById('image-lightbox-next').addEventListener('click', () => stepImageLightbox(1));
-document.getElementById('image-lightbox-close').addEventListener('click', closeImageLightbox);
-document.getElementById('image-lightbox-stage').addEventListener('click', e => {
-  if (e.target === e.currentTarget) closeImageLightbox();
+document.getElementById('media-lightbox-prev').addEventListener('click', () => stepLightbox(-1));
+document.getElementById('media-lightbox-next').addEventListener('click', () => stepLightbox(1));
+document.getElementById('media-lightbox-close').addEventListener('click', closeLightbox);
+document.getElementById('media-lightbox-stage').addEventListener('click', e => {
+  if (e.target === e.currentTarget) closeLightbox();
 });
-document.getElementById('image-lightbox-img').addEventListener('error', async e => {
-  const index = imageIndex;
-  if (index < 0) return;
-  const error = document.getElementById('image-lightbox-error');
-  e.target.hidden = true;
-  error.innerHTML = mediaFallbackHtml('');
-  error.hidden = false;
-  const detail = await mediaContentType(e.target.src);
-  if (imageIndex === index) error.innerHTML = mediaFallbackHtml(detail); // still on the same image
-});
+for (const player of Object.values(LIGHTBOX_PLAYERS)) {
+  player.addEventListener('error', async e => {
+    const index = lightboxIndex;
+    if (index < 0 || !e.target.hasAttribute('src')) return;
+    const error = document.getElementById('media-lightbox-error');
+    e.target.hidden = true;
+    error.innerHTML = mediaFallbackHtml('');
+    error.hidden = false;
+    const detail = await mediaContentType(e.target.src);
+    if (lightboxIndex === index) error.innerHTML = mediaFallbackHtml(detail); // still on the same record
+  });
+}
 
 // ── Image annotations ─────────────────────────────────────────────────────
 // Labelled boxes drawn over the image open in the lightbox, saved per record
@@ -2946,11 +2984,11 @@ function resetImageAnnotationState() {
   relabelBox = -1;
   imageLabelForm.hidden = true;
   imageOverlay.hidden = true;
-  document.getElementById('image-lightbox-hint').hidden = true;
+  document.getElementById('media-lightbox-hint').hidden = true;
 }
 
 function imageRecordKey() {
-  return String(imageRecords[imageIndex][repoSchemas[activeRepoId].key]);
+  return String(lightboxRecords[lightboxIndex][repoSchemas[activeRepoId].key]);
 }
 
 function imageBoxes() {
@@ -2961,8 +2999,8 @@ function imageBoxes() {
 // Fits the overlay to the image as painted, which object-fit can letterbox
 // inside the <img> element's own box.
 function layoutImageAnnotations() {
-  const img = document.getElementById('image-lightbox-img');
-  if (!annotationsEnabled || imageIndex < 0 || !imageLoaded) return;
+  const img = document.getElementById('media-lightbox-img');
+  if (!annotationsEnabled || lightboxIndex < 0 || !imageLoaded) return;
   const scale = Math.min(img.clientWidth / img.naturalWidth, img.clientHeight / img.naturalHeight);
   const width = img.naturalWidth * scale;
   const height = img.naturalHeight * scale;
@@ -2971,7 +3009,7 @@ function layoutImageAnnotations() {
   imageOverlay.style.width = width + 'px';
   imageOverlay.style.height = height + 'px';
   imageOverlay.hidden = false;
-  document.getElementById('image-lightbox-hint').hidden = false;
+  document.getElementById('media-lightbox-hint').hidden = false;
 }
 
 function boxColor(label) {
@@ -2980,7 +3018,7 @@ function boxColor(label) {
 }
 
 function boxStyle(box, label) {
-  const img = document.getElementById('image-lightbox-img');
+  const img = document.getElementById('media-lightbox-img');
   const pct = (value, total) => value / total * 100 + '%';
   return `left:${pct(box.x, img.naturalWidth)};top:${pct(box.y, img.naturalHeight)};` +
     `width:${pct(box.width, img.naturalWidth)};height:${pct(box.height, img.naturalHeight)};` +
@@ -2988,7 +3026,7 @@ function boxStyle(box, label) {
 }
 
 function renderImageBoxes() {
-  if (imageIndex < 0 || !imageLoaded) return;
+  if (lightboxIndex < 0 || !imageLoaded) return;
   document.getElementById('image-boxes').innerHTML = imageBoxes().map((box, i) =>
     `<div class="image-box${i === selectedBox ? ' selected' : ''}" data-index="${i}" style="${boxStyle(box, box.label)}">` +
     `<span class="image-box-label" title="Change label">${escapeHtml(box.label)}</span>` +
@@ -3005,7 +3043,7 @@ function overlayPoint(e) {
 }
 
 function dragToBox(from, to) {
-  const img = document.getElementById('image-lightbox-img');
+  const img = document.getElementById('media-lightbox-img');
   const span = (a, b, total) => {
     const start = Math.min(Math.round(Math.min(a, b) * total), total - 1);
     return [start, Math.max(Math.round(Math.max(a, b) * total) - start, 1)];
@@ -3018,7 +3056,7 @@ function dragToBox(from, to) {
 // Opens the label input under the box it is for: the one just drawn
 // (pendingBox), or an existing one being relabelled (relabelBox).
 function openImageLabelForm() {
-  const img = document.getElementById('image-lightbox-img');
+  const img = document.getElementById('media-lightbox-img');
   const box = pendingBox || imageBoxes()[relabelBox];
   document.getElementById('image-label-options').innerHTML =
     imageAnnotations.labels.map(label => `<option value="${escapeHtml(label)}">`).join('');
@@ -3059,7 +3097,7 @@ function deleteImageBox(index) {
 // Replaces the open image's boxes, showing the change at once and reloading
 // from the server if it could not be saved.
 function saveImageBoxes(boxes) {
-  const img = document.getElementById('image-lightbox-img');
+  const img = document.getElementById('media-lightbox-img');
   const repoId = activeRepoId;
   const key = imageRecordKey();
   const body = { width: img.naturalWidth, height: img.naturalHeight, annotations: boxes };
@@ -3084,13 +3122,13 @@ function saveImageBoxes(boxes) {
   });
 }
 
-document.getElementById('image-lightbox-img').addEventListener('load', () => {
-  if (imageIndex < 0) return;
+document.getElementById('media-lightbox-img').addEventListener('load', () => {
+  if (lightboxIndex < 0) return;
   imageLoaded = true;
   layoutImageAnnotations();
   renderImageBoxes();
 });
-new ResizeObserver(layoutImageAnnotations).observe(document.getElementById('image-lightbox-stage'));
+new ResizeObserver(layoutImageAnnotations).observe(document.getElementById('media-lightbox-stage'));
 
 // A press on the overlay is a click (select a box, or act on its label or
 // delete button) until the pointer travels BOX_MIN_DRAG, when it becomes a
@@ -3145,10 +3183,16 @@ imageLabelForm.addEventListener('submit', e => {
 
 // ── Media view (bounded Video/Audio) ────────────────────────────────────
 // Backs the "View Video"/"View Audio" action on repository nodes whose
-// DataView is a VideoView/AudioView — a list of seekable clips, one per
-// record. Distinct from the live "Stream view" above: this repo is
-// ReadableProtocol, not StreamableProtocol, so there's no Start/Stop toggle
-// and no shared background feed, just ordinary bounded records.
+// DataView is a VideoView/AudioView — a grid of cards, one per record, as in
+// the image view above: a video card previews a frame of its clip, an audio
+// card its waveform, both with the clip's length. Selecting a card opens the
+// clip in #media-lightbox and plays it. Distinct from the live "Stream view"
+// above: this repo is ReadableProtocol, not StreamableProtocol, so there's
+// no Start/Stop toggle and no shared background feed, just ordinary bounded
+// records.
+
+const WAVE_BARS = 48;                     // bars in an audio card's waveform
+const WAVE_MAX_BYTES = 10 * 1024 * 1024;  // a larger clip isn't downloaded just to draw one
 
 async function showMediaView(repoId) {
   enterRepoView(repoId);
@@ -3161,30 +3205,97 @@ async function showMediaView(repoId) {
 
 async function refreshMediaView() {
   const schema = repoSchemas[activeRepoId];
-  const body = document.getElementById('map-panel-body');
+  closeLightbox();
   if (replayMode && replayRepoId === activeRepoId) {
     renderMediaReplay(schema);
     return;
   }
-  let records;
+  if (schema.view.kind === 'video') {
+    // The #t fragment has the browser paint that frame as the card's
+    // preview, rather than leaving an unplayed <video> blank.
+    const grid = await renderMediaGrid(url =>
+      `<video muted playsinline preload="metadata" tabindex="-1" src="${url}#t=0.1"></video>`);
+    if (!grid) return;
+    // `loadedmetadata` doesn't bubble, hence the capturing listener.
+    grid.addEventListener('loadedmetadata', e => {
+      setTileDuration(e.target.closest('.media-tile'), e.target.duration);
+    }, true);
+    return;
+  }
+  const grid = await renderMediaGrid(() =>
+    `<svg class="media-wave" viewBox="0 0 ${WAVE_BARS} 100" preserveAspectRatio="none" aria-hidden="true"></svg>`);
+  if (grid) loadAudioPreviews(grid);
+}
+
+function setTileDuration(tile, seconds) {
+  if (Number.isFinite(seconds)) tile.querySelector('.media-duration').textContent = formatClock(seconds);
+}
+
+// Fills in the audio cards one clip at a time, stopping once the grid has
+// been replaced (another repository, a refresh, replay mode).
+async function loadAudioPreviews(grid) {
+  const repoId = activeRepoId;
+  const key = repoSchemas[repoId].key;
+  for (const tile of grid.querySelectorAll('.media-tile')) {
+    const url = mediaUrl(repoId, lightboxRecords[tile.dataset.index][key]);
+    const clip = await decodeAudioClip(url);
+    const duration = clip ? clip.duration : await audioDuration(url);
+    if (!grid.isConnected) return;
+    const wave = tile.querySelector('.media-wave');
+    if (clip) wave.innerHTML = waveBarsSvg(clip);
+    else if (!Number.isFinite(duration)) showTileFallback(wave, url);
+    setTileDuration(tile, duration);
+  }
+}
+
+// Downloads and decodes a whole clip for its waveform, or returns null for
+// one that is too large to fetch for a preview or that this browser can't
+// decode. The one-byte range request only asks the server for the clip's
+// size, which comes back in Content-Range.
+async function decodeAudioClip(url) {
   try {
-    const res = await fetch(`/api/repositories/${activeRepoId}/records`);
-    if (!res.ok) throw new Error(`HTTP ${res.status}`);
-    records = await res.json();
+    const probe = await fetch(url, { headers: { Range: 'bytes=0-0' } });
+    if (probe.body) probe.body.cancel();
+    const size = Number((probe.headers.get('Content-Range') || '').split('/')[1]);
+    if (!probe.ok || !(size <= WAVE_MAX_BYTES)) return null;
+    const res = await fetch(url);
+    if (!res.ok) return null;
+    // An offline context decodes without the user gesture a live one needs.
+    return await new OfflineAudioContext(1, 1, 44100).decodeAudioData(await res.arrayBuffer());
   } catch (err) {
-    body.innerHTML = '<span class="detail-empty">// failed to load records</span>';
-    return;
+    return null;
   }
-  if (!records.length) {
-    body.innerHTML = '<span class="detail-empty">// no records</span>';
-    return;
+}
+
+// A clip's length read from its metadata alone, NaN if it can't be played.
+function audioDuration(url) {
+  return new Promise(resolve => {
+    const audio = new Audio();
+    audio.preload = 'metadata';
+    audio.addEventListener('loadedmetadata', () => resolve(audio.duration));
+    audio.addEventListener('error', () => resolve(NaN));
+    audio.src = url;
+  });
+}
+
+// One bar per slice of the clip, as tall as that slice's loudest sample
+// relative to the clip's loudest. Filled with currentColor, so a theme
+// colors the waveform through .media-wave.
+function waveBarsSvg(clip) {
+  const samples = clip.getChannelData(0);
+  const step = Math.max(1, Math.floor(samples.length / WAVE_BARS));
+  const peaks = [];
+  for (let bar = 0; bar < WAVE_BARS; bar++) {
+    let peak = 0;
+    const end = Math.min((bar + 1) * step, samples.length);
+    for (let i = bar * step; i < end; i++) peak = Math.max(peak, Math.abs(samples[i]));
+    peaks.push(peak);
   }
-  const tag = schema.view.kind === 'video' ? 'video' : 'audio';
-  body.innerHTML = '<div class="media-list">' + records.map(r => {
-    const key = escapeHtml(r[schema.key]);
-    return `<div class="media-item"><div class="media-caption">${key}</div>` +
-      `<${tag} controls src="${escapeHtml(mediaUrl(activeRepoId, r[schema.key]))}"></${tag}></div>`;
-  }).join('') + '</div>';
+  const loudest = Math.max(...peaks) || 1;
+  return peaks.map((peak, bar) => {
+    const height = Math.max(2, peak / loudest * 100);
+    return `<rect x="${bar + 0.15}" y="${50 - height / 2}" width="0.7" height="${height}" fill="currentColor"/>`;
+  }).join('');
 }
 
 // Replay mode renders a single active clip (the common case is one clip per

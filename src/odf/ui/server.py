@@ -33,7 +33,7 @@ from opendataframework.view import (
     VideoView,
 )
 
-from odf.ui import annotations, data, layout, themes
+from odf.ui import annotations, data, layout, media, themes
 from odf.ui.topology import TopologyView, build_topology
 
 if TYPE_CHECKING:
@@ -44,52 +44,8 @@ _STREAM_BOUNDARY = "odf-frame"
 _MEDIA_CONTENT_TYPES: dict[type, str] = {
     ImageView: "image/jpeg",
     VideoView: "video/mp4",
-    # WAV rather than MP3 — the demo's only AudioView repository (VoiceMemos)
-    # synthesizes clips with the stdlib `wave` module to avoid an encoding
-    # dependency; nothing else uses plain AudioView today.
     AudioView: "audio/wav",
 }
-
-# ISO-BMFF major brands (bytes 8-12, after the ``ftyp`` box marker) of the
-# still-image formats phones save by default.
-_FTYP_IMAGE_TYPES: dict[bytes, str] = {
-    b"avif": "image/avif",
-    b"avis": "image/avif",
-    b"heic": "image/heic",
-    b"heix": "image/heic",
-    b"hevc": "image/heic",
-    b"hevx": "image/heic",
-    b"mif1": "image/heif",
-    b"msf1": "image/heif",
-}
-
-
-def _sniff_image_type(content: bytes) -> str:
-    """Detect an encoded image's media type from its leading magic bytes.
-
-    An ``ImageView`` field holds whatever the project stored, not necessarily
-    JPEG, and a browser only gets to explain an image it can't decode (HEIC
-    outside Safari, say) if it is told the real type.
-
-    Args:
-        content: The encoded image.
-
-    Returns:
-        The detected media type, or ``image/jpeg`` when nothing matches.
-    """
-    if content.startswith(b"\x89PNG\r\n\x1a\n"):
-        return "image/png"
-    if content.startswith((b"GIF87a", b"GIF89a")):
-        return "image/gif"
-    if content[:4] == b"RIFF" and content[8:12] == b"WEBP":
-        return "image/webp"
-    if content.startswith(b"BM"):
-        return "image/bmp"
-    if content.startswith((b"II*\x00", b"MM\x00*")):
-        return "image/tiff"
-    if content[4:8] == b"ftyp":
-        return _FTYP_IMAGE_TYPES.get(content[8:12], "image/jpeg")
-    return "image/jpeg"
 
 
 class UiServer:
@@ -326,12 +282,16 @@ class UiServer:
             )
 
         @app.get("/api/repositories/{repo_id}/records/{key}/media")
-        def record_media(repo_id: str, key: str) -> Response:
-            """Return the raw media bytes (image/video/audio) for one record."""
+        def record_media(repo_id: str, key: str, request: Request) -> Response:
+            """Return the raw media bytes (image/video/audio) for one record.
+
+            Honors a single-range ``Range`` header with a ``206``, which is
+            what lets a browser seek within a clip (and Safari play one).
+            """
             _, instance, entity_cls = self._get_readable(repo_id)
             view = self._get_data_view(repo_id)
-            content_type = _MEDIA_CONTENT_TYPES.get(type(view))
-            if content_type is None:
+            default_type = _MEDIA_CONTENT_TYPES.get(type(view))
+            if default_type is None:
                 raise HTTPException(status_code=403, detail="Repository has no media view")
             key_field = data.key_field_name(entity_cls)
             coerced_key = data.coerce_key(entity_cls, key_field, key)
@@ -341,9 +301,26 @@ class UiServer:
             content = getattr(record, view.field)
             if not isinstance(content, (bytes, bytearray)):
                 raise HTTPException(status_code=404, detail="Record has no media")
-            if isinstance(view, ImageView):
-                content_type = _sniff_image_type(bytes(content[:12]))
-            return Response(content=bytes(content), media_type=content_type)
+            content = bytes(content)
+            content_type = media.sniff_media_type(content[: media.SNIFF_LENGTH], default_type)
+            headers = {"Accept-Ranges": "bytes"}
+            try:
+                byte_range = media.parse_range(request.headers.get("range"), len(content))
+            except ValueError:
+                return Response(
+                    status_code=416,
+                    headers={**headers, "Content-Range": f"bytes */{len(content)}"},
+                )
+            if byte_range is None:
+                return Response(content=content, media_type=content_type, headers=headers)
+            start, end = byte_range
+            headers["Content-Range"] = f"bytes {start}-{end}/{len(content)}"
+            return Response(
+                content=content[start : end + 1],
+                status_code=206,
+                media_type=content_type,
+                headers=headers,
+            )
 
         @app.get("/api/repositories/{repo_id}/annotations")
         def repository_annotations(repo_id: str) -> dict:

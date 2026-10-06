@@ -27,6 +27,14 @@
   with `json.load`. The
   [`11-image-view`](https://github.com/opendataframework/odf/tree/main/examples/11-image-view)
   example describes the format.
+- **UI**: the video and audio views list their records as cards, like the image view: a
+  video card previews a frame of its clip, an audio card its waveform (for clips up to
+  10 MB), both with the clip's length. Selecting a card opens the clip in a player and
+  starts it, with the record's other fields as a caption, previous/next buttons, and
+  `Esc` to return to the grid. Clips are now served with the media type detected from
+  their bytes (MP4, QuickTime, WebM, Ogg, AVI, WAV, MP3, AAC, FLAC) instead of always
+  `video/mp4` or `audio/wav`, and with `Range` requests honored, so a clip can be seeked
+  and plays in Safari. A clip the browser can't decode is labelled with its type.
 
 ### Changed
 

@@ -385,9 +385,13 @@ canvas{display:block;cursor:grab}
 /* Image view — grid of thumbnails, one per record. */
 .media-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(140px,1fr));gap:10px}
 .media-tile{border:1px solid var(--border);border-radius:2px;overflow:hidden;background:var(--hover-bg)}
-.media-tile img{display:block;width:100%;height:120px;object-fit:cover}
+.media-tile img,.media-tile video{display:block;width:100%;height:120px;object-fit:cover}
+.media-tile video{background:#000;pointer-events:none}
+.media-wave{display:block;box-sizing:border-box;width:100%;height:120px;padding:24px 10px;color:var(--title-accent)}
+.media-duration{position:absolute;top:6px;right:6px;padding:1px 5px;border-radius:2px;background:rgba(0,0,0,.65);color:#fff;font-size:10px}
+.media-duration:empty{display:none}
 .media-tile .media-caption{padding:4px 6px;font-size:10px;color:var(--text-dim);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-button.media-tile{display:block;width:100%;padding:0;font:inherit;color:inherit;text-align:left;cursor:pointer;transition:border-color .12s}
+button.media-tile{position:relative;display:block;width:100%;padding:0;font:inherit;color:inherit;text-align:left;cursor:pointer;transition:border-color .12s}
 button.media-tile:hover,button.media-tile:focus-visible{border-color:var(--title-accent);outline:none}
 .media-fallback{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4px;padding:8px;font-size:10.5px;color:var(--text-dim);text-align:center}
 .media-fallback[hidden]{display:none}
@@ -395,18 +399,20 @@ button.media-tile:hover,button.media-tile:focus-visible{border-color:var(--title
 .media-fallback-detail{color:var(--text-muted);font-weight:600}
 
 /* Image lightbox — the selected image, over the panel body (app.js sets its `top`). */
-.image-lightbox{position:absolute;left:0;right:0;bottom:0;z-index:1001;display:flex;flex-direction:column;background:var(--panel)}
-.image-lightbox[hidden]{display:none}
-.image-lightbox-stage{flex:1;min-height:0;display:flex;align-items:center;justify-content:center;gap:12px;padding:16px;cursor:zoom-out}
-.image-lightbox-stage img{flex:0 1 auto;min-width:0;max-width:100%;max-height:100%;object-fit:contain;cursor:default}
-.image-lightbox-stage .media-fallback{flex:1;cursor:default}
-.image-lightbox-nav{flex:none;margin-left:0;font-size:18px;line-height:1;padding:10px 8px}
-.image-lightbox-bar{display:flex;align-items:center;gap:8px;padding:8px 16px;border-top:1px solid var(--border)}
-.image-lightbox-bar .doc-header{flex:1;margin:0;padding:0;border:0}
-.image-lightbox-bar .data-btn{flex:none;margin-left:0;text-decoration:none;white-space:nowrap}
-.image-lightbox-hint{flex:none;color:var(--text-muted);font-size:10.5px;white-space:nowrap}
-.image-lightbox-hint[hidden]{display:none}
-.image-lightbox-stage{position:relative}
+.media-lightbox{position:absolute;left:0;right:0;bottom:0;z-index:1001;display:flex;flex-direction:column;background:var(--panel)}
+.media-lightbox[hidden]{display:none}
+.media-lightbox-stage{flex:1;min-height:0;display:flex;align-items:center;justify-content:center;gap:12px;padding:16px;cursor:zoom-out}
+.media-lightbox-stage img{flex:0 1 auto;min-width:0;max-width:100%;max-height:100%;object-fit:contain;cursor:default}
+.media-lightbox-stage video{flex:0 1 auto;min-width:0;max-width:100%;max-height:100%;background:#000;cursor:default}
+.media-lightbox-stage audio{flex:0 1 480px;min-width:0;cursor:default}
+.media-lightbox-stage .media-fallback{flex:1;cursor:default}
+.media-lightbox-nav{flex:none;margin-left:0;font-size:18px;line-height:1;padding:10px 8px}
+.media-lightbox-bar{display:flex;align-items:center;gap:8px;padding:8px 16px;border-top:1px solid var(--border)}
+.media-lightbox-bar .doc-header{flex:1;margin:0;padding:0;border:0}
+.media-lightbox-bar .data-btn{flex:none;margin-left:0;text-decoration:none;white-space:nowrap}
+.media-lightbox-hint{flex:none;color:var(--text-muted);font-size:10.5px;white-space:nowrap}
+.media-lightbox-hint[hidden]{display:none}
+.media-lightbox-stage{position:relative}
 .image-annotations{position:absolute;cursor:crosshair;touch-action:none;user-select:none;-webkit-user-select:none}
 .image-annotations[hidden]{display:none}
 .image-box{position:absolute;box-sizing:border-box;border:2px solid var(--box-color);background:color-mix(in srgb, var(--box-color) 12%, transparent)}

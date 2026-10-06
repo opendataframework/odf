@@ -9,7 +9,13 @@ from opendataframework.component import Component
 from opendataframework.context import Context
 from opendataframework.namespace import Namespace
 from opendataframework.repository import Repository
-from opendataframework.view import ImageView, StreamingAudioView, StreamingVideoView
+from opendataframework.view import (
+    AudioView,
+    ImageView,
+    StreamingAudioView,
+    StreamingVideoView,
+    VideoView,
+)
 
 from odf.ui import themes
 from odf.ui.server import UiServer
@@ -603,6 +609,85 @@ def test_record_media_serves_an_image_with_its_detected_type(content, content_ty
     assert r.status_code == 200
     assert r.headers["content-type"] == content_type
     assert r.content == content
+
+
+@dataclass
+class Clip:
+    name: str
+    clip: bytes
+
+
+def clips_namespace(clips, view):
+    """A namespace holding a ``Clips`` repository of ``clips`` with ``view``."""
+    NS = make_ns()
+
+    @NS
+    @Repository(Clip)
+    class Clips:
+        def all(self):
+            return clips
+
+        def data_view(self):
+            return view
+
+    return NS
+
+
+@pytest.mark.parametrize(
+    ("view", "content", "content_type"),
+    [
+        (VideoView(field="clip"), b"\x00\x00\x00\x18ftypisomrest", "video/mp4"),
+        (VideoView(field="clip"), b"\x1a\x45\xdf\xa3rest", "video/webm"),
+        (VideoView(field="clip"), b"unrecognised", "video/mp4"),
+        (AudioView(field="clip"), b"RIFF\x00\x00\x00\x00WAVErest", "audio/wav"),
+        (AudioView(field="clip"), b"ID3\x04rest", "audio/mpeg"),
+        (AudioView(field="clip"), b"OggS\x00rest", "audio/ogg"),
+        (AudioView(field="clip"), b"unrecognised", "audio/wav"),
+    ],
+)
+def test_record_media_serves_a_clip_with_its_detected_type(view, content, content_type):
+    NS = clips_namespace([Clip(name="a", clip=content)], view)
+
+    with Context(namespaces={NS}) as ctx:
+        client = TestClient(UiServer(ctx, "proj")._app)
+        r = client.get("/api/repositories/clips/records/a/media")
+
+    assert r.status_code == 200
+    assert r.headers["content-type"] == content_type
+    assert r.headers["accept-ranges"] == "bytes"
+    assert r.content == content
+
+
+@pytest.mark.parametrize(
+    ("range_header", "content_range", "body"),
+    [
+        ("bytes=2-5", "bytes 2-5/10", b"2345"),
+        ("bytes=4-", "bytes 4-9/10", b"456789"),
+        ("bytes=-3", "bytes 7-9/10", b"789"),
+    ],
+)
+def test_record_media_serves_a_requested_byte_range(range_header, content_range, body):
+    NS = clips_namespace([Clip(name="a", clip=b"0123456789")], VideoView(field="clip"))
+
+    with Context(namespaces={NS}) as ctx:
+        client = TestClient(UiServer(ctx, "proj")._app)
+        r = client.get("/api/repositories/clips/records/a/media", headers={"Range": range_header})
+
+    assert r.status_code == 206
+    assert r.headers["content-range"] == content_range
+    assert r.headers["content-type"] == "video/mp4"
+    assert r.content == body
+
+
+def test_record_media_returns_416_for_a_range_past_the_end():
+    NS = clips_namespace([Clip(name="a", clip=b"0123456789")], AudioView(field="clip"))
+
+    with Context(namespaces={NS}) as ctx:
+        client = TestClient(UiServer(ctx, "proj")._app)
+        r = client.get("/api/repositories/clips/records/a/media", headers={"Range": "bytes=10-"})
+
+    assert r.status_code == 416
+    assert r.headers["content-range"] == "bytes */10"
 
 
 def test_record_media_resolves_a_url_encoded_key():
