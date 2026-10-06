@@ -35,6 +35,16 @@
   their bytes (MP4, QuickTime, WebM, Ogg, AVI, WAV, MP3, AAC, FLAC) instead of always
   `video/mp4` or `audio/wav`, and with `Range` requests honored, so a clip can be seeked
   and plays in Safari. A clip the browser can't decode is labelled with its type.
+- **UI**: the document view lists its records as cards, like the image view, each
+  previewing the start of its document. Selecting a card opens the document, with the
+  record's other fields as a caption, previous/next buttons (or the arrow keys), and
+  `Esc` to return to the grid. A `DocumentView` field can now hold a file as well as a
+  JSON-shaped value: `bytes` are shown as a PDF (drawn by pdf.js, loaded from a CDN when
+  first needed) or as text, detected from their content, and a `str` as text, while a
+  `dict` or `list` is still a collapsible tree. Bytes of any other type are labelled with
+  that type and can be downloaded. The
+  [`12-document-view`](https://github.com/opendataframework/odf/tree/main/examples/12-document-view)
+  example shows each kind.
 
 ### Changed
 

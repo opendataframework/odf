@@ -13,11 +13,12 @@ class OrderReceipt:
     Attributes:
         id: Primary key, ``None`` until ``OrderReceipts.save()`` assigns one.
         order_id: The order this receipt was issued for.
-        document: The receipt content, as a JSON-serializable dict.
+        document: The receipt content: a JSON-serializable dict, text, or
+            the bytes of a file (a PDF or a text file).
         issued_at: ``time.time()`` when the receipt was issued.
     """
 
     id: int | None
     order_id: int
-    document: dict
+    document: dict | str | bytes
     issued_at: float

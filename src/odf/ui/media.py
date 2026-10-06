@@ -5,6 +5,8 @@ shape: no HTTP concerns live here, only functions that ``ui/server.py``
 wires to its route.
 """
 
+import codecs
+
 # ISO-BMFF major brands (bytes 8-12, after the ``ftyp`` box marker) of the
 # still-image formats phones save by default.
 _FTYP_IMAGE_TYPES: dict[bytes, str] = {
@@ -21,6 +23,10 @@ _FTYP_IMAGE_TYPES: dict[bytes, str] = {
 # How many leading bytes ``sniff_media_type`` looks at.
 SNIFF_LENGTH = 12
 
+# How many it looks at for a document, where telling text from binary takes
+# more than a magic number.
+DOCUMENT_SNIFF_LENGTH = 1024
+
 
 def sniff_media_type(content: bytes, default: str) -> str:
     """Detect encoded media's type from its leading magic bytes.
@@ -36,7 +42,8 @@ def sniff_media_type(content: bytes, default: str) -> str:
         default: The media type to fall back on. Its major type also picks
             between the two readings of a container that holds either video
             or audio (MP4, WebM, Ogg): ``audio/...`` for an ``audio``
-            default, ``video/...`` otherwise.
+            default, ``video/...`` otherwise. An ``application/...`` default
+            marks a document, detected as a PDF or as plain text.
 
     Returns:
         The detected media type, or ``default`` when nothing matches.
@@ -44,6 +51,8 @@ def sniff_media_type(content: bytes, default: str) -> str:
     major = default.partition("/")[0]
     if major == "image":
         return _sniff_image_type(content, default)
+    if major == "application":
+        return _sniff_document_type(content, default)
     av = "audio" if major == "audio" else "video"
     if content[4:8] == b"ftyp":
         brand = content[8:12]
@@ -87,6 +96,20 @@ def _sniff_image_type(content: bytes, default: str) -> str:
     if content[4:8] == b"ftyp":
         return _FTYP_IMAGE_TYPES.get(content[8:12], default)
     return default
+
+
+def _sniff_document_type(content: bytes, default: str) -> str:
+    if content.startswith(b"%PDF-"):
+        return "application/pdf"
+    if not content or b"\x00" in content:
+        return default
+    try:
+        # Incremental, so a multi-byte character cut off by the sniff length
+        # doesn't make text look binary.
+        codecs.getincrementaldecoder("utf-8")().decode(content)
+    except UnicodeDecodeError:
+        return default
+    return "text/plain; charset=utf-8"
 
 
 def parse_range(header: str | None, size: int) -> tuple[int, int] | None:

@@ -18,7 +18,7 @@ check that the split works for external consumers.
 | 9 | [`09-streaming-audio-view/`](09-streaming-audio-view/) | A stream-only `DispatchRadio` repository (`data_view() -> StreamingAudioView`) rendered as a live audio player. |
 | 10 | [`10-audio-view/`](10-audio-view/) | A `VoiceMemos` repository (`data_view() -> AudioView`) rendered as a grid of audio cards, each showing its clip's waveform and opening it in a player. |
 | 11 | [`11-image-view/`](11-image-view/) | A `DeliveryPhotos` repository (`data_view() -> ImageView`) rendered as a grid of thumbnails that open full size. |
-| 12 | [`12-document-view/`](12-document-view/) | An `OrderReceipts` repository (`data_view() -> DocumentView`) rendered as a collapsible, Postman-style JSON tree per record. |
+| 12 | [`12-document-view/`](12-document-view/) | An `OrderReceipts` repository (`data_view() -> DocumentView`) rendered as cards that open each record's document: a JSON tree, text, or a PDF. |
 | 13 | [`13-timeseries-view/`](13-timeseries-view/) | An `Orders` repository (`data_view() -> TimeseriesView`) rendered as a line chart, one point per record. |
 | 14 | [`14-chart/`](14-chart/) | A `SalesByStore` component implementing `chart() -> str`, a matplotlib-backed self-contained HTML chart the dev UI renders behind a **View Chart** button. |
 | 15 | [`15-chart-plotly/`](15-chart-plotly/) | The same `ChartProtocol` contract as `14-chart`, backed by Plotly instead of matplotlib for real hover tooltips. |

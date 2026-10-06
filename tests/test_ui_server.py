@@ -11,6 +11,7 @@ from opendataframework.namespace import Namespace
 from opendataframework.repository import Repository
 from opendataframework.view import (
     AudioView,
+    DocumentView,
     ImageView,
     StreamingAudioView,
     StreamingVideoView,
@@ -711,6 +712,77 @@ def test_record_media_returns_404_for_a_missing_record_or_missing_bytes():
 
     assert unknown.status_code == 404
     assert no_bytes.status_code == 404
+
+
+@dataclass
+class Paper:
+    name: str
+    body: bytes | str | dict
+
+
+def papers_namespace(papers):
+    """A namespace holding a ``Papers`` repository of ``papers`` with a ``DocumentView``."""
+    NS = make_ns()
+
+    @NS
+    @Repository(Paper)
+    class Papers:
+        def all(self):
+            return papers
+
+        def data_view(self):
+            return DocumentView(field="body")
+
+    return NS
+
+
+@pytest.mark.parametrize(
+    ("content", "content_type"),
+    [
+        (b"%PDF-1.7\nrest", "application/pdf"),
+        (b"Receipt #102\n", "text/plain; charset=utf-8"),
+        (b"<script>alert(1)</script>", "text/plain; charset=utf-8"),
+        (b"PK\x03\x04\x00rest", "application/octet-stream"),
+    ],
+)
+def test_record_media_serves_a_document_with_its_detected_type(content, content_type):
+    NS = papers_namespace([Paper(name="a", body=content)])
+
+    with Context(namespaces={NS}) as ctx:
+        client = TestClient(UiServer(ctx, "proj")._app)
+        r = client.get("/api/repositories/papers/records/a/media")
+
+    assert r.status_code == 200
+    assert r.headers["content-type"] == content_type
+    assert r.headers["x-content-type-options"] == "nosniff"
+    assert r.content == content
+
+
+def test_record_media_serves_a_requested_byte_range_of_a_document():
+    NS = papers_namespace([Paper(name="a", body=b"0123456789")])
+
+    with Context(namespaces={NS}) as ctx:
+        client = TestClient(UiServer(ctx, "proj")._app)
+        r = client.get("/api/repositories/papers/records/a/media", headers={"Range": "bytes=2-5"})
+
+    assert r.status_code == 206
+    assert r.headers["content-range"] == "bytes 2-5/10"
+    assert r.headers["content-type"] == "text/plain; charset=utf-8"
+    assert r.content == b"2345"
+
+
+def test_record_media_returns_404_for_a_document_held_inline():
+    NS = papers_namespace([Paper(name="json", body={"total": 1}), Paper(name="text", body="hi")])
+
+    with Context(namespaces={NS}) as ctx:
+        client = TestClient(UiServer(ctx, "proj")._app)
+        as_json = client.get("/api/repositories/papers/records/json/media")
+        as_text = client.get("/api/repositories/papers/records/text/media")
+        records = client.get("/api/repositories/papers/records").json()
+
+    assert as_json.status_code == 404
+    assert as_text.status_code == 404
+    assert [r["body"] for r in records] == [{"total": 1}, "hi"]
 
 
 def test_record_media_returns_403_for_a_repository_without_a_media_view():

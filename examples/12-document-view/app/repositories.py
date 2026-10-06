@@ -1,14 +1,18 @@
 """In-memory repository backing the document-view example."""
 
 import time
+from pathlib import Path
 
 from opendataframework import DocumentView, Repository, Storage
 
 from app.entities import OrderReceipt
 
-# (order_id, receipt document) — so there's a real receipt to look at
+_RECEIPTS_DIR = Path(__file__).resolve().parent.parent / "data" / "receipts"
+
+# (order_id, receipt document) — one receipt per kind of document the view
+# shows (JSON, a text file, a PDF), so there are real receipts to look at
 # without hand-triggering a save() first.
-_SEED_RECEIPTS: tuple[tuple[int, dict], ...] = (
+_SEED_RECEIPTS: tuple[tuple[int, dict | str | bytes], ...] = (
     (
         101,
         {
@@ -19,6 +23,21 @@ _SEED_RECEIPTS: tuple[tuple[int, dict], ...] = (
             "total": 100.00,
         },
     ),
+    (
+        102,
+        {
+            "order_id": 102,
+            "line_items": [
+                {"sku": "SKU-0102", "quantity": 2, "price": 12.50},
+                {"sku": "SKU-0318", "quantity": 1, "price": 25.00},
+            ],
+            "subtotal": 50.00,
+            "tax": 4.00,
+            "total": 54.00,
+        },
+    ),
+    (103, (_RECEIPTS_DIR / "order-103.txt").read_bytes()),
+    (104, (_RECEIPTS_DIR / "order-104.pdf").read_bytes()),
 )
 
 
@@ -30,7 +49,9 @@ class OrderReceipts:
     Kept in-memory on purpose — the concept here is ``data_view()``, not
     persistence (see ../02-data-analytics for a SQLite-backed repository).
     Pre-seeded, also on purpose — a document view is a lot more useful to
-    look at with a real receipt already in it than an empty one.
+    look at with a few real receipts already in it than an empty one. The
+    receipt files are only read once, at import; ``document`` holds their
+    bytes.
     """
 
     def __init__(self) -> None:

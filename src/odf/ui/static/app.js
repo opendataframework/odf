@@ -1907,7 +1907,7 @@ function setMapMode(mode) {
     }
   }
   if (mapMode === 'geo' && mode !== 'geo') destroyGeoMap();
-  if ((mapMode === 'image' || mapMode === 'media') && mode !== mapMode) closeLightbox();
+  if ((mapMode === 'image' || mapMode === 'media' || mapMode === 'document') && mode !== mapMode) closeLightbox();
   if (mapMode === 'chart' && mode !== 'chart') {
     const frame = document.getElementById('chart-frame');
     if (frame) frame.src = 'about:blank';
@@ -2431,10 +2431,10 @@ async function deleteRow(tr, schema) {
 
 window.addEventListener('keydown', e => {
   if (lightboxIndex >= 0) {
-    // An open image or clip takes the keys first, so Esc returns to the grid
-    // rather than all the way to the topology.
+    // An open image, clip or document takes the keys first, so Esc returns
+    // to the grid rather than all the way to the topology.
     if (e.key === 'Escape') { if (!cancelImageAnnotationStep()) closeLightbox(); }
-    else if (mapMode !== 'image') return; // the arrow keys seek within an open clip's own player
+    else if (mapMode !== 'image' && mapMode !== 'document') return; // the arrow keys seek within an open clip's own player
     else if (e.target.closest('input, textarea, select')) return;
     else if ((e.key === 'Delete' || e.key === 'Backspace') && selectedBox >= 0) deleteImageBox(selectedBox);
     else if (e.key === 'ArrowLeft') stepLightbox(-1);
@@ -2763,7 +2763,7 @@ function renderGeoMap(schema, records, opts = {}) {
 // Selecting a thumbnail opens that image in #media-lightbox, which covers
 // the panel body (not the panel header) until closed, and where boxes can be
 // drawn on it (see "Image annotations" below). The Video/Audio "Media view"
-// further down shares the grid and the lightbox.
+// and the "Document view" further down share the grid and the lightbox.
 
 let lightboxRecords = []; // the grid's records, in display order
 let lightboxIndex = -1;   // index into lightboxRecords of the record open in the lightbox, -1 when closed
@@ -2794,7 +2794,7 @@ async function mediaContentType(url) {
 
 function mediaFallbackHtml(detail) {
   const kind = repoSchemas[activeRepoId].view.kind;
-  return `<span>Can't ${kind === 'image' ? 'display' : 'play'} this ${kind}</span>` +
+  return `<span>Can't ${kind === 'video' || kind === 'audio' ? 'play' : 'display'} this ${kind}</span>` +
     (detail ? `<span class="media-fallback-detail">${escapeHtml(detail)}</span>` : '');
 }
 
@@ -2865,6 +2865,7 @@ async function refreshImageView() {
 // Empties every lightbox element. A <video>/<audio> keeps downloading and
 // playing its old source until it is reloaded without one.
 function unloadLightboxPlayers() {
+  unloadDocumentReader();
   for (const player of Object.values(LIGHTBOX_PLAYERS)) {
     player.hidden = true;
     if (!player.hasAttribute('src')) continue;
@@ -2884,10 +2885,15 @@ function openLightbox(index) {
 
   const player = LIGHTBOX_PLAYERS[schema.view.kind];
   document.getElementById('media-lightbox-error').hidden = true;
-  player.hidden = false;
-  if (player.tagName === 'IMG') player.alt = String(record[schema.key]);
-  player.src = url;
-  if (player.play) player.play().catch(() => {}); // blocked autoplay leaves the controls to start it
+  document.getElementById('media-lightbox-open').hidden = false;
+  if (player) {
+    player.hidden = false;
+    if (player.tagName === 'IMG') player.alt = String(record[schema.key]);
+    player.src = url;
+    if (player.play) player.play().catch(() => {}); // blocked autoplay leaves the controls to start it
+  } else {
+    openDocument(record, url);
+  }
   document.getElementById('media-lightbox-open').href = url;
   document.getElementById('media-lightbox-caption').innerHTML =
     `<span>${index + 1} / ${lightboxRecords.length}</span>` +
@@ -3376,43 +3382,191 @@ function wireMediaReplay(schema) {
 
 // ── Document view ─────────────────────────────────────────────────────────
 // Backs the "View Document" action on repository nodes whose DataView is a
-// DocumentView — one record per block, the declared JSON-shaped field
-// rendered as a collapsible tree (Postman-style) instead of a stringified
-// table cell; the record's other fields show as a small header above it.
+// DocumentView — a grid of cards, one per record, each previewing the start
+// of its document and opening it in #media-lightbox (see "Image view" above).
+// What a document is follows from the declared field's value: a JSON-shaped
+// one (a dict, say) is a collapsible tree, a string is text, and bytes are a
+// file, a PDF or plain text, fetched from the same .../media endpoint as an
+// image. Bytes arrive as null in the records themselves (see
+// odf.ui.data.to_json_safe_dict), which is how a file is told apart.
+
+// pdf.js draws PDFs. It is only fetched once a PDF is on screen.
+const PDFJS_URL = 'https://unpkg.com/pdfjs-dist@4.10.38/build/';
+const DOC_SNIPPET_BYTES = 2048;             // how much of a text file a card's preview fetches
+const DOC_SNIPPET_LINES = 14;               // lines of a document that fit on a card
+const DOC_TEXT_MAX_BYTES = 2 * 1024 * 1024; // the reader shows this much of a text file, the rest through "Open original"
+
+let pdfJs = null;       // the pdf.js module, or the promise loading it
+let docLoadToken = 0;   // bumped whenever the reader is emptied, so a slow load can tell it was superseded
+let openPdf = null;     // the pdf.js document open in the reader
+let pdfPageObserver = null; // draws the open PDF's pages as they scroll into view
+
+function loadPdfJs() {
+  if (!pdfJs) {
+    pdfJs = import(PDFJS_URL + 'pdf.min.mjs').then(lib => {
+      lib.GlobalWorkerOptions.workerSrc = PDFJS_URL + 'pdf.worker.min.mjs';
+      return lib;
+    });
+    pdfJs.catch(() => { pdfJs = null; }); // offline, say: try again on the next PDF
+  }
+  return pdfJs;
+}
 
 async function showDocumentView(repoId) {
   activeRepoId = repoId;
   const schema = repoSchemas[repoId];
   setMapMode('document');
+  closeLightbox();
   document.getElementById('map-panel-title').textContent = `${schema.label} · documents`;
   await refreshDocumentView();
 }
 
 async function refreshDocumentView() {
-  const schema = repoSchemas[activeRepoId];
-  const body = document.getElementById('map-panel-body');
-  let records;
+  const grid = await renderMediaGrid(() => '<div class="doc-preview"></div>');
+  if (grid) loadDocumentPreviews(grid);
+}
+
+function docSnippet(text) {
+  return text.replace(/�+$/, '').split('\n', DOC_SNIPPET_LINES).join('\n');
+}
+
+// Fills in the cards: the inline documents at once, then the files one at a
+// time, stopping once the grid has been replaced.
+async function loadDocumentPreviews(grid) {
+  const repoId = activeRepoId;
+  const schema = repoSchemas[repoId];
+  const files = [];
+  for (const tile of grid.querySelectorAll('.media-tile')) {
+    const value = lightboxRecords[tile.dataset.index][schema.view.field];
+    if (value === null || value === undefined) files.push(tile);
+    else tile.querySelector('.doc-preview').textContent =
+      docSnippet(typeof value === 'string' ? value : JSON.stringify(value, null, 2));
+  }
+  for (const tile of files) {
+    await loadFilePreview(tile, mediaUrl(repoId, lightboxRecords[tile.dataset.index][schema.key]));
+    if (!grid.isConnected) return;
+  }
+}
+
+async function loadFilePreview(tile, url) {
+  const preview = tile.querySelector('.doc-preview');
   try {
-    const res = await fetch(`/api/repositories/${activeRepoId}/records`);
-    if (!res.ok) throw new Error(`HTTP ${res.status}`);
-    records = await res.json();
+    const res = await fetch(url, { headers: { Range: `bytes=0-${DOC_SNIPPET_BYTES - 1}` } });
+    const type = res.headers.get('Content-Type') || '';
+    if (res.ok && type.startsWith('text/')) {
+      preview.textContent = docSnippet(await res.text());
+      return;
+    }
+    if (res.body) res.body.cancel();
+    if (!res.ok || !type.startsWith('application/pdf')) throw new Error(type);
+    const pdf = await (await loadPdfJs()).getDocument({ url }).promise;
+    try {
+      const canvas = document.createElement('canvas');
+      await drawPdfPage(await pdf.getPage(1), canvas, 280 * (window.devicePixelRatio || 1));
+      preview.classList.add('doc-preview-page');
+      preview.replaceChildren(canvas);
+      tile.querySelector('.media-duration').textContent = pdf.numPages === 1 ? '1 page' : `${pdf.numPages} pages`;
+    } finally {
+      pdf.destroy();
+    }
   } catch (err) {
-    body.innerHTML = '<span class="detail-empty">// failed to load records</span>';
+    showTileFallback(preview, url);
+  }
+}
+
+// Draws a PDF page onto `canvas`, `width` device pixels wide.
+async function drawPdfPage(page, canvas, width) {
+  const viewport = page.getViewport({ scale: width / page.getViewport({ scale: 1 }).width });
+  canvas.width = Math.round(viewport.width);
+  canvas.height = Math.round(viewport.height);
+  await page.render({ canvasContext: canvas.getContext('2d'), viewport }).promise;
+}
+
+function unloadDocumentReader() {
+  docLoadToken++;
+  if (pdfPageObserver) pdfPageObserver.disconnect();
+  pdfPageObserver = null;
+  if (openPdf) openPdf.destroy();
+  openPdf = null;
+  const reader = document.getElementById('media-lightbox-doc');
+  reader.hidden = true;
+  reader.innerHTML = '';
+}
+
+function showDocumentError(detail) {
+  const error = document.getElementById('media-lightbox-error');
+  document.getElementById('media-lightbox-doc').hidden = true;
+  error.innerHTML = mediaFallbackHtml(detail);
+  error.hidden = false;
+}
+
+// Shows a record's document in the lightbox, see openLightbox().
+async function openDocument(record, url) {
+  const token = docLoadToken;
+  const reader = document.getElementById('media-lightbox-doc');
+  const value = record[repoSchemas[activeRepoId].view.field];
+  reader.hidden = false;
+  reader.scrollTop = 0;
+  if (value !== null && value !== undefined) {
+    // Held in the record itself, so there is no file to open.
+    document.getElementById('media-lightbox-open').hidden = true;
+    reader.innerHTML = typeof value === 'string'
+      ? `<pre class="doc-text">${escapeHtml(value)}</pre>`
+      : `<div class="doc-tree">${renderJsonTree(value)}</div>`;
     return;
   }
-  if (!records.length) {
-    body.innerHTML = '<span class="detail-empty">// no records</span>';
-    return;
+  reader.innerHTML = '<span class="detail-empty">// loading</span>';
+  let type = '';
+  try {
+    const res = await fetch(url, { headers: { Range: `bytes=0-${DOC_TEXT_MAX_BYTES - 1}` } });
+    type = res.ok ? (res.headers.get('Content-Type') || '') : `HTTP ${res.status}`;
+    if (res.ok && type.startsWith('text/')) {
+      const text = await res.text();
+      if (token !== docLoadToken) return;
+      const size = Number((res.headers.get('Content-Range') || '').split('/')[1]);
+      reader.innerHTML = `<pre class="doc-text">${escapeHtml(text.replace(/�+$/, ''))}</pre>` +
+        (size > DOC_TEXT_MAX_BYTES ? '<div class="doc-note">Only the start of this document is shown. Open the original for the rest.</div>' : '');
+      return;
+    }
+    if (res.body) res.body.cancel();
+    if (!res.ok || !type.startsWith('application/pdf')) throw new Error(type);
+    type = '';
+    await openPdfDocument(reader, url, token);
+  } catch (err) {
+    if (token === docLoadToken) showDocumentError(type);
   }
-  const field = schema.view.field;
-  body.innerHTML = '<div class="doc-list">' + records.map(r => {
-    const header = Object.entries(r)
-      .filter(([k]) => k !== field)
-      .map(([k, v]) => `<span><b>${escapeHtml(k)}</b>: ${escapeHtml(v ?? '')}</span>`)
-      .join('');
-    return `<div class="doc-record"><div class="doc-header">${header}</div>` +
-      `<div class="doc-tree">${renderJsonTree(r[field])}</div></div>`;
-  }).join('') + '</div>';
+}
+
+// Lays out one canvas per page, each drawn when it scrolls into view, so a
+// long PDF opens as fast as a short one.
+async function openPdfDocument(reader, url, token) {
+  const lib = await loadPdfJs();
+  const pdf = await lib.getDocument({ url }).promise;
+  if (token !== docLoadToken) { pdf.destroy(); return; }
+  openPdf = pdf;
+  const first = (await pdf.getPage(1)).getViewport({ scale: 1 });
+  if (token !== docLoadToken) return;
+  pdfPageObserver = new IntersectionObserver(entries => {
+    for (const entry of entries) {
+      if (!entry.isIntersecting) continue;
+      pdfPageObserver.unobserve(entry.target);
+      const canvas = entry.target;
+      pdf.getPage(Number(canvas.dataset.page))
+        .then(page => token === docLoadToken && drawPdfPage(page, canvas, canvas.clientWidth * (window.devicePixelRatio || 1)))
+        .catch(() => {}); // the document was closed mid-draw
+    }
+  }, { root: reader, rootMargin: '600px 0px' });
+  reader.innerHTML = '';
+  for (let number = 1; number <= pdf.numPages; number++) {
+    const canvas = document.createElement('canvas');
+    canvas.className = 'doc-page';
+    canvas.dataset.page = number;
+    // Until it is drawn, a page takes the first page's shape.
+    canvas.width = first.width;
+    canvas.height = first.height;
+    reader.appendChild(canvas);
+    pdfPageObserver.observe(canvas);
+  }
 }
 
 function renderJsonTree(value) {

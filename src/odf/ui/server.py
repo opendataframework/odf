@@ -27,6 +27,7 @@ from opendataframework.utils import kebab
 from opendataframework.view import (
     AudioView,
     DataView,
+    DocumentView,
     ImageView,
     StreamingAudioView,
     StreamingVideoView,
@@ -45,6 +46,7 @@ _MEDIA_CONTENT_TYPES: dict[type, str] = {
     ImageView: "image/jpeg",
     VideoView: "video/mp4",
     AudioView: "audio/wav",
+    DocumentView: "application/octet-stream",
 }
 
 
@@ -283,10 +285,14 @@ class UiServer:
 
         @app.get("/api/repositories/{repo_id}/records/{key}/media")
         def record_media(repo_id: str, key: str, request: Request) -> Response:
-            """Return the raw media bytes (image/video/audio) for one record.
+            """Return the raw media bytes (image/video/audio/document) for one record.
 
             Honors a single-range ``Range`` header with a ``206``, which is
             what lets a browser seek within a clip (and Safari play one).
+
+            A document is only ever served as a PDF, as plain text or as an
+            opaque download, and never left for the browser to sniff, so
+            stored markup can't run on the UI's origin when it is opened.
             """
             _, instance, entity_cls = self._get_readable(repo_id)
             view = self._get_data_view(repo_id)
@@ -302,8 +308,12 @@ class UiServer:
             if not isinstance(content, (bytes, bytearray)):
                 raise HTTPException(status_code=404, detail="Record has no media")
             content = bytes(content)
-            content_type = media.sniff_media_type(content[: media.SNIFF_LENGTH], default_type)
             headers = {"Accept-Ranges": "bytes"}
+            sniff_length = media.SNIFF_LENGTH
+            if isinstance(view, DocumentView):
+                sniff_length = media.DOCUMENT_SNIFF_LENGTH
+                headers["X-Content-Type-Options"] = "nosniff"
+            content_type = media.sniff_media_type(content[:sniff_length], default_type)
             try:
                 byte_range = media.parse_range(request.headers.get("range"), len(content))
             except ValueError:

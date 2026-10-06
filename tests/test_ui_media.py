@@ -44,6 +44,22 @@ def test_sniff_media_type_detects_images(content, expected):
 
 
 @pytest.mark.parametrize(
+    ("content", "expected"),
+    [
+        (b"%PDF-1.7\n%\xe2\xe3\xcf\xd3\n", "application/pdf"),
+        (b"Receipt #102\nTotal: 54.00\n", "text/plain; charset=utf-8"),
+        ("Total: 54,00 \u20ac".encode(), "text/plain; charset=utf-8"),
+        ("Total: 54,00 \u20ac".encode()[:-1], "text/plain; charset=utf-8"),
+        (b"PK\x03\x04\x14\x00\x06\x00", "application/octet-stream"),
+        (b"caf\xe9 latin-1", "application/octet-stream"),
+        (b"", "application/octet-stream"),
+    ],
+)
+def test_sniff_media_type_detects_documents(content, expected):
+    assert media.sniff_media_type(content, "application/octet-stream") == expected
+
+
+@pytest.mark.parametrize(
     ("header", "expected"),
     [
         ("bytes=2-5", (2, 5)),
