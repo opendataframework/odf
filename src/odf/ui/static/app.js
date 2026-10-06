@@ -3389,7 +3389,8 @@ function wireMediaReplay(schema) {
 // file, a PDF or plain text, fetched from the same .../media endpoint as an
 // image. Bytes arrive as null in the records themselves (see
 // odf.ui.data.to_json_safe_dict), which is how a file is told apart. Text
-// that reads as Markdown is rendered, see looksLikeMarkdown().
+// that parses as JSON is a tree too, and text that reads as Markdown is
+// rendered, see looksLikeMarkdown().
 
 // pdf.js draws PDFs. It is only fetched once a PDF is on screen.
 const PDFJS_URL = 'https://unpkg.com/pdfjs-dist@4.10.38/build/';
@@ -3407,7 +3408,7 @@ let docLoadToken = 0;   // bumped whenever the reader is emptied, so a slow load
 let openPdf = null;     // the pdf.js document open in the reader
 let pdfPageObserver = null; // draws the open PDF's pages as they scroll into view
 let markdownRenderer = null; // text => safe HTML, or the promise loading it
-let openText = null;    // the text document open in the reader: { text, note, rendered }
+let openText = null;    // the text document open in the reader: { text, note, json, rendered }
 
 function loadPdfJs() {
   if (!pdfJs) {
@@ -3535,10 +3536,21 @@ function unloadDocumentReader() {
   reader.innerHTML = '';
 }
 
-// Shows a text document in the reader, rendered if it reads as Markdown.
-// `note` is HTML to put under it.
+// The value of text that is a JSON object or array, undefined for any other.
+function parseJsonDocument(text) {
+  if (!/^\s*[{[]/.test(text)) return undefined;
+  try {
+    return JSON.parse(text);
+  } catch (err) {
+    return undefined;
+  }
+}
+
+// Shows a text document in the reader: as a tree if it is JSON, rendered if
+// it reads as Markdown. `note` is HTML to put under it.
 function showDocumentText(text, note) {
-  openText = { text, note, rendered: looksLikeMarkdown(text) };
+  const json = parseJsonDocument(text);
+  openText = { text, note, json, rendered: json !== undefined || looksLikeMarkdown(text) };
   renderDocumentText();
 }
 
@@ -3548,18 +3560,18 @@ async function renderDocumentText() {
   const reader = document.getElementById('media-lightbox-doc');
   const toggle = document.getElementById('media-lightbox-source');
   let html = null;
-  if (doc.rendered) {
+  if (doc.rendered && doc.json !== undefined) {
+    html = `<div class="doc-tree">${renderJsonTree(doc.json)}</div>`;
+  } else if (doc.rendered) {
     try {
-      html = (await loadMarkdownRenderer())(doc.text);
+      html = `<div class="doc-markdown">${(await loadMarkdownRenderer())(doc.text)}</div>`;
     } catch (err) {
       doc.rendered = false; // the renderer couldn't be fetched: the source is still readable
     }
     if (token !== docLoadToken) return;
   }
-  reader.innerHTML = (html === null
-    ? `<pre class="doc-text">${escapeHtml(doc.text)}</pre>`
-    : `<div class="doc-markdown">${html}</div>`) + doc.note;
-  toggle.textContent = doc.rendered ? 'View source' : 'View as Markdown';
+  reader.innerHTML = (html === null ? `<pre class="doc-text">${escapeHtml(doc.text)}</pre>` : html) + doc.note;
+  toggle.textContent = doc.rendered ? 'View source' : (doc.json !== undefined ? 'View as tree' : 'View as Markdown');
   toggle.hidden = false;
 }
 

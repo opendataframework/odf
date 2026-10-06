@@ -13,9 +13,9 @@ What a document opens as follows from the value of `OrderReceipt`'s
 | Value | Shown as | Card preview |
 |---|---|---|
 | a `dict` or `list` | a collapsible JSON tree, Postman-style | its first lines as JSON |
-| a `str` | text, rendered if it reads as Markdown | its first lines |
+| a `str` | text: a JSON tree if it parses as JSON, rendered if it reads as Markdown | its first lines |
 | `bytes` of a PDF | its pages | its first page, with the page count |
-| `bytes` of UTF-8 text (plain text, Markdown, CSV, ...) | text, rendered if it reads as Markdown | its first lines |
+| `bytes` of UTF-8 text (plain text, JSON, Markdown, CSV, ...) | text, as for a `str` | its first lines |
 
 File bytes are told apart by their content, not by a file name, and are
 served by `GET /api/repositories/{id}/records/{key}/media`, which **Open
@@ -32,15 +32,18 @@ Markdown. It is then rendered by [marked](https://marked.js.org/), with
 [DOMPurify](https://github.com/cure53/DOMPurify) removing any markup that
 could run, both loaded from a CDN with the first Markdown document. **View
 source** and **View as Markdown** in the reader switch between the two, for
-when the guess is wrong.
+when the guess is wrong. Text holding a JSON object or array, such as a
+`.json` file, opens as the same tree a `dict` does, with **View source**
+showing it as written.
 
 This isolates the `DocumentView` variant covered in
 [`opendataframework`'s view docs](https://opendataframework.github.io/opendataframework/view/).
 
-`OrderReceipts` comes pre-seeded in-memory with five receipts (see
+`OrderReceipts` comes pre-seeded in-memory with six receipts (see
 `app/repositories.py`'s `_SEED_RECEIPTS`): two as dicts, and one each read
-from a text file, a PDF and a Markdown file under `data/receipts/` — a
-document view is a lot more useful to look at with something already in it.
+from a text file, a PDF, a Markdown file and a JSON file under
+`data/receipts/` — a document view is a lot more useful to look at with
+something already in it.
 
 ## Structure
 
@@ -49,7 +52,7 @@ document view is a lot more useful to look at with something already in it.
 ├── config.toml          # no custom keys needed for this example
 ├── main.py              # entry point — reads back the pre-seeded receipts, prints data_view()
 ├── data/
-│   └── receipts/        # order-103.txt, order-104.pdf, order-105.md — the receipts kept as files
+│   └── receipts/        # order-103.txt, order-104.pdf, order-105.md, order-106.json — the receipts kept as files
 └── app/
     ├── __init__.py      # imports both modules so decorators register at startup
     ├── entities.py       # OrderReceipt(id, order_id, document, issued_at) — @Entity
@@ -76,6 +79,7 @@ All receipts:
   OrderReceipt(id=3, order_id=103, document=<258 bytes>)
   OrderReceipt(id=4, order_id=104, document=<1676 bytes>)
   OrderReceipt(id=5, order_id=105, document=<407 bytes>)
+  OrderReceipt(id=6, order_id=106, document=<244 bytes>)
 
 data_view() -> DocumentView(field='document')
 ```

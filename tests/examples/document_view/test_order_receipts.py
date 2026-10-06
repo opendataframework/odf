@@ -14,6 +14,7 @@ def test_order_receipts_are_seeded_with_each_kind_of_document():
     assert any(isinstance(d, bytes) and d.startswith(b"%PDF-") for d in documents)
     assert any(isinstance(d, bytes) and d.startswith(b"ORDER RECEIPT") for d in documents)
     assert any(isinstance(d, bytes) and d.startswith(b"# Order receipt") for d in documents)
+    assert any(isinstance(d, bytes) and d.startswith(b"{") for d in documents)
 
 
 def test_order_receipts_save_assigns_incrementing_ids():

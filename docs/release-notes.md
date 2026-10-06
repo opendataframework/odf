@@ -41,8 +41,9 @@
   `Esc` to return to the grid. A `DocumentView` field can now hold a file as well as a
   JSON-shaped value: `bytes` are shown as a PDF (drawn by pdf.js, loaded from a CDN when
   first needed) or as text, detected from their content, and a `str` as text, while a
-  `dict` or `list` is still a collapsible tree. Text that reads as Markdown is rendered,
-  with a button to switch to its source and back. Bytes of any other type are labelled
+  `dict` or `list` is still a collapsible tree. Text that parses as JSON, such as a
+  `.json` file, is a tree as well, and text that reads as Markdown is rendered, each with
+  a button to switch to its source and back. Bytes of any other type are labelled
   with that type and can be downloaded. The
   [`12-document-view`](https://github.com/opendataframework/odf/tree/main/examples/12-document-view)
   example shows each kind.
