@@ -78,6 +78,8 @@ annotation tool or a one-off script would be more than the job needs:
   or resize: delete the box and draw it again. A label no box in the
   repository uses any more is dropped from the list.
 - Select a box's label to change it.
+- A box inside a larger one stays on top, so it can still be selected,
+  whichever was drawn first.
 - `Esc` backs out of the label input, then the selection, then the photo.
 
 Every change is saved to `annotations.json` in the directory `odf run` was

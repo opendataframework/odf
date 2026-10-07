@@ -2947,8 +2947,9 @@ for (const player of Object.values(LIGHTBOX_PLAYERS)) {
 // through PUT /api/repositories/{id}/records/{key}/annotations into the
 // project's annotations file (see odf.ui.annotations for its format). Boxes
 // are held in image pixels and drawn in percent of the image, so they follow
-// the lightbox as it resizes. There is no move or resize: a wrong box is
-// deleted and drawn again.
+// the lightbox as it resizes. They are painted largest first, so a box inside
+// another stays clickable whichever was drawn first. There is no move or
+// resize: a wrong box is deleted and drawn again.
 
 const BOX_COLORS = ['#ff6b6b', '#4dabf7', '#51cf66', '#fcc419', '#cc5de8', '#ff922b', '#22b8cf', '#f06595'];
 const BOX_MIN_DRAG = 4; // px a pointer must travel before a press counts as drawing rather than a click
@@ -3036,7 +3037,9 @@ function boxStyle(box, label) {
 
 function renderImageBoxes() {
   if (lightboxIndex < 0 || !imageLoaded) return;
-  document.getElementById('image-boxes').innerHTML = imageBoxes().map((box, i) =>
+  const largestFirst = imageBoxes().map((box, i) => ({ box, i }))
+    .sort((a, b) => b.box.width * b.box.height - a.box.width * a.box.height);
+  document.getElementById('image-boxes').innerHTML = largestFirst.map(({ box, i }) =>
     `<div class="image-box${i === selectedBox ? ' selected' : ''}" data-index="${i}" style="${boxStyle(box, box.label)}">` +
     `<span class="image-box-label" title="Change label">${escapeHtml(box.label)}</span>` +
     (i === selectedBox ? '<button type="button" class="image-box-delete" title="Delete (Del)">&times;</button>' : '') +
