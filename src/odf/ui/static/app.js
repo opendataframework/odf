@@ -1101,6 +1101,35 @@ function selectNode(id) {
   const cVar  = nodeAccentCss(node);
   const repo  = repoSchemas[id];
 
+  // One full-width row per action, so the rows line up whatever set of
+  // actions the component has: its own in `main`, the ones every component
+  // has in `utility`.
+  const main = [];
+  if (repo && repo.view) {
+    main.push({ id: 'view-btn', label: 'View', kind: 'primary', run: () => showDataView(id) });
+  }
+  if (repo && repo.streamable) {
+    main.push({ id: 'stream-toggle-btn', label: `${node.streaming ? 'Stop' : 'Start'} Streaming`, kind: node.streaming ? 'danger' : 'primary', run: () => toggleStream(id) });
+  }
+  if (node.type === 'service') {
+    main.push({ id: 'lifecycle-btn', label: node.running ? 'Stop' : 'Start', kind: node.running ? 'danger' : 'primary', run: () => toggleService(id) });
+  }
+  if (node.type === 'task' || node.type === 'pipeline') {
+    main.push({ id: 'execute-btn', label: 'Execute', kind: 'primary', run: () => executeNode(id) });
+  }
+  if (node.chart) {
+    main.push({ id: 'show-chart-btn', label: 'View Chart', kind: 'primary', run: () => showChartView(id) });
+  }
+  if (node.details) {
+    main.push({ id: 'show-details-btn', label: 'Details', kind: '', run: () => showDetailsView(id) });
+  }
+  const utility = [
+    { id: 'show-logs-btn', label: 'Show Logs', kind: '', run: () => showLogsView(id) },
+    { id: 'customize-btn', label: 'Customize', kind: '', run: e => openStylePicker(node, e.currentTarget) },
+  ];
+  const actionHtml = a =>
+    `<button class="detail-action ${a.kind}" id="${a.id}"><span>${a.label}</span><span class="detail-action-arrow">&rarr;</span></button>`;
+
   document.getElementById('inspector-popup-body').innerHTML =
     `<div class="detail-title" style="color:${cVar}">${node.label}</div>` +
     (node.layer || node.decorator || node.file
@@ -1108,48 +1137,17 @@ function selectNode(id) {
       : '') +
     `<div class="detail-desc">${node.desc}</div>` +
     '<div class="detail-actions">' +
-      (repo && repo.view
-        ? '<button class="data-btn primary" id="view-btn">View &rarr;</button>'
-        : '') +
-      (repo && repo.streamable
-        ? `<button class="data-btn ${node.streaming ? 'danger' : 'primary'}" id="stream-toggle-btn">${node.streaming ? 'Stop' : 'Start'} Streaming &rarr;</button>`
-        : '') +
-      (node.type === 'service'
-        ? `<button class="data-btn ${node.running ? 'danger' : 'primary'}" id="lifecycle-btn">${node.running ? 'Stop' : 'Start'} &rarr;</button>`
-        : '') +
-      (node.type === 'task' || node.type === 'pipeline'
-        ? '<button class="data-btn primary" id="execute-btn">Execute &rarr;</button>'
-        : '') +
-      (node.details ? '<button class="data-btn" id="show-details-btn">Details &rarr;</button>' : '') +
-      (node.chart ? '<button class="data-btn primary" id="show-chart-btn">View Chart &rarr;</button>' : '') +
-      '<button class="data-btn" id="show-logs-btn">Show Logs &rarr;</button>' +
-      '<button class="data-btn" id="customize-btn">Customize &rarr;</button>' +
+      (main.length ? `<div class="detail-action-group">${main.map(actionHtml).join('')}</div>` : '') +
+      `<div class="detail-action-group utility">${utility.map(actionHtml).join('')}</div>` +
     '</div>';
 
   document.querySelectorAll('.node-item').forEach(el => el.classList.remove('selected'));
   const si = document.querySelector(`.node-item[data-id="${id}"]`);
   if (si) si.classList.add('selected');
 
-  if (repo && repo.view) {
-    document.getElementById('view-btn').addEventListener('click', () => showDataView(id));
+  for (const a of [...main, ...utility]) {
+    document.getElementById(a.id).addEventListener('click', a.run);
   }
-  if (repo && repo.streamable) {
-    document.getElementById('stream-toggle-btn').addEventListener('click', () => toggleStream(id));
-  }
-  if (node.type === 'service') {
-    document.getElementById('lifecycle-btn').addEventListener('click', () => toggleService(id));
-  }
-  if (node.type === 'task' || node.type === 'pipeline') {
-    document.getElementById('execute-btn').addEventListener('click', () => executeNode(id));
-  }
-  if (node.details) {
-    document.getElementById('show-details-btn').addEventListener('click', () => showDetailsView(id));
-  }
-  if (node.chart) {
-    document.getElementById('show-chart-btn').addEventListener('click', () => showChartView(id));
-  }
-  document.getElementById('show-logs-btn').addEventListener('click', () => showLogsView(id));
-  document.getElementById('customize-btn').addEventListener('click', e => openStylePicker(node, e.currentTarget));
 
   showInspectorPopup(node);
   addLog(node.label, nodeAccent(node));

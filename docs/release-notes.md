@@ -56,6 +56,9 @@
   the header bar, as icon buttons next to the theme toggle. They no longer cover a
   view's own controls, such as the table view's timeline dropdown and replay controls,
   and the button of the open drawer stays highlighted.
+- **UI**: the popup shown when selecting a component lists its actions as full-width
+  rows instead of buttons of different widths. The component's own actions, such as
+  View, Start or Execute, come first, with Show Logs and Customize grouped below them.
 
 ## 0.2.0
 

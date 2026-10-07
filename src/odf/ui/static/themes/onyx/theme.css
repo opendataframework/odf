@@ -237,11 +237,20 @@ canvas{display:block;cursor:grab}
 .log-line .dot{width:5px;height:5px;flex-shrink:0;margin-top:4px}
 .log-line .ts{font-family:'Roboto Mono','SF Mono',Consolas,monospace;color:var(--text-dim);flex-shrink:0}
 
-/* flex+gap (not the .data-btn margin-left/:first-child pattern used
-   elsewhere) so wrapped rows stay left-aligned instead of drifting right by
-   a stray margin once there are enough buttons to wrap */
-.detail-actions{margin-top:10px;display:flex;flex-wrap:wrap;gap:6px}
-.detail-actions .data-btn{margin-left:0}
+/* One full-width row per action, so the rows line up whatever set of
+   actions a component has: its own in a boxed group, the ones every
+   component has under a divider below it */
+.detail-actions{margin-top:10px;display:flex;flex-direction:column}
+.detail-action-group{display:flex;flex-direction:column;border:1px solid var(--border);border-radius:8px;overflow:hidden}
+.detail-action-group.utility{border:0;border-top:1px solid var(--border);border-radius:0}
+.detail-action-group + .detail-action-group.utility{margin-top:8px;padding-top:4px}
+.detail-action{display:flex;align-items:center;justify-content:space-between;gap:8px;width:100%;background:transparent;border:0;border-top:1px solid var(--border);color:var(--text-muted);font-family:'Roboto Mono','SF Mono',Consolas,monospace;font-size:11px;font-weight:600;letter-spacing:.03em;text-align:left;padding:6px 8px;cursor:pointer;transition:background .12s,color .12s}
+.detail-action:first-child,.detail-action-group.utility .detail-action{border-top:0}
+.detail-action:hover{background:var(--hover-bg);color:var(--text)}
+.detail-action.primary{color:var(--title-accent)}
+.detail-action.danger{color:var(--accent-alert)}
+.detail-action:disabled{opacity:.4;cursor:default;pointer-events:none}
+.detail-action-arrow{flex:none;opacity:.6}
 
 /* Inspector popup — anchored to the clicked building's screen position at
    selection time (not live-tracked; pan/zoom/resize close it instead, see
@@ -522,7 +531,7 @@ button.media-tile:hover,button.media-tile:focus-visible{border-color:var(--title
 .brand-mark.has-logo{background:none;border-radius:0}
 
 .hdr-title,.hdr-stat .k,.hdr-status,.theme-toggle,.sb-heading,.panel-heading,
-.layer-group-name,.style-picker-label,.data-btn,.map-back-btn,
+.layer-group-name,.style-picker-label,.data-btn,.detail-action,.map-back-btn,
 .view-mode-select,.pagination select,.timeline-bar select,#map-title,#map-panel-title,
 .tl-item,.detail-title,.detail-empty,.icon-swatch.reset,.color-swatch.reset,.icon-picker-tab,
 .data-table th,.node-tag,.layer-badge{
@@ -543,6 +552,9 @@ button.media-tile:hover,button.media-tile:focus-visible{border-color:var(--title
 .theme-toggle,.data-btn,.map-back-btn{font-size:12px;font-weight:500;background:transparent;border-color:var(--border-strong);color:var(--title-accent);border-radius:999px}
 .theme-toggle{padding:6px 14px}
 .data-btn{padding:4px 12px}
+.detail-action{font-size:12px;font-weight:500;padding:7px 10px}
+.detail-action:hover{background:color-mix(in srgb, var(--text) 8%, transparent)}
+.detail-action:focus-visible{outline:2px solid var(--title-accent);outline-offset:-2px}
 .map-back-btn{padding:5px 14px}
 .theme-toggle:hover,.data-btn:hover,.map-back-btn:hover{background:color-mix(in srgb, var(--title-accent) 8%, transparent);color:var(--title-accent);border-color:var(--border-strong)}
 .data-btn.primary{background:var(--title-accent);border-color:var(--title-accent);color:var(--on-primary)}
