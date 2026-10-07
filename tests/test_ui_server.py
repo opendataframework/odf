@@ -912,6 +912,29 @@ def test_annotations_round_trip_and_accumulate_labels(tmp_path):
     assert json.loads(annotations_file.read_text())["repositories"]["photos"] == block
 
 
+def test_annotations_put_drops_labels_no_box_uses_any_more(tmp_path):
+    annotations_file = tmp_path / "ann.json"
+    NS = photos_namespace([Photo(name="a", image=b"jpg"), Photo(name="b", image=b"jpg")])
+    with Context(namespaces={NS}) as ctx:
+        client = TestClient(UiServer(ctx, "proj", annotations_file=annotations_file)._app)
+        client.put(
+            "/api/repositories/photos/records/a/annotations",
+            json={"width": 10, "height": 20, "annotations": [parcel_box()]},
+        )
+        client.put(
+            "/api/repositories/photos/records/b/annotations",
+            json={"width": 10, "height": 20, "annotations": [parcel_box("door")]},
+        )
+
+        r = client.put(
+            "/api/repositories/photos/records/a/annotations",
+            json={"width": 10, "height": 20, "annotations": []},
+        )
+
+    assert r.json() == {"labels": ["door"]}
+    assert json.loads(annotations_file.read_text())["repositories"]["photos"]["labels"] == ["door"]
+
+
 def test_annotations_put_rejects_a_malformed_body(tmp_path):
     annotations_file = tmp_path / "ann.json"
     NS = photos_namespace([Photo(name="a", image=b"jpg")])

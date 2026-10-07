@@ -3131,9 +3131,13 @@ function saveImageBoxes(boxes) {
   const body = { width: img.naturalWidth, height: img.naturalHeight, annotations: boxes };
   if (boxes.length) imageAnnotations.records[key] = body;
   else delete imageAnnotations.records[key];
+  // As the server will: drop the labels no box uses any more, then add the new ones.
+  const used = new Set(Object.values(imageAnnotations.records).flatMap(record => record.annotations.map(box => box.label)));
+  imageAnnotations.labels = imageAnnotations.labels.filter(label => used.has(label));
   for (const box of boxes) {
     if (!imageAnnotations.labels.includes(box.label)) imageAnnotations.labels.push(box.label);
   }
+  if (!imageAnnotations.labels.includes(lastBoxLabel)) lastBoxLabel = '';
   renderImageBoxes();
   const save = ++boxSaveCount;
   boxSaves = boxSaves.then(async () => {

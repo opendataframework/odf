@@ -28,10 +28,12 @@ The file holds one block per repository id::
       }
     }
 
-``labels`` is ordered and append-only, so a label's index is a stable class
-id. Coordinates are pixels in the image as displayed (``x``/``y`` the box's
-top-left corner), and each record carries the image's own ``width`` and
-``height`` so they can be normalised without decoding the image.
+``labels`` holds the labels the repository's boxes use, in the order each was
+first used. A label no box uses any more is dropped, so a label's index is a
+stable class id only while every label before it stays in use. Coordinates
+are pixels in the image as displayed (``x``/``y`` the box's top-left corner),
+and each record carries the image's own ``width`` and ``height`` so they can
+be normalised without decoding the image.
 """
 
 import json
@@ -105,8 +107,9 @@ def set_record(
 ) -> dict:
     """Replace one record's annotations in ``data``, in place.
 
-    Labels not seen before in this repository are appended to its ``labels``.
-    An empty ``annotations`` removes the record's entry; labels are kept.
+    Labels not seen before in this repository are appended to its ``labels``,
+    and labels none of its boxes use any more are dropped from it. An empty
+    ``annotations`` removes the record's entry.
 
     Args:
         data: The document described in the module docstring.
@@ -129,15 +132,17 @@ def set_record(
     boxes = [_box(item, image_width, image_height) for item in annotations]
 
     block = data.setdefault("repositories", {}).setdefault(repo_id, {})
-    labels = block.setdefault("labels", [])
     records = block.setdefault("records", {})
-    for box in boxes:
-        if box["label"] not in labels:
-            labels.append(box["label"])
     if boxes:
         records[key] = {"width": image_width, "height": image_height, "annotations": boxes}
     else:
         records.pop(key, None)
+    used = {box["label"] for record in records.values() for box in record["annotations"]}
+    labels = [label for label in block.get("labels", []) if label in used]
+    for box in boxes:
+        if box["label"] not in labels:
+            labels.append(box["label"])
+    block["labels"] = labels
     return repository(data, repo_id)
 
 

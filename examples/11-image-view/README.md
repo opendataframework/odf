@@ -75,7 +75,8 @@ annotation tool or a one-off script would be more than the job needs:
   pick with `↓`/`↑` and `Enter`; typing narrows the list, and the last label
   is prefilled.
 - Select a box and press `Delete` (or its `×`) to remove it. There is no move
-  or resize: delete the box and draw it again.
+  or resize: delete the box and draw it again. A label no box in the
+  repository uses any more is dropped from the list.
 - Select a box's label to change it.
 - `Esc` backs out of the label input, then the selection, then the photo.
 
@@ -105,8 +106,9 @@ path):
 
 - `repositories` is keyed by repository id, and `records` by record key (as a
   string). A record with no boxes has no entry.
-- `labels` lists every label used in that repository in the order it was first
-  used, and is only ever appended to, so a label's index is a stable class id.
+- `labels` lists the labels that repository's boxes use, in the order each was
+  first used. A label no box uses any more is dropped, so a label's index is a
+  stable class id only while every label before it stays in use.
 - `x`, `y`, `width` and `height` are pixels in the image, with `x`/`y` the
   box's top-left corner. `width` and `height` on the record are the image's own
   size, so boxes can be normalised without opening the image.

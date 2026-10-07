@@ -73,13 +73,50 @@ def test_set_record_keeps_repositories_separate():
     assert annotations.repository(data, "scans")["labels"] == ["stamp"]
 
 
-def test_set_record_with_no_annotations_removes_the_record_but_keeps_labels():
+def test_set_record_with_no_annotations_removes_the_record_and_its_labels():
     data = {}
     annotations.set_record(data, "photos", "a", 100, 100, [box("parcel")])
 
     block = annotations.set_record(data, "photos", "a", 100, 100, [])
 
-    assert block == {"labels": ["parcel"], "records": {}}
+    assert block == {"labels": [], "records": {}}
+
+
+def test_set_record_keeps_a_label_another_record_still_uses():
+    data = {}
+    annotations.set_record(data, "photos", "a", 100, 100, [box("parcel")])
+    annotations.set_record(data, "photos", "b", 100, 100, [box("parcel")])
+
+    block = annotations.set_record(data, "photos", "a", 100, 100, [])
+
+    assert block["labels"] == ["parcel"]
+
+
+def test_set_record_drops_a_label_its_only_box_was_relabelled_from():
+    data = {}
+    annotations.set_record(data, "photos", "a", 100, 100, [box("parcle"), box("door")])
+
+    block = annotations.set_record(data, "photos", "a", 100, 100, [box("parcel"), box("door")])
+
+    assert block["labels"] == ["door", "parcel"]
+
+
+def test_set_record_keeps_the_order_of_the_labels_still_used():
+    data = {}
+    annotations.set_record(data, "photos", "a", 100, 100, [box("parcel"), box("door")])
+    annotations.set_record(data, "photos", "b", 100, 100, [box("cat")])
+
+    block = annotations.set_record(data, "photos", "a", 100, 100, [box("door")])
+
+    assert block["labels"] == ["door", "cat"]
+
+
+def test_set_record_drops_unused_labels_already_in_the_file():
+    data = {"repositories": {"photos": {"labels": ["box", "door"], "records": {}}}}
+
+    block = annotations.set_record(data, "photos", "a", 100, 100, [box("door")])
+
+    assert block["labels"] == ["door"]
 
 
 def test_set_record_strips_labels_and_rounds_coordinates():
