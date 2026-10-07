@@ -93,3 +93,89 @@ odf run
 `GET /api/repositories` reports `OrderReceipts`' view as
 `{"kind": "document", "field": "document"}` — that's what tells the UI to
 render document cards instead of a table.
+
+## Annotating
+
+An open receipt can be labelled, for simple cases where a separate annotation
+tool or a one-off script would be more than the job needs. What it takes
+follows from what it opens as:
+
+- **Text** (`order-103.txt`): select some of it, type a label and press
+  `Enter`. Labels already used in the repository are listed under the input,
+  to click or to pick with `↓`/`↑` and `Enter`; typing narrows the list, and
+  the last label is prefilled. White space at either end of the selection is
+  left out, and a selection that runs into a span already there is refused,
+  so spans never overlap.
+- **Markdown and JSON text** (`order-105.md`, `order-106.json`): the same, in
+  **View source**. A span is a place in the text as written, which the
+  rendered view doesn't show.
+- **A PDF** (`order-104.pdf`): drag on a page to draw a box, then label it the
+  same way. A box inside a larger one stays on top, so it can still be
+  selected.
+- **A `dict` or `list`** (receipts 1 and 2) can't be labelled: it has no text
+  of its own for a span to point into.
+
+Select a span or a box and press `Delete` (or its `×`) to remove it, or select
+its label to change it. There is no move or resize: delete it and make it
+again. A label nothing in the repository uses any more is dropped from the
+list. `Esc` backs out of the label input, then the selection, then the
+receipt.
+
+Every change is saved to `annotations.json` in the directory `odf run` was
+started from (`[project] annotations-file` in `config.toml` names another
+path), the same file image boxes go to. `annotations = false` under `[ui]` in
+`config.toml` turns annotating off for a project that doesn't need it. The
+file looks like this:
+
+```json
+{
+  "version": 1,
+  "repositories": {
+    "order-receipts": {
+      "labels": ["total", "logo"],
+      "records": {
+        "3": {
+          "annotations": [
+            {"type": "span", "label": "total", "start": 220, "end": 227, "text": "50.00 €"}
+          ]
+        },
+        "4": {
+          "annotations": [
+            {"type": "box", "label": "logo", "page": 1,
+             "x": 40, "y": 32.5, "width": 120, "height": 48,
+             "page_width": 612, "page_height": 792}
+          ]
+        }
+      }
+    }
+  }
+}
+```
+
+- `repositories` is keyed by repository id, and `records` by record key (as a
+  string). A record with no annotations has no entry.
+- `labels` lists the labels that repository's annotations use, in the order
+  each was first used. A label nothing uses any more is dropped, so a label's
+  index is a stable class id only while every label before it stays in use.
+- A span's `start` and `end` (exclusive) count characters the way Python
+  indexes a `str`, into the document's text: the `str` itself, or the file's
+  bytes decoded as UTF-8 (after a byte order mark, if it has one). `text` is
+  what the span covered when it was drawn, to tell a document that has changed
+  since. A record's spans are listed in the order they appear in the text.
+- A box's `x`, `y`, `width` and `height` are PDF points (1/72 inch) from the
+  top-left corner of the page as displayed, with `page` counted from 1.
+  `page_width` and `page_height` are that page's own size, so a box can be
+  normalised without opening the PDF.
+
+The file is plain JSON, so a pipeline reads it without importing `odf`:
+
+```python
+import json
+from pathlib import Path
+
+block = json.load(open("annotations.json"))["repositories"]["order-receipts"]
+text = Path("data/receipts/order-103.txt").read_text(encoding="utf-8")
+for span in block["records"]["3"]["annotations"]:
+    assert text[span["start"] : span["end"]] == span["text"]
+    entity = (span["start"], span["end"], span["label"])  # spaCy-style
+```

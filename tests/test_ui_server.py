@@ -991,7 +991,57 @@ def test_extensions_report_annotations_enabled_with_a_file(tmp_path):
         assert client.get("/api/ui/extensions").json()["annotations"] is True
 
 
-def test_annotations_are_only_served_for_image_repositories(tmp_path):
+def test_document_annotations_round_trip(tmp_path):
+    annotations_file = tmp_path / "ann.json"
+    NS = papers_namespace([Paper(name="a", body="Total: $100.00"), Paper(name="b", body=b"%PDF-")])
+    span = {"type": "span", "label": "total", "start": 7, "end": 14, "text": "$100.00"}
+    page_box = {
+        "type": "box",
+        "label": "logo",
+        "page": 1,
+        "x": 40,
+        "y": 32.5,
+        "width": 120,
+        "height": 48,
+        "page_width": 612,
+        "page_height": 792,
+    }
+    with Context(namespaces={NS}) as ctx:
+        client = TestClient(UiServer(ctx, "proj", annotations_file=annotations_file)._app)
+
+        first = client.put(
+            "/api/repositories/papers/records/a/annotations", json={"annotations": [span]}
+        )
+        second = client.put(
+            "/api/repositories/papers/records/b/annotations", json={"annotations": [page_box]}
+        )
+        block = client.get("/api/repositories/papers/annotations").json()
+
+    assert first.json() == {"labels": ["total"]}
+    assert second.json() == {"labels": ["total", "logo"]}
+    assert block == {
+        "labels": ["total", "logo"],
+        "records": {"a": {"annotations": [span]}, "b": {"annotations": [page_box]}},
+    }
+    assert json.loads(annotations_file.read_text())["repositories"]["papers"] == block
+
+
+def test_document_annotations_put_rejects_a_malformed_body(tmp_path):
+    annotations_file = tmp_path / "ann.json"
+    NS = papers_namespace([Paper(name="a", body="Total: $100.00")])
+    with Context(namespaces={NS}) as ctx:
+        client = TestClient(UiServer(ctx, "proj", annotations_file=annotations_file)._app)
+
+        r = client.put(
+            "/api/repositories/papers/records/a/annotations",
+            json={"annotations": [{"type": "span", "label": "total", "start": 7, "end": 3}]},
+        )
+
+    assert r.status_code == 400
+    assert not annotations_file.exists()
+
+
+def test_annotations_are_only_served_for_image_and_document_repositories(tmp_path):
     NS = make_ns()
 
     @NS

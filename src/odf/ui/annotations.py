@@ -1,11 +1,12 @@
-"""Persists image annotations drawn in the UI to a JSON sidecar file.
+"""Persists annotations drawn in the UI to a JSON sidecar file.
 
-Backs the labelled boxes drawn over an open image in the image view (see
-``app.js``'s "Image annotations" section), so a project can label images in
-the dev UI and read the result from a later pipeline with nothing more than
-``json.load``. Scoped to whatever ``Path`` a ``UiServer`` is constructed with,
-like ``odf.ui.layout`` (see ``Server.start``'s ``annotations-file`` config
-key).
+Backs the labelled boxes drawn over an open image in the image view, and the
+labelled text spans and page boxes drawn on an open document in the document
+view (see ``app.js``'s "Image annotations" and "Document annotations"
+sections), so a project can label its data in the dev UI and read the result
+from a later pipeline with nothing more than ``json.load``. Scoped to whatever
+``Path`` a ``UiServer`` is constructed with, like ``odf.ui.layout`` (see
+``Server.start``'s ``annotations-file`` config key).
 
 The file holds one block per repository id::
 
@@ -24,20 +25,50 @@ The file holds one block per repository id::
               ]
             }
           }
+        },
+        "order-receipts": {
+          "labels": ["total", "logo"],
+          "records": {
+            "3": {
+              "annotations": [
+                {"type": "span", "label": "total",
+                 "start": 120, "end": 127, "text": "$100.00"}
+              ]
+            },
+            "4": {
+              "annotations": [
+                {"type": "box", "label": "logo", "page": 1,
+                 "x": 40, "y": 32.5, "width": 120, "height": 48,
+                 "page_width": 612, "page_height": 792}
+              ]
+            }
+          }
         }
       }
     }
 
-``labels`` holds the labels the repository's boxes use, in the order each was
-first used. A label no box uses any more is dropped, so a label's index is a
-stable class id only while every label before it stays in use. Coordinates
-are pixels in the image as displayed (``x``/``y`` the box's top-left corner),
-and each record carries the image's own ``width`` and ``height`` so they can
-be normalised without decoding the image.
+``labels`` holds the labels the repository's annotations use, in the order
+each was first used. A label no annotation uses any more is dropped, so a
+label's index is a stable class id only while every label before it stays in
+use.
+
+An image's coordinates are pixels in the image as displayed (``x``/``y`` the
+box's top-left corner), and each record carries the image's own ``width`` and
+``height`` so they can be normalised without decoding the image.
+
+A document's record has no size of its own. A span's ``start`` and ``end``
+(exclusive) count Unicode code points, as a Python ``str`` is indexed, into
+the document's text: the field's ``str`` value, or its bytes decoded as
+UTF-8. ``text`` is the text the span covered when it was drawn, so a reader
+can tell a document that has changed since. Spans in one record don't overlap
+and are kept in the order they appear in the text. A box on a PDF page is in
+PDF points from the top-left corner of the page as displayed, with ``page``
+counted from 1 and the page's own size beside it.
 """
 
 import json
 import os
+from itertools import pairwise
 from pathlib import Path
 
 VERSION = 1
@@ -130,18 +161,56 @@ def set_record(
     if not isinstance(annotations, list):
         raise ValueError("annotations must be a list")
     boxes = [_box(item, image_width, image_height) for item in annotations]
+    record = {"width": image_width, "height": image_height, "annotations": boxes}
+    return _store(data, repo_id, key, record)
 
+
+def set_document_record(data: dict, repo_id: str, key: str, annotations: object) -> dict:
+    """Replace one document record's annotations in ``data``, in place.
+
+    Labels are kept as ``set_record`` keeps them, and an empty ``annotations``
+    removes the record's entry.
+
+    Args:
+        data: The document described in the module docstring.
+        repo_id: The repository's kebab-case id.
+        key: The record's key, as it appears in the URL.
+        annotations: The record's full list of annotations: text spans, boxes
+            on PDF pages, or both.
+
+    Returns:
+        The repository's updated block, as ``repository()`` returns it.
+
+    Raises:
+        ValueError: If any annotation is malformed, or two spans overlap.
+    """
+    if not isinstance(annotations, list):
+        raise ValueError("annotations must be a list")
+    items = [_document_item(item) for item in annotations]
+    spans = sorted(
+        (item for item in items if item["type"] == "span"), key=lambda span: span["start"]
+    )
+    for before, after in pairwise(spans):
+        if after["start"] < before["end"]:
+            raise ValueError("spans must not overlap")
+    boxes = [item for item in items if item["type"] == "box"]
+    return _store(data, repo_id, key, {"annotations": spans + boxes})
+
+
+def _store(data: dict, repo_id: str, key: str, record: dict) -> dict:
+    """Put ``record`` under ``key``, or drop the key if it has no annotations."""
+    items = record["annotations"]
     block = data.setdefault("repositories", {}).setdefault(repo_id, {})
     records = block.setdefault("records", {})
-    if boxes:
-        records[key] = {"width": image_width, "height": image_height, "annotations": boxes}
+    if items:
+        records[key] = record
     else:
         records.pop(key, None)
-    used = {box["label"] for record in records.values() for box in record["annotations"]}
+    used = {item["label"] for saved in records.values() for item in saved["annotations"]}
     labels = [label for label in block.get("labels", []) if label in used]
-    for box in boxes:
-        if box["label"] not in labels:
-            labels.append(box["label"])
+    for item in items:
+        if item["label"] not in labels:
+            labels.append(item["label"])
     block["labels"] = labels
     return repository(data, repo_id)
 
@@ -163,9 +232,7 @@ def _box(item: object, image_width: int, image_height: int) -> dict:
     """Validate one annotation and clamp it to the image."""
     if not isinstance(item, dict) or item.get("type") != "box":
         raise ValueError('each annotation must be an object with "type": "box"')
-    label = item.get("label")
-    if not isinstance(label, str) or not label.strip():
-        raise ValueError("each annotation needs a non-empty label")
+    label = _label(item)
     left = round(_number(item.get("x"), "x"))
     top = round(_number(item.get("y"), "y"))
     right = left + _positive_int(item.get("width"), "width")
@@ -176,9 +243,80 @@ def _box(item: object, image_width: int, image_height: int) -> dict:
         raise ValueError("annotation lies outside the image")
     return {
         "type": "box",
-        "label": label.strip(),
+        "label": label,
         "x": left,
         "y": top,
         "width": right - left,
         "height": bottom - top,
+    }
+
+
+def _label(item: dict) -> str:
+    label = item.get("label")
+    if not isinstance(label, str) or not label.strip():
+        raise ValueError("each annotation needs a non-empty label")
+    return label.strip()
+
+
+def _whole(value: object, name: str) -> int:
+    if isinstance(value, bool) or not isinstance(value, int):
+        raise ValueError(f"{name} must be a whole number")
+    return value
+
+
+def _positive(value: object, name: str) -> float:
+    result = round(_number(value, name), 2)
+    if result <= 0:
+        raise ValueError(f"{name} must be positive")
+    return result
+
+
+def _document_item(item: object) -> dict:
+    """Validate one annotation of a document: a text span or a box on a page."""
+    kind = item.get("type") if isinstance(item, dict) else None
+    if kind == "span":
+        return _span(item)
+    if kind == "box":
+        return _page_box(item)
+    raise ValueError('each annotation must be an object with "type": "span" or "box"')
+
+
+def _span(item: dict) -> dict:
+    label = _label(item)
+    start = _whole(item.get("start"), "start")
+    end = _whole(item.get("end"), "end")
+    if start < 0 or end <= start:
+        raise ValueError("a span needs 0 <= start < end")
+    text = item.get("text")
+    if not isinstance(text, str) or len(text) != end - start:
+        raise ValueError("a span's text must be end - start characters long")
+    return {"type": "span", "label": label, "start": start, "end": end, "text": text}
+
+
+def _page_box(item: dict) -> dict:
+    """Validate a box on a PDF page and clamp it to the page."""
+    label = _label(item)
+    page = _whole(item.get("page"), "page")
+    if page < 1:
+        raise ValueError("page must be 1 or more")
+    page_width = _positive(item.get("page_width"), "page_width")
+    page_height = _positive(item.get("page_height"), "page_height")
+    left = _number(item.get("x"), "x")
+    top = _number(item.get("y"), "y")
+    right = left + _positive(item.get("width"), "width")
+    bottom = top + _positive(item.get("height"), "height")
+    left, right = max(left, 0), min(right, page_width)
+    top, bottom = max(top, 0), min(bottom, page_height)
+    if right <= left or bottom <= top:
+        raise ValueError("annotation lies outside the page")
+    return {
+        "type": "box",
+        "label": label,
+        "page": page,
+        "x": round(left, 2),
+        "y": round(top, 2),
+        "width": round(right - left, 2),
+        "height": round(bottom - top, 2),
+        "page_width": page_width,
+        "page_height": page_height,
     }

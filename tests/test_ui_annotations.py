@@ -162,3 +162,107 @@ def test_set_record_rejects_malformed_input(width, height, items):
         annotations.set_record(data, "photos", "a", width, height, items)
 
     assert annotations.repository(data, "photos") == {"labels": [], "records": {}}
+
+
+def span(label="total", start=7, end=14, text="$100.00"):
+    return {"type": "span", "label": label, "start": start, "end": end, "text": text}
+
+
+def page_box(label="logo", page=1, x=40, y=32.5, width=120, height=48):
+    return {
+        "type": "box",
+        "label": label,
+        "page": page,
+        "x": x,
+        "y": y,
+        "width": width,
+        "height": height,
+        "page_width": 612,
+        "page_height": 792,
+    }
+
+
+def test_set_document_record_stores_spans_and_page_boxes_without_a_size():
+    block = annotations.set_document_record({}, "papers", "a", [page_box(), span()])
+
+    assert block == {
+        "labels": ["total", "logo"],
+        "records": {"a": {"annotations": [span(), page_box()]}},
+    }
+
+
+def test_set_document_record_keeps_spans_in_text_order():
+    first = span("order", start=0, end=5, text="Order")
+    block = annotations.set_document_record({}, "papers", "a", [span(), first])
+
+    assert block["records"]["a"]["annotations"] == [first, span()]
+    assert block["labels"] == ["order", "total"]
+
+
+def test_set_document_record_strips_labels_and_counts_code_points():
+    block = annotations.set_document_record(
+        {}, "papers", "a", [span("  mood ", start=0, end=2, text="\U0001f600!")]
+    )
+
+    assert block["records"]["a"]["annotations"] == [
+        span("mood", start=0, end=2, text="\U0001f600!")
+    ]
+
+
+def test_set_document_record_allows_spans_that_touch():
+    items = [span("a", start=0, end=3, text="abc"), span("b", start=3, end=6, text="def")]
+
+    block = annotations.set_document_record({}, "papers", "a", items)
+
+    assert block["records"]["a"]["annotations"] == items
+
+
+def test_set_document_record_clamps_page_boxes_and_rounds_to_hundredths():
+    block = annotations.set_document_record(
+        {}, "papers", "a", [page_box(x=-10, y=700.123, width=1000, height=200)]
+    )
+
+    assert block["records"]["a"]["annotations"] == [
+        page_box(x=0, y=700.12, width=612, height=91.88)
+    ]
+
+
+def test_set_document_record_with_no_annotations_removes_the_record_and_its_labels():
+    data = {}
+    annotations.set_document_record(data, "papers", "a", [span()])
+    annotations.set_document_record(data, "papers", "b", [page_box()])
+
+    block = annotations.set_document_record(data, "papers", "a", [])
+
+    assert block == {"labels": ["logo"], "records": {"b": {"annotations": [page_box()]}}}
+
+
+@pytest.mark.parametrize(
+    "items",
+    [
+        "nope",
+        ["nope"],
+        [{**span(), "type": "polygon"}],
+        [span(label="   ")],
+        [span(start=-1, end=6)],
+        [span(start=7, end=7, text="")],
+        [span(start=7.0)],
+        [span(start=True, end=8, text="$100.00")],
+        [span(text="$100")],
+        [{**span(), "text": 7}],
+        [span(), span("tax", start=10, end=16, text="0.00 +")],
+        [page_box(page=0)],
+        [page_box(page=1.5)],
+        [page_box(width=0)],
+        [page_box(x=700)],
+        [{**page_box(), "page_width": 0}],
+        [{**page_box(), "page_height": "792"}],
+    ],
+)
+def test_set_document_record_rejects_malformed_input(items):
+    data = {}
+
+    with pytest.raises(ValueError):
+        annotations.set_document_record(data, "papers", "a", items)
+
+    assert annotations.repository(data, "papers") == {"labels": [], "records": {}}

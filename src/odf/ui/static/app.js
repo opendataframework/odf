@@ -2952,7 +2952,9 @@ for (const player of Object.values(LIGHTBOX_PLAYERS)) {
 // another stays clickable whichever was drawn first. There is no move or
 // resize: a wrong box is deleted and drawn again. A box is dragged out
 // free-form, or, with "Fixed box" picked in the lightbox bar, placed at a set
-// size in image pixels (see boxSize).
+// size in image pixels (see boxSize). The pages of a PDF take boxes the same
+// way, and text takes labelled spans, through the state and the label input
+// here (see "Document annotations" below).
 
 const BOX_COLORS = ['#ff6b6b', '#4dabf7', '#51cf66', '#fcc419', '#cc5de8', '#ff922b', '#22b8cf', '#f06595'];
 const BOX_MIN_DRAG = 4; // px a pointer must travel before a press counts as drawing rather than a click
@@ -2962,7 +2964,8 @@ let annotationsEnabled = false; // whether the server keeps an annotations file 
 let imageAnnotations = { labels: [], records: {} }; // the active repository's labels and boxes
 let imageLoaded = false; // whether the lightbox image has decoded, so its natural size is known
 let selectedBox = -1;    // index of the open image's selected box, -1 for none
-let boxDrag = null;      // the press in progress on the overlay, see its pointerdown listener
+let boxDrag = null;      // the press in progress on an overlay, see wireBoxOverlay
+let boxSurface = null;   // what that press, and the box it draws or relabels, is on, see surfaceOf
 let pendingBox = null;   // a box being drawn, or drawn and waiting for its label
 let relabelBox = -1;     // index of the box whose label is being edited, -1 for none
 let lastBoxLabel = '';
@@ -2981,6 +2984,16 @@ const imageLabelOptions = document.getElementById('image-label-options');
 const imageBoxMode = document.getElementById('image-box-mode');
 const imageBoxWidth = document.getElementById('image-box-width');
 const imageBoxHeight = document.getElementById('image-box-height');
+
+// What boxes are drawn on, the open image or one page of the open PDF:
+// `overlay` takes the pointer, `boxes` holds the drawn boxes, and `width` and
+// `height` are its size in the units boxes are saved in. `page` is the PDF
+// page's number, undefined for an image.
+function surfaceOf(overlay) {
+  if (overlay !== imageOverlay) return pageSurface(overlay.parentElement);
+  const img = document.getElementById('media-lightbox-img');
+  return { overlay, boxes: document.getElementById('image-boxes'), width: img.naturalWidth, height: img.naturalHeight };
+}
 
 function loadBoxSize() {
   try {
@@ -3052,7 +3065,9 @@ function resetImageAnnotationState() {
   boxDrag = null;
   pendingBox = null;
   relabelBox = -1;
+  boxSurface = null;
   imageLabelForm.hidden = true;
+  imageOverlay.appendChild(imageLabelForm); // back from the document it was opened in
   imageOverlay.hidden = true;
   document.getElementById('media-lightbox-hint').hidden = true;
   document.getElementById('image-box-size').hidden = true;
@@ -3090,42 +3105,56 @@ function boxColor(label) {
   return BOX_COLORS[(index < 0 ? imageAnnotations.labels.length : index) % BOX_COLORS.length];
 }
 
-function boxStyle(box, label) {
-  const img = document.getElementById('media-lightbox-img');
+function boxStyle(box, label, surface) {
   const pct = (value, total) => value / total * 100 + '%';
-  return `left:${pct(box.x, img.naturalWidth)};top:${pct(box.y, img.naturalHeight)};` +
-    `width:${pct(box.width, img.naturalWidth)};height:${pct(box.height, img.naturalHeight)};` +
+  return `left:${pct(box.x, surface.width)};top:${pct(box.y, surface.height)};` +
+    `width:${pct(box.width, surface.width)};height:${pct(box.height, surface.height)};` +
     `--box-color:${boxColor(label)}`;
 }
 
+// Redraws the open record's annotations: an image's boxes, or a document's
+// (see renderDocumentAnnotations).
 function renderImageBoxes() {
-  if (lightboxIndex < 0 || !imageLoaded) return;
+  if (lightboxIndex < 0) return;
+  if (mapMode === 'document') renderDocumentAnnotations();
+  else if (imageLoaded) renderSurfaceBoxes(surfaceOf(imageOverlay));
+}
+
+function renderSurfaceBoxes(surface) {
   const largestFirst = imageBoxes().map((box, i) => ({ box, i }))
+    .filter(({ box }) => box.type === 'box' && box.page === surface.page)
     .sort((a, b) => b.box.width * b.box.height - a.box.width * a.box.height);
-  document.getElementById('image-boxes').innerHTML = largestFirst.map(({ box, i }) =>
-    `<div class="image-box${i === selectedBox ? ' selected' : ''}" data-index="${i}" style="${boxStyle(box, box.label)}">` +
+  const draft = pendingBox && pendingBox.type !== 'span' && pendingBox.page === surface.page;
+  surface.boxes.innerHTML = largestFirst.map(({ box, i }) =>
+    `<div class="image-box${i === selectedBox ? ' selected' : ''}" data-index="${i}" style="${boxStyle(box, box.label, surface)}">` +
     `<span class="image-box-label" title="Change label">${escapeHtml(box.label)}</span>` +
     (i === selectedBox ? '<button type="button" class="image-box-delete" title="Delete (Del)">&times;</button>' : '') +
     '</div>').join('') +
-    (pendingBox ? `<div class="image-box draft" style="${boxStyle(pendingBox, lastBoxLabel)}"></div>` : '');
+    (draft ? `<div class="image-box draft" style="${boxStyle(pendingBox, lastBoxLabel, surface)}"></div>` : '');
 }
 
-// A pointer position as 0..1 fractions of the image, clamped to it.
-function overlayPoint(e) {
-  const rect = imageOverlay.getBoundingClientRect();
+// A pointer position as 0..1 fractions of the overlay, clamped to it.
+function overlayPoint(e, overlay) {
+  const rect = overlay.getBoundingClientRect();
   const clamp = v => Math.min(Math.max(v, 0), 1);
   return { x: clamp((e.clientX - rect.left) / rect.width), y: clamp((e.clientY - rect.top) / rect.height) };
 }
 
-function dragToBox(from, to) {
-  const img = document.getElementById('media-lightbox-img');
+// The box between two points of a surface, in whole pixels of an image or
+// hundredths of a point of a PDF page, which it then also names.
+function dragToBox(from, to, surface) {
+  const onPage = surface.page !== undefined;
+  const steps = onPage ? 100 : 1;
+  const unit = 1 / steps;
+  const snap = value => Math.round(value * steps) / steps;
   const span = (a, b, total) => {
-    const start = Math.min(Math.round(Math.min(a, b) * total), total - 1);
-    return [start, Math.max(Math.round(Math.max(a, b) * total) - start, 1)];
+    const start = Math.min(snap(Math.min(a, b) * total), total - unit);
+    return [start, Math.max(snap(Math.max(a, b) * total) - start, unit)];
   };
-  const [x, width] = span(from.x, to.x, img.naturalWidth);
-  const [y, height] = span(from.y, to.y, img.naturalHeight);
-  return { x, y, width, height };
+  const [x, width] = span(from.x, to.x, surface.width);
+  const [y, height] = span(from.y, to.y, surface.height);
+  const box = { x, y, width, height };
+  return onPage ? { ...box, page: surface.page, page_width: surface.width, page_height: surface.height } : box;
 }
 
 // Lists the repository's labels, as the server returned them, under the label
@@ -3148,18 +3177,24 @@ function stepImageLabelOption(step) {
   options[labelOption].scrollIntoView({ block: 'nearest' });
 }
 
-// Opens the label input under the box it is for: the one just drawn
+// Opens the label input under the box or span it is for: the one just drawn
 // (pendingBox), or an existing one being relabelled (relabelBox).
 function openImageLabelForm() {
-  const img = document.getElementById('media-lightbox-img');
   const box = pendingBox || imageBoxes()[relabelBox];
-  imageLabelInput.value = pendingBox ? lastBoxLabel : box.label;
+  const value = pendingBox ? lastBoxLabel : box.label;
+  if (box.type === 'span') return openSpanLabelForm(value);
+  const { overlay, width, height } = boxSurface;
+  openLabelFormIn(overlay, box.x / width * overlay.clientWidth, (box.y + box.height) / height * overlay.clientHeight + 4, value);
+}
+
+// Moves the label input into `host`, as near (left, top) as fits inside it.
+function openLabelFormIn(host, left, top, value) {
+  host.appendChild(imageLabelForm);
+  imageLabelInput.value = value;
   renderImageLabelOptions(''); // every label, whatever the input is prefilled with
   imageLabelForm.hidden = false;
-  const left = box.x / img.naturalWidth * imageOverlay.clientWidth;
-  const top = (box.y + box.height) / img.naturalHeight * imageOverlay.clientHeight + 4;
-  imageLabelForm.style.left = Math.max(Math.min(left, imageOverlay.clientWidth - imageLabelForm.offsetWidth), 0) + 'px';
-  imageLabelForm.style.top = Math.max(Math.min(top, imageOverlay.clientHeight - imageLabelForm.offsetHeight), 0) + 'px';
+  imageLabelForm.style.left = Math.max(Math.min(left, host.clientWidth - imageLabelForm.offsetWidth), 0) + 'px';
+  imageLabelForm.style.top = Math.max(Math.min(top, host.clientHeight - imageLabelForm.offsetHeight), 0) + 'px';
   imageLabelInput.focus();
   imageLabelInput.select();
 }
@@ -3167,6 +3202,7 @@ function openImageLabelForm() {
 function closeImageLabelForm() {
   if (imageLabelForm.hidden) return false;
   imageLabelForm.hidden = true;
+  imageOverlay.appendChild(imageLabelForm); // out of a document that may be redrawn under it
   pendingBox = null;
   relabelBox = -1;
   renderImageBoxes();
@@ -3188,13 +3224,14 @@ function deleteImageBox(index) {
   saveImageBoxes(imageBoxes().filter((_, i) => i !== index));
 }
 
-// Replaces the open image's boxes, showing the change at once and reloading
-// from the server if it could not be saved.
+// Replaces the open record's annotations, showing the change at once and
+// reloading from the server if it could not be saved.
 function saveImageBoxes(boxes) {
   const img = document.getElementById('media-lightbox-img');
   const repoId = activeRepoId;
   const key = imageRecordKey();
-  const body = { width: img.naturalWidth, height: img.naturalHeight, annotations: boxes };
+  const body = mapMode === 'document' ? { annotations: boxes }
+    : { width: img.naturalWidth, height: img.naturalHeight, annotations: boxes };
   if (boxes.length) imageAnnotations.records[key] = body;
   else delete imageAnnotations.records[key];
   // As the server will: drop the labels no box uses any more, then add the new ones.
@@ -3233,52 +3270,60 @@ document.getElementById('media-lightbox-img').addEventListener('load', () => {
 });
 new ResizeObserver(layoutImageAnnotations).observe(document.getElementById('media-lightbox-stage'));
 
-// A press on the overlay is a click (select a box, or act on its label or
+// A press on an overlay is a click (select a box, or act on its label or
 // delete button) until the pointer travels BOX_MIN_DRAG, when it becomes a
 // new box. The overlay captures the pointer, so a box can be drawn starting
 // inside another one and finished outside the image. A fixed-size box follows
 // the drag, centred on the pointer, and a click on a spot with no box places
-// one too, unless that click was closing the label input.
-imageOverlay.addEventListener('pointerdown', e => {
-  if (e.button !== 0 || e.target.closest('.image-label-form')) return;
-  e.preventDefault();
-  const dismissed = closeImageLabelForm();
-  boxDrag = { from: overlayPoint(e), clientX: e.clientX, clientY: e.clientY, target: e.target, drawing: false, dismissed };
-  imageOverlay.setPointerCapture(e.pointerId);
-});
-imageOverlay.addEventListener('pointermove', e => {
-  if (!boxDrag) return;
-  if (!boxDrag.drawing && Math.hypot(e.clientX - boxDrag.clientX, e.clientY - boxDrag.clientY) < BOX_MIN_DRAG) return;
-  boxDrag.drawing = true;
-  selectedBox = -1;
-  pendingBox = boxSize.fixed ? fixedBoxAt(overlayPoint(e)) : dragToBox(boxDrag.from, overlayPoint(e));
-  renderImageBoxes();
-});
-imageOverlay.addEventListener('pointerup', () => {
-  const drag = boxDrag;
-  if (!drag) return;
-  boxDrag = null;
-  if (drag.drawing) {
-    if (pendingBox) openImageLabelForm();
-    return;
-  }
-  const box = drag.target.closest('.image-box[data-index]');
-  const index = box ? Number(box.dataset.index) : -1;
-  if (index >= 0 && drag.target.closest('.image-box-delete')) return deleteImageBox(index);
-  selectedBox = index;
-  if (index < 0 && boxSize.fixed && !drag.dismissed) pendingBox = fixedBoxAt(drag.from);
-  renderImageBoxes();
-  if (pendingBox) return openImageLabelForm();
-  if (index >= 0 && drag.target.closest('.image-box-label')) {
-    relabelBox = index;
-    openImageLabelForm();
-  }
-});
-imageOverlay.addEventListener('pointercancel', () => {
-  boxDrag = null;
-  pendingBox = null;
-  renderImageBoxes();
-});
+// one too, unless that click was closing the label input. Only an image
+// takes fixed-size boxes.
+function wireBoxOverlay(overlay) {
+  const fixed = () => boxSize.fixed && overlay === imageOverlay;
+  overlay.addEventListener('pointerdown', e => {
+    if (e.button !== 0 || e.target.closest('.image-label-form')) return;
+    e.preventDefault();
+    const dismissed = closeImageLabelForm();
+    boxSurface = surfaceOf(overlay);
+    boxDrag = { from: overlayPoint(e, overlay), clientX: e.clientX, clientY: e.clientY, target: e.target, drawing: false, dismissed };
+    overlay.setPointerCapture(e.pointerId);
+  });
+  overlay.addEventListener('pointermove', e => {
+    if (!boxDrag) return;
+    if (!boxDrag.drawing && Math.hypot(e.clientX - boxDrag.clientX, e.clientY - boxDrag.clientY) < BOX_MIN_DRAG) return;
+    boxDrag.drawing = true;
+    selectedBox = -1;
+    const point = overlayPoint(e, overlay);
+    pendingBox = fixed() ? fixedBoxAt(point) : dragToBox(boxDrag.from, point, boxSurface);
+    renderImageBoxes();
+  });
+  overlay.addEventListener('pointerup', () => {
+    const drag = boxDrag;
+    if (!drag) return;
+    boxDrag = null;
+    if (drag.drawing) {
+      if (pendingBox) openImageLabelForm();
+      return;
+    }
+    const box = drag.target.closest('.image-box[data-index]');
+    const index = box ? Number(box.dataset.index) : -1;
+    if (index >= 0 && drag.target.closest('.image-box-delete')) return deleteImageBox(index);
+    selectedBox = index;
+    if (index < 0 && fixed() && !drag.dismissed) pendingBox = fixedBoxAt(drag.from);
+    renderImageBoxes();
+    if (pendingBox) return openImageLabelForm();
+    if (index >= 0 && drag.target.closest('.image-box-label')) {
+      relabelBox = index;
+      openImageLabelForm();
+    }
+  });
+  overlay.addEventListener('pointercancel', () => {
+    boxDrag = null;
+    pendingBox = null;
+    renderImageBoxes();
+  });
+}
+wireBoxOverlay(imageOverlay);
+
 function submitImageLabel(value) {
   const label = value.trim();
   if (!label) return;
@@ -3549,7 +3594,7 @@ let docLoadToken = 0;   // bumped whenever the reader is emptied, so a slow load
 let openPdf = null;     // the pdf.js document open in the reader
 let pdfPageObserver = null; // draws the open PDF's pages as they scroll into view
 let markdownRenderer = null; // text => safe HTML, or the promise loading it
-let openText = null;    // the text document open in the reader: { text, note, json, rendered }
+let openText = null;    // the text document open in the reader: { text, note, json, rendered, astral }
 
 function loadPdfJs() {
   if (!pdfJs) {
@@ -3600,7 +3645,7 @@ async function showDocumentView(repoId) {
   setMapMode('document');
   closeLightbox();
   document.getElementById('map-panel-title').textContent = `${schema.label} · documents`;
-  await refreshDocumentView();
+  await Promise.all([refreshDocumentView(), loadImageAnnotations()]);
 }
 
 async function refreshDocumentView() {
@@ -3691,7 +3736,8 @@ function parseJsonDocument(text) {
 // it reads as Markdown. `note` is HTML to put under it.
 function showDocumentText(text, note) {
   const json = parseJsonDocument(text);
-  openText = { text, note, json, rendered: json !== undefined || looksLikeMarkdown(text) };
+  // `astral`: whether it has characters that take two UTF-16 units, see unitsToPoints().
+  openText = { text, note, json, rendered: json !== undefined || looksLikeMarkdown(text), astral: /[\uD800-\uDFFF]/.test(text) };
   renderDocumentText();
 }
 
@@ -3711,13 +3757,17 @@ async function renderDocumentText() {
     }
     if (token !== docLoadToken) return;
   }
-  reader.innerHTML = (html === null ? `<pre class="doc-text">${escapeHtml(doc.text)}</pre>` : html) + doc.note;
+  reader.innerHTML = (html === null ? '<div class="doc-source"><pre class="doc-text"></pre></div>' : html) + doc.note;
+  if (html === null) renderDocumentSource();
+  renderDocumentHint();
   toggle.textContent = doc.rendered ? 'View source' : (doc.json !== undefined ? 'View as tree' : 'View as Markdown');
   toggle.hidden = false;
 }
 
 document.getElementById('media-lightbox-source').addEventListener('click', () => {
   if (!openText) return;
+  closeImageLabelForm();
+  selectedBox = -1;
   openText.rendered = !openText.rendered;
   renderDocumentText();
 });
@@ -3772,6 +3822,7 @@ async function openPdfDocument(reader, url, token) {
   const pdf = await lib.getDocument({ url }).promise;
   if (token !== docLoadToken) { pdf.destroy(); return; }
   openPdf = pdf;
+  renderDocumentHint();
   const first = (await pdf.getPage(1)).getViewport({ scale: 1 });
   if (token !== docLoadToken) return;
   pdfPageObserver = new IntersectionObserver(entries => {
@@ -3780,7 +3831,11 @@ async function openPdfDocument(reader, url, token) {
       pdfPageObserver.unobserve(entry.target);
       const canvas = entry.target;
       pdf.getPage(Number(canvas.dataset.page))
-        .then(page => token === docLoadToken && drawPdfPage(page, canvas, canvas.clientWidth * (window.devicePixelRatio || 1)))
+        .then(page => {
+          if (token !== docLoadToken) return;
+          addPageOverlay(canvas.parentElement, page);
+          return drawPdfPage(page, canvas, canvas.clientWidth * (window.devicePixelRatio || 1));
+        })
         .catch(() => {}); // the document was closed mid-draw
     }
   }, { root: reader, rootMargin: '600px 0px' });
@@ -3792,7 +3847,11 @@ async function openPdfDocument(reader, url, token) {
     // Until it is drawn, a page takes the first page's shape.
     canvas.width = first.width;
     canvas.height = first.height;
-    reader.appendChild(canvas);
+    const wrap = document.createElement('div');
+    wrap.className = 'doc-page-wrap';
+    wrap.dataset.page = number;
+    wrap.appendChild(canvas);
+    reader.appendChild(wrap);
     pdfPageObserver.observe(canvas);
   }
 }
@@ -3815,6 +3874,199 @@ function renderJsonTree(value) {
   if (typeof value === 'string') return `<span class="doc-string">"${escapeHtml(value)}"</span>`;
   return `<span class="doc-scalar">${escapeHtml(String(value))}</span>`;
 }
+
+// ── Document annotations ──────────────────────────────────────────────────
+// Labels on the document open in the lightbox, held in the same state and
+// saved through the same endpoint as the boxes of "Image annotations" above.
+// A PDF takes boxes, drawn on a page as they are on an image and held in PDF
+// points. Text takes spans: selecting some of it opens the label input. A
+// span is held as offsets into the text, so it is drawn, and can only be
+// made, where the text is shown as written, which for a Markdown or JSON
+// document is its source. A document held in the record as a JSON value (a
+// dict, say) has no text to count into, and takes none.
+
+// Says under the document how it is annotated, if it can be.
+function renderDocumentHint() {
+  const hint = document.getElementById('media-lightbox-hint');
+  const text = !annotationsEnabled ? ''
+    : openPdf ? 'Drag on a page to add a box'
+      : !openText ? ''
+        : openText.rendered ? 'View source to label text' : 'Select text to add a label';
+  hint.textContent = text;
+  hint.hidden = !text;
+}
+
+function renderDocumentAnnotations() {
+  if (openPdf) {
+    for (const wrap of document.querySelectorAll('#media-lightbox-doc .doc-page-wrap[data-width]')) {
+      renderSurfaceBoxes(pageSurface(wrap));
+    }
+  } else if (openText && !openText.rendered) {
+    renderDocumentSource();
+  }
+}
+
+// The surface (see surfaceOf) of a PDF page that has been given its overlay.
+function pageSurface(wrap) {
+  const overlay = wrap.querySelector('.image-annotations');
+  return {
+    overlay,
+    boxes: overlay.firstElementChild,
+    width: Number(wrap.dataset.width),
+    height: Number(wrap.dataset.height),
+    page: Number(wrap.dataset.page),
+  };
+}
+
+// Lays the overlay boxes are drawn on over a PDF page, once the page's own
+// size is known, which is when it is about to be drawn.
+function addPageOverlay(wrap, page) {
+  if (!annotationsEnabled || wrap.dataset.width) return;
+  const size = page.getViewport({ scale: 1 });
+  wrap.dataset.width = Math.round(size.width * 100) / 100;
+  wrap.dataset.height = Math.round(size.height * 100) / 100;
+  const overlay = document.createElement('div');
+  overlay.className = 'image-annotations';
+  overlay.appendChild(document.createElement('div'));
+  wrap.appendChild(overlay);
+  wireBoxOverlay(overlay);
+  renderSurfaceBoxes(pageSurface(wrap));
+}
+
+// Offsets in the annotations file count code points, as a Python str is
+// indexed, where a JS string counts UTF-16 units. The two only differ in text
+// with characters outside the BMP (openText.astral).
+function unitsToPoints(units) {
+  return openText.astral ? [...openText.text.slice(0, units)].length : units;
+}
+
+function pointsToUnits(points) {
+  if (!openText.astral) return points;
+  let units = 0;
+  for (const ch of openText.text) {
+    if (points-- <= 0) break;
+    units += ch.length;
+  }
+  return units;
+}
+
+// Fills the reader's source <pre> with the open text, its spans as <mark>s.
+// It is built from nodes rather than HTML, which would drop a leading newline
+// and fold each CRLF into one character, moving every offset after it.
+function renderDocumentSource() {
+  const pre = document.querySelector('#media-lightbox-doc .doc-text');
+  if (!pre) return;
+  const text = openText.text;
+  const spans = imageBoxes().map((span, i) => ({ span, i }));
+  if (pendingBox && pendingBox.type === 'span') spans.push({ span: pendingBox, i: -1 });
+  const nodes = [];
+  let at = 0;
+  for (const { span, i } of spans.filter(({ span }) => span.type === 'span').sort((a, b) => a.span.start - b.span.start)) {
+    const start = pointsToUnits(span.start);
+    const end = pointsToUnits(span.end);
+    if (start < at || end > text.length) continue; // the text is no longer the one this was drawn on
+    const mark = document.createElement('mark');
+    mark.className = 'doc-span' + (i < 0 ? ' draft' : i === selectedBox ? ' selected' : '');
+    mark.style.setProperty('--box-color', boxColor(i < 0 ? lastBoxLabel : span.label));
+    mark.append(text.slice(start, end));
+    if (i >= 0) {
+      mark.dataset.index = i;
+      const label = document.createElement('span');
+      label.className = 'doc-span-label';
+      label.title = 'Change label';
+      label.textContent = span.label;
+      mark.append(label);
+    }
+    if (i >= 0 && i === selectedBox) {
+      const remove = document.createElement('button');
+      remove.type = 'button';
+      remove.className = 'doc-span-delete';
+      remove.title = 'Delete (Del)';
+      remove.textContent = '\u00d7';
+      mark.append(remove);
+    }
+    nodes.push(text.slice(at, start), mark);
+    at = end;
+  }
+  nodes.push(text.slice(at));
+  pre.replaceChildren(...nodes);
+}
+
+// The offset into the open text of a position in the source <pre>, as a
+// selection gives it. The labels drawn on the spans are not part of the text.
+function sourceOffset(pre, node, offset) {
+  const before = document.createRange();
+  before.setStart(pre, 0);
+  before.setEnd(node, offset);
+  const walker = document.createTreeWalker(pre, NodeFilter.SHOW_TEXT, {
+    acceptNode: text => text.parentElement.closest('.doc-span-label, .doc-span-delete')
+      ? NodeFilter.FILTER_REJECT : NodeFilter.FILTER_ACCEPT,
+  });
+  let total = 0;
+  for (let text = walker.nextNode(); text; text = walker.nextNode()) {
+    if (text === node) return total + offset;
+    if (!before.intersectsNode(text)) break;
+    total += text.length;
+  }
+  return total;
+}
+
+function openSpanLabelForm(value) {
+  const host = document.querySelector('#media-lightbox-doc .doc-source');
+  const mark = host.querySelector(pendingBox ? '.doc-span.draft' : `.doc-span[data-index="${relabelBox}"]`);
+  if (!mark) return closeImageLabelForm();
+  const rect = mark.getBoundingClientRect();
+  const origin = host.getBoundingClientRect();
+  openLabelFormIn(host, rect.left - origin.left, rect.bottom - origin.top + 4, value);
+}
+
+// Turns the selection into a span waiting for its label, less the white
+// space at its ends. Spans don't overlap, so one that would is refused.
+function startSpanFromSelection(pre, range) {
+  const text = openText.text;
+  let start = sourceOffset(pre, range.startContainer, range.startOffset);
+  let end = sourceOffset(pre, range.endContainer, range.endOffset);
+  while (start < end && /\s/.test(text[start])) start++;
+  while (end > start && /\s/.test(text[end - 1])) end--;
+  getSelection().removeAllRanges();
+  closeImageLabelForm();
+  if (start === end) return;
+  const span = { type: 'span', start: unitsToPoints(start), end: unitsToPoints(end), text: text.slice(start, end) };
+  if (imageBoxes().some(other => other.type === 'span' && span.start < other.end && other.start < span.end)) {
+    addLog('That text already has a label on part of it', ACCENT.alert);
+    return;
+  }
+  selectedBox = -1;
+  pendingBox = span;
+  renderDocumentSource();
+  openImageLabelForm();
+}
+
+// A selection made in the source becomes a span wherever the pointer is let
+// go. Short of one, a click selects the span it is on, or acts on that span's
+// label or delete button.
+document.addEventListener('mouseup', e => {
+  if (!annotationsEnabled || lightboxIndex < 0 || !openText || openText.rendered) return;
+  const pre = document.querySelector('#media-lightbox-doc .doc-text');
+  if (!pre || !(e.target instanceof Element) || e.target.closest('.image-label-form')) return;
+  const selection = getSelection();
+  if (!selection.isCollapsed && selection.rangeCount && pre.contains(selection.getRangeAt(0).commonAncestorContainer)) {
+    return startSpanFromSelection(pre, selection.getRangeAt(0));
+  }
+  if (!pre.contains(e.target)) return;
+  const dismissed = closeImageLabelForm();
+  const mark = e.target.closest('.doc-span[data-index]');
+  const index = mark ? Number(mark.dataset.index) : -1;
+  if (index >= 0 && e.target.closest('.doc-span-delete')) return deleteImageBox(index);
+  const onLabel = index >= 0 && e.target.closest('.doc-span-label');
+  if (index === selectedBox && !dismissed && !onLabel) return;
+  selectedBox = index;
+  renderDocumentSource();
+  if (onLabel) {
+    relabelBox = index;
+    openImageLabelForm();
+  }
+});
 
 // ── Timeseries view ───────────────────────────────────────────────────────
 // Backs the "View Timeline" action on repository nodes whose DataView is a

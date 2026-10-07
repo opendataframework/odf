@@ -117,9 +117,9 @@ class Server:
                 extra (``pip install odf[ui]``). Grid positions moved by
                 dragging a node persist to the file named by ``[project]
                 layout-file`` in config (default ``"layout.json"``, relative
-                to the current working directory). Boxes drawn in the image
-                view persist to the file named by ``[project]
-                annotations-file`` (default ``"annotations.json"``, see
+                to the current working directory). Annotations drawn in the
+                image and document views persist to the file named by
+                ``[project] annotations-file`` (default ``"annotations.json"``, see
                 ``odf.ui.annotations``), unless ``[ui] annotations = false``
                 turns annotating off. The icon/color pickers can
                 be extended beyond the built-in set via ``[ui] icon-scripts``

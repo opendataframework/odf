@@ -51,6 +51,17 @@
   with that type and can be downloaded. The
   [`12-document-view`](https://github.com/opendataframework/odf/tree/main/examples/12-document-view)
   example shows each kind.
+- **UI**: an open document in the document view can be labelled. Select text to label
+  that span of it, or drag on a PDF page to draw a labelled box, as on an image; select a
+  span or a box to delete it, or select its label to change it. Spans are drawn on text as
+  it is written, so a Markdown or JSON document is labelled from `View source`, and spans
+  don't overlap. A `dict` or `list` document takes no labels. They are saved to the same
+  `annotations.json` as image boxes: a span as its start and end in the text, counted in
+  characters as Python indexes a `str`, with the text it covers, and a page box in PDF
+  points with its page number and the page's size. The
+  [`12-document-view`](https://github.com/opendataframework/odf/tree/main/examples/12-document-view)
+  example describes the format. `[ui] annotations = false` in `config.toml` turns
+  annotating off.
 
 ### Changed
 
