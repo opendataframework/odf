@@ -71,7 +71,9 @@ An open photo can be labelled with boxes, for simple cases where a separate
 annotation tool or a one-off script would be more than the job needs:
 
 - Drag on the photo to draw a box, type its label and press `Enter`. Labels
-  already used in the repository are suggested, and the last one is prefilled.
+  already used in the repository are listed under the input, to click or to
+  pick with `↓`/`↑` and `Enter`; typing narrows the list, and the last label
+  is prefilled.
 - Select a box and press `Delete` (or its `×`) to remove it. There is no move
   or resize: delete the box and draw it again.
 - Select a box's label to change it.

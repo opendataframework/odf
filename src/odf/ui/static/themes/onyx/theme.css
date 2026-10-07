@@ -441,6 +441,11 @@ button.media-tile:hover,button.media-tile:focus-visible{border-color:var(--title
 .image-label-form[hidden]{display:none}
 .image-label-form input{width:150px;background:var(--panel);border:1px solid var(--border-strong);color:var(--text);font-family:inherit;font-size:11.5px;padding:5px 8px;border-radius:6px}
 .image-label-form input:focus{outline:none;border-color:var(--title-accent)}
+.image-label-options{display:flex;flex-direction:column;width:150px;box-sizing:border-box;max-height:132px;overflow-y:auto;margin-top:2px;background:var(--panel);border:1px solid var(--border-strong);border-radius:6px}
+.image-label-options[hidden]{display:none}
+.image-label-option{display:flex;align-items:center;gap:6px;flex:none;padding:4px 8px;border:0;background:none;color:var(--text);font-family:inherit;font-size:11.5px;text-align:left;cursor:pointer;overflow:hidden;white-space:nowrap}
+.image-label-option:hover,.image-label-option.active{background:color-mix(in srgb, var(--box-color) 28%, transparent)}
+.image-label-swatch{flex:none;width:8px;height:8px;background:var(--box-color)}
 
 /* Bounded Video/Audio view — a list of seekable clips, one per record. */
 .media-list{display:flex;flex-direction:column;gap:14px}

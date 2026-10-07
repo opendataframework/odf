@@ -2961,11 +2961,14 @@ let boxDrag = null;      // the press in progress on the overlay, see its pointe
 let pendingBox = null;   // a box being drawn, or drawn and waiting for its label
 let relabelBox = -1;     // index of the box whose label is being edited, -1 for none
 let lastBoxLabel = '';
+let labelOption = -1;    // index of the label option picked with the arrow keys, -1 for none
 let boxSaves = Promise.resolve(); // chains saves, so they reach the server in the order they were made
+let boxSaveCount = 0;    // saves made so far, so only the latest one's response sets the labels
 
 const imageOverlay = document.getElementById('image-annotations');
 const imageLabelForm = document.getElementById('image-label-form');
 const imageLabelInput = document.getElementById('image-label-input');
+const imageLabelOptions = document.getElementById('image-label-options');
 
 async function loadImageAnnotations() {
   imageAnnotations = { labels: [], records: {} };
@@ -3059,14 +3062,33 @@ function dragToBox(from, to) {
   return { x, y, width, height };
 }
 
+// Lists the repository's labels, as the server returned them, under the label
+// input: the ones containing `filter`, or all of them when it is empty.
+function renderImageLabelOptions(filter) {
+  const text = filter.trim().toLowerCase();
+  const labels = imageAnnotations.labels.filter(label => label.toLowerCase().includes(text));
+  labelOption = -1;
+  imageLabelOptions.innerHTML = labels.map(label =>
+    `<button type="button" class="image-label-option" data-label="${escapeHtml(label)}" style="--box-color:${boxColor(label)}">` +
+    `<span class="image-label-swatch"></span>${escapeHtml(label)}</button>`).join('');
+  imageLabelOptions.hidden = !labels.length;
+}
+
+function stepImageLabelOption(step) {
+  const options = [...imageLabelOptions.children];
+  if (!options.length) return;
+  labelOption = (labelOption + step + options.length + (labelOption < 0 && step < 0 ? 1 : 0)) % options.length;
+  options.forEach((option, i) => option.classList.toggle('active', i === labelOption));
+  options[labelOption].scrollIntoView({ block: 'nearest' });
+}
+
 // Opens the label input under the box it is for: the one just drawn
 // (pendingBox), or an existing one being relabelled (relabelBox).
 function openImageLabelForm() {
   const img = document.getElementById('media-lightbox-img');
   const box = pendingBox || imageBoxes()[relabelBox];
-  document.getElementById('image-label-options').innerHTML =
-    imageAnnotations.labels.map(label => `<option value="${escapeHtml(label)}">`).join('');
   imageLabelInput.value = pendingBox ? lastBoxLabel : box.label;
+  renderImageLabelOptions(''); // every label, whatever the input is prefilled with
   imageLabelForm.hidden = false;
   const left = box.x / img.naturalWidth * imageOverlay.clientWidth;
   const top = (box.y + box.height) / img.naturalHeight * imageOverlay.clientHeight + 4;
@@ -3113,6 +3135,7 @@ function saveImageBoxes(boxes) {
     if (!imageAnnotations.labels.includes(box.label)) imageAnnotations.labels.push(box.label);
   }
   renderImageBoxes();
+  const save = ++boxSaveCount;
   boxSaves = boxSaves.then(async () => {
     try {
       const res = await fetch(`/api/repositories/${repoId}/records/${encodeURIComponent(key)}/annotations`, {
@@ -3121,6 +3144,10 @@ function saveImageBoxes(boxes) {
         body: JSON.stringify(body),
       });
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      const { labels } = await res.json();
+      if (repoId !== activeRepoId || save !== boxSaveCount) return; // a later save's labels are on their way
+      imageAnnotations.labels = labels;
+      if (!imageLabelForm.hidden) renderImageLabelOptions(imageLabelInput.value);
     } catch (err) {
       addLog(`Failed to save annotations for ${key}`, ACCENT.alert);
       if (repoId === activeRepoId) await loadImageAnnotations();
@@ -3175,9 +3202,8 @@ imageOverlay.addEventListener('pointercancel', () => {
   pendingBox = null;
   renderImageBoxes();
 });
-imageLabelForm.addEventListener('submit', e => {
-  e.preventDefault();
-  const label = imageLabelInput.value.trim();
+function submitImageLabel(value) {
+  const label = value.trim();
   if (!label) return;
   const boxes = imageBoxes().map(box => ({ ...box }));
   if (pendingBox) boxes.push({ type: 'box', label, ...pendingBox });
@@ -3185,6 +3211,22 @@ imageLabelForm.addEventListener('submit', e => {
   lastBoxLabel = label;
   closeImageLabelForm();
   saveImageBoxes(boxes);
+}
+
+imageLabelForm.addEventListener('submit', e => {
+  e.preventDefault();
+  const picked = imageLabelOptions.children[labelOption];
+  submitImageLabel(picked ? picked.dataset.label : imageLabelInput.value);
+});
+imageLabelInput.addEventListener('input', () => renderImageLabelOptions(imageLabelInput.value));
+imageLabelInput.addEventListener('keydown', e => {
+  if (e.key !== 'ArrowDown' && e.key !== 'ArrowUp') return;
+  e.preventDefault();
+  stepImageLabelOption(e.key === 'ArrowDown' ? 1 : -1);
+});
+imageLabelOptions.addEventListener('click', e => {
+  const option = e.target.closest('.image-label-option');
+  if (option) submitImageLabel(option.dataset.label);
 });
 
 // ── Media view (bounded Video/Audio) ────────────────────────────────────
