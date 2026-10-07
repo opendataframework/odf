@@ -479,7 +479,7 @@ button.media-tile:hover,button.media-tile:focus-visible{border-color:var(--title
 .doc-page-wrap .doc-page{margin-bottom:0}
 .doc-page-wrap .image-annotations{inset:0;touch-action:pan-y}
 .doc-source{position:relative}
-.doc-source .doc-text{margin:0}
+.doc-source .doc-text{margin:0;cursor:text;user-select:text;-webkit-user-select:text}
 .doc-span{color:inherit;background:color-mix(in srgb, var(--box-color) 24%, transparent);border-bottom:2px solid var(--box-color);cursor:pointer}
 .doc-span.selected{background:color-mix(in srgb, var(--box-color) 48%, transparent)}
 .doc-span.draft{border-bottom-style:dashed;cursor:text}
