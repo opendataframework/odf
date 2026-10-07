@@ -22,7 +22,9 @@
 - **UI**: labelled boxes can be drawn on an open image in the image view. Drag to draw a
   box and type its label, or pick one already used from the list under the input; select a box to delete it,
   or select its label to change it. A box inside a larger one stays on top, so it can
-  still be selected. A label no box uses any more is dropped from the list. Boxes are saved to `annotations.json`, or the file
+  still be selected. With `Fixed box` picked under the image, every new box takes the
+  width and height set beside it, in image pixels, for algorithms that need boxes of one
+  size: click or drag to place one centred on the pointer, kept whole inside the image. A label no box uses any more is dropped from the list. Boxes are saved to `annotations.json`, or the file
   named by `[project] annotations-file` in `config.toml`, as pixel coordinates with each
   image's size and an ordered label list per repository, for a later pipeline to read
   with `json.load`. The

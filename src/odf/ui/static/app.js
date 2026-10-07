@@ -2950,10 +2950,13 @@ for (const player of Object.values(LIGHTBOX_PLAYERS)) {
 // are held in image pixels and drawn in percent of the image, so they follow
 // the lightbox as it resizes. They are painted largest first, so a box inside
 // another stays clickable whichever was drawn first. There is no move or
-// resize: a wrong box is deleted and drawn again.
+// resize: a wrong box is deleted and drawn again. A box is dragged out
+// free-form, or, with "Fixed box" picked in the lightbox bar, placed at a set
+// size in image pixels (see boxSize).
 
 const BOX_COLORS = ['#ff6b6b', '#4dabf7', '#51cf66', '#fcc419', '#cc5de8', '#ff922b', '#22b8cf', '#f06595'];
 const BOX_MIN_DRAG = 4; // px a pointer must travel before a press counts as drawing rather than a click
+const BOX_SIZE_KEY = 'odf-ui-box-size';
 
 let annotationsEnabled = false; // whether the server keeps an annotations file (see loadUiExtensions)
 let imageAnnotations = { labels: [], records: {} }; // the active repository's labels and boxes
@@ -2966,11 +2969,67 @@ let lastBoxLabel = '';
 let labelOption = -1;    // index of the label option picked with the arrow keys, -1 for none
 let boxSaves = Promise.resolve(); // chains saves, so they reach the server in the order they were made
 let boxSaveCount = 0;    // saves made so far, so only the latest one's response sets the labels
+// Whether new boxes take a set size, in image pixels, rather than the dragged
+// one. A per-browser preference, so it lives in localStorage rather than the
+// annotations file.
+let boxSize = { fixed: false, width: 16, height: 16 };
 
 const imageOverlay = document.getElementById('image-annotations');
 const imageLabelForm = document.getElementById('image-label-form');
 const imageLabelInput = document.getElementById('image-label-input');
 const imageLabelOptions = document.getElementById('image-label-options');
+const imageBoxMode = document.getElementById('image-box-mode');
+const imageBoxWidth = document.getElementById('image-box-width');
+const imageBoxHeight = document.getElementById('image-box-height');
+
+function loadBoxSize() {
+  try {
+    const s = JSON.parse(localStorage.getItem(BOX_SIZE_KEY) || '{}');
+    if (typeof s.fixed === 'boolean') boxSize.fixed = s.fixed;
+    if (Number.isInteger(s.width) && s.width > 0) boxSize.width = s.width;
+    if (Number.isInteger(s.height) && s.height > 0) boxSize.height = s.height;
+  } catch {}
+}
+
+function saveBoxSize() {
+  try { localStorage.setItem(BOX_SIZE_KEY, JSON.stringify(boxSize)); } catch {}
+}
+
+// Whether the open image has room for a box of the set size.
+function fixedBoxFits() {
+  const img = document.getElementById('media-lightbox-img');
+  return boxSize.width <= img.naturalWidth && boxSize.height <= img.naturalHeight;
+}
+
+// Shows boxSize in the lightbox bar's controls, and in the hint beside them.
+function renderBoxSizeControl() {
+  imageBoxMode.value = boxSize.fixed ? 'fixed' : 'free';
+  imageBoxWidth.value = boxSize.width;
+  imageBoxHeight.value = boxSize.height;
+  for (const el of [imageBoxWidth, imageBoxHeight, document.querySelector('.image-box-size-x')]) {
+    el.hidden = !boxSize.fixed;
+  }
+  const size = `${boxSize.width} × ${boxSize.height}`;
+  document.getElementById('media-lightbox-hint').textContent =
+    !boxSize.fixed ? 'Drag on the image to add a box'
+      : imageLoaded && !fixedBoxFits() ? `Image is smaller than the ${size} box`
+        : `Click the image to add a ${size} box`;
+}
+
+// A box of the set size centred on `point` (0..1 fractions of the image),
+// slid back inside the image where it would cross an edge. Null when the
+// image is smaller than the box.
+function fixedBoxAt(point) {
+  const img = document.getElementById('media-lightbox-img');
+  if (!fixedBoxFits()) return null;
+  const start = (at, size, total) => Math.min(Math.max(Math.round(at * total - size / 2), 0), total - size);
+  return {
+    x: start(point.x, boxSize.width, img.naturalWidth),
+    y: start(point.y, boxSize.height, img.naturalHeight),
+    width: boxSize.width,
+    height: boxSize.height,
+  };
+}
 
 async function loadImageAnnotations() {
   imageAnnotations = { labels: [], records: {} };
@@ -2996,6 +3055,7 @@ function resetImageAnnotationState() {
   imageLabelForm.hidden = true;
   imageOverlay.hidden = true;
   document.getElementById('media-lightbox-hint').hidden = true;
+  document.getElementById('image-box-size').hidden = true;
 }
 
 function imageRecordKey() {
@@ -3021,6 +3081,8 @@ function layoutImageAnnotations() {
   imageOverlay.style.height = height + 'px';
   imageOverlay.hidden = false;
   document.getElementById('media-lightbox-hint').hidden = false;
+  document.getElementById('image-box-size').hidden = false;
+  renderBoxSizeControl();
 }
 
 function boxColor(label) {
@@ -3174,12 +3236,14 @@ new ResizeObserver(layoutImageAnnotations).observe(document.getElementById('medi
 // A press on the overlay is a click (select a box, or act on its label or
 // delete button) until the pointer travels BOX_MIN_DRAG, when it becomes a
 // new box. The overlay captures the pointer, so a box can be drawn starting
-// inside another one and finished outside the image.
+// inside another one and finished outside the image. A fixed-size box follows
+// the drag, centred on the pointer, and a click on a spot with no box places
+// one too, unless that click was closing the label input.
 imageOverlay.addEventListener('pointerdown', e => {
   if (e.button !== 0 || e.target.closest('.image-label-form')) return;
   e.preventDefault();
-  closeImageLabelForm();
-  boxDrag = { from: overlayPoint(e), clientX: e.clientX, clientY: e.clientY, target: e.target, drawing: false };
+  const dismissed = closeImageLabelForm();
+  boxDrag = { from: overlayPoint(e), clientX: e.clientX, clientY: e.clientY, target: e.target, drawing: false, dismissed };
   imageOverlay.setPointerCapture(e.pointerId);
 });
 imageOverlay.addEventListener('pointermove', e => {
@@ -3187,19 +3251,24 @@ imageOverlay.addEventListener('pointermove', e => {
   if (!boxDrag.drawing && Math.hypot(e.clientX - boxDrag.clientX, e.clientY - boxDrag.clientY) < BOX_MIN_DRAG) return;
   boxDrag.drawing = true;
   selectedBox = -1;
-  pendingBox = dragToBox(boxDrag.from, overlayPoint(e));
+  pendingBox = boxSize.fixed ? fixedBoxAt(overlayPoint(e)) : dragToBox(boxDrag.from, overlayPoint(e));
   renderImageBoxes();
 });
 imageOverlay.addEventListener('pointerup', () => {
   const drag = boxDrag;
   if (!drag) return;
   boxDrag = null;
-  if (drag.drawing) return openImageLabelForm();
+  if (drag.drawing) {
+    if (pendingBox) openImageLabelForm();
+    return;
+  }
   const box = drag.target.closest('.image-box[data-index]');
   const index = box ? Number(box.dataset.index) : -1;
   if (index >= 0 && drag.target.closest('.image-box-delete')) return deleteImageBox(index);
   selectedBox = index;
+  if (index < 0 && boxSize.fixed && !drag.dismissed) pendingBox = fixedBoxAt(drag.from);
   renderImageBoxes();
+  if (pendingBox) return openImageLabelForm();
   if (index >= 0 && drag.target.closest('.image-box-label')) {
     relabelBox = index;
     openImageLabelForm();
@@ -3236,6 +3305,28 @@ imageLabelOptions.addEventListener('click', e => {
   const option = e.target.closest('.image-label-option');
   if (option) submitImageLabel(option.dataset.label);
 });
+
+// A size that isn't a whole number of pixels, one or more, is dropped for the
+// one it replaced. A box still waiting for its label keeps the size it was
+// drawn at.
+function updateBoxSize() {
+  const side = (input, previous) => {
+    const value = Number(input.value);
+    return Number.isInteger(value) && value > 0 ? value : previous;
+  };
+  boxSize = {
+    fixed: imageBoxMode.value === 'fixed',
+    width: side(imageBoxWidth, boxSize.width),
+    height: side(imageBoxHeight, boxSize.height),
+  };
+  saveBoxSize();
+  renderBoxSizeControl();
+}
+
+for (const control of [imageBoxMode, imageBoxWidth, imageBoxHeight]) {
+  control.addEventListener('change', updateBoxSize);
+}
+loadBoxSize();
 
 // ── Media view (bounded Video/Audio) ────────────────────────────────────
 // Backs the "View Video"/"View Audio" action on repository nodes whose

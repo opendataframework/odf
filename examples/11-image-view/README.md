@@ -74,6 +74,13 @@ annotation tool or a one-off script would be more than the job needs:
   already used in the repository are listed under the input, to click or to
   pick with `↓`/`↑` and `Enter`; typing narrows the list, and the last label
   is prefilled.
+- For boxes of one size, which some algorithms need, switch `Free box` to
+  `Fixed box` under the photo and set the width and height in image pixels
+  (16 × 16 to start with). A click on a spot with no box then places one
+  centred on the pointer, and a drag carries it to where it is released, so
+  it can also go on top of another box. Near an edge the box slides inside
+  the photo rather than being cut, and a photo smaller than the box takes
+  none. The choice is remembered in the browser.
 - Select a box and press `Delete` (or its `×`) to remove it. There is no move
   or resize: delete the box and draw it again. A label no box in the
   repository uses any more is dropped from the list.

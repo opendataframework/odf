@@ -1241,6 +1241,15 @@ def test_ui_has_the_collapsible_sidebar_rail():
     assert "odf-ui-sidebar" in script
 
 
+def test_ui_has_the_fixed_size_annotation_box_control():
+    html = (themes.STATIC_DIR / "index.html").read_text()
+    script = (themes.STATIC_DIR / "app.js").read_text()
+
+    for control in ("image-box-mode", "image-box-width", "image-box-height"):
+        assert f'id="{control}"' in html
+    assert "odf-ui-box-size" in script
+
+
 def test_ui_takes_node_cells_from_the_topology_payload():
     script = (themes.STATIC_DIR / "app.js").read_text()
 
