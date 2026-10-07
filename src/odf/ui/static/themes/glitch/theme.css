@@ -440,6 +440,7 @@ button.media-tile:hover,button.media-tile:focus-visible{border-color:var(--title
 .image-box-size{flex:none;display:inline-flex;align-items:center;gap:4px;color:var(--text-muted);font-size:10.5px}
 .image-box-size[hidden]{display:none}
 .image-box-size input{width:56px;cursor:text}
+.image-box-size select.data-btn,.image-box-size select.data-btn:hover{appearance:none;-webkit-appearance:none;padding-right:24px;background-image:linear-gradient(45deg,transparent 50%,currentColor 50%),linear-gradient(135deg,currentColor 50%,transparent 50%);background-size:4px 4px;background-repeat:no-repeat;background-position:calc(100% - 14px) 50%,calc(100% - 10px) 50%}
 .image-box-size .data-btn:focus{outline:none;border-color:var(--title-accent)}
 .media-lightbox-stage{position:relative}
 .image-annotations{position:absolute;cursor:crosshair;touch-action:none;user-select:none;-webkit-user-select:none}
