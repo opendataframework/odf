@@ -1101,51 +1101,54 @@ function selectNode(id) {
   const cVar  = nodeAccentCss(node);
   const repo  = repoSchemas[id];
 
+  // Type always has a value; a component outside any layer, or defined
+  // outside the project, has no Layer or File row.
+  const meta = [
+    ['Type', `<dd>${node.decorator || node.type}</dd>`],
+    ['Layer', node.layer && `<dd>${layerBadgeHtml(node.layer)}</dd>`],
+    ['File', node.file && `<dd class="file" title="${node.file}">${node.file}</dd>`],
+  ].filter(([, dd]) => dd);
+
   // One full-width row per action, so the rows line up whatever set of
-  // actions the component has: its own in `main`, the ones every component
-  // has in `utility`.
-  const main = [];
+  // actions the component has: its own first, then the ones every component
+  // has.
+  const actions = [];
   if (repo && repo.view) {
-    main.push({ id: 'view-btn', label: 'View', kind: 'primary', run: () => showDataView(id) });
+    actions.push({ id: 'view-btn', label: 'View', kind: '', run: () => showDataView(id) });
   }
   if (repo && repo.streamable) {
-    main.push({ id: 'stream-toggle-btn', label: `${node.streaming ? 'Stop' : 'Start'} Streaming`, kind: node.streaming ? 'danger' : 'primary', run: () => toggleStream(id) });
+    actions.push({ id: 'stream-toggle-btn', label: `${node.streaming ? 'Stop' : 'Start'} Streaming`, kind: node.streaming ? 'danger' : '', run: () => toggleStream(id) });
   }
   if (node.type === 'service') {
-    main.push({ id: 'lifecycle-btn', label: node.running ? 'Stop' : 'Start', kind: node.running ? 'danger' : 'primary', run: () => toggleService(id) });
+    actions.push({ id: 'lifecycle-btn', label: node.running ? 'Stop' : 'Start', kind: node.running ? 'danger' : '', run: () => toggleService(id) });
   }
   if (node.type === 'task' || node.type === 'pipeline') {
-    main.push({ id: 'execute-btn', label: 'Execute', kind: 'primary', run: () => executeNode(id) });
+    actions.push({ id: 'execute-btn', label: 'Execute', kind: '', run: () => executeNode(id) });
   }
   if (node.chart) {
-    main.push({ id: 'show-chart-btn', label: 'View Chart', kind: 'primary', run: () => showChartView(id) });
+    actions.push({ id: 'show-chart-btn', label: 'View Chart', kind: '', run: () => showChartView(id) });
   }
   if (node.details) {
-    main.push({ id: 'show-details-btn', label: 'Details', kind: '', run: () => showDetailsView(id) });
+    actions.push({ id: 'show-details-btn', label: 'Details', kind: '', run: () => showDetailsView(id) });
   }
-  const utility = [
+  actions.push(
     { id: 'show-logs-btn', label: 'Show Logs', kind: '', run: () => showLogsView(id) },
     { id: 'customize-btn', label: 'Customize', kind: '', run: e => openStylePicker(node, e.currentTarget) },
-  ];
+  );
   const actionHtml = a =>
     `<button class="detail-action ${a.kind}" id="${a.id}"><span>${a.label}</span><span class="detail-action-arrow">&rarr;</span></button>`;
 
   document.getElementById('inspector-popup-body').innerHTML =
     `<div class="detail-title" style="color:${cVar}">${node.label}</div>` +
-    (node.layer || node.decorator || node.file
-      ? `<div class="detail-meta">${layerBadgeHtml(node.layer)}${node.decorator ? `<span class="deco">${node.decorator}</span>` : ''}${node.file ? `<span class="file">${node.file}</span>` : ''}</div>`
-      : '') +
     `<div class="detail-desc">${node.desc}</div>` +
-    '<div class="detail-actions">' +
-      (main.length ? `<div class="detail-action-group">${main.map(actionHtml).join('')}</div>` : '') +
-      `<div class="detail-action-group utility">${utility.map(actionHtml).join('')}</div>` +
-    '</div>';
+    `<dl class="detail-meta">${meta.map(([label, dd]) => `<dt>${label}</dt>${dd}`).join('')}</dl>` +
+    `<div class="detail-actions">${actions.map(actionHtml).join('')}</div>`;
 
   document.querySelectorAll('.node-item').forEach(el => el.classList.remove('selected'));
   const si = document.querySelector(`.node-item[data-id="${id}"]`);
   if (si) si.classList.add('selected');
 
-  for (const a of [...main, ...utility]) {
+  for (const a of actions) {
     document.getElementById(a.id).addEventListener('click', a.run);
   }
 

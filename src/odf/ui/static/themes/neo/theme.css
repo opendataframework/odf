@@ -208,27 +208,23 @@ canvas{display:block;cursor:grab}
 .panel-heading{color:var(--text-dim);font-family:'Archivo Black','Arial Black',Inter,'Segoe UI',Roboto,-apple-system,BlinkMacSystemFont,Helvetica,Arial,sans-serif;font-size:9.5px;font-weight:600;letter-spacing:.1em;text-transform:uppercase;margin-bottom:9px}
 
 .detail-empty{font-size:12px;color:var(--text-dim);font-family:'Archivo Black','Arial Black',Inter,'Segoe UI',Roboto,-apple-system,BlinkMacSystemFont,Helvetica,Arial,sans-serif}
-.detail-title{font-family:'Archivo Black','Arial Black',Inter,'Segoe UI',Roboto,-apple-system,BlinkMacSystemFont,Helvetica,Arial,sans-serif;font-size:14px;font-weight:700;letter-spacing:.01em;margin-bottom:6px}
-.detail-meta{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:8px}
-.detail-meta .deco{font-family:'Archivo Black','Arial Black',Inter,'Segoe UI',Roboto,-apple-system,BlinkMacSystemFont,Helvetica,Arial,sans-serif;font-size:10.5px;color:var(--text-muted)}
-.detail-meta .file{font-family:'SF Mono','Fira Code',Consolas,'Courier New',monospace;font-size:10.5px;color:var(--text-dim);background:var(--hover-bg);border:2px solid var(--border);padding:2px 6px;border-radius:0}
+.detail-title{font-family:'Archivo Black','Arial Black',Inter,'Segoe UI',Roboto,-apple-system,BlinkMacSystemFont,Helvetica,Arial,sans-serif;font-size:14px;font-weight:700;letter-spacing:.01em;margin-bottom:4px}
 .detail-desc{font-size:12px;line-height:1.6;color:var(--text-muted)}
+.detail-meta{display:grid;grid-template-columns:auto minmax(0,1fr);gap:4px 10px;align-items:center;margin:10px 0 0}
+.detail-meta dt{font-family:'Archivo Black','Arial Black',Inter,'Segoe UI',Roboto,-apple-system,BlinkMacSystemFont,Helvetica,Arial,sans-serif;font-size:10px;font-weight:600;letter-spacing:.03em;color:var(--text-dim)}
+.detail-meta dd{margin:0;min-width:0;font-family:'Archivo Black','Arial Black',Inter,'Segoe UI',Roboto,-apple-system,BlinkMacSystemFont,Helvetica,Arial,sans-serif;font-size:11px;color:var(--text-muted)}
+.detail-meta dd.file{font-family:'SF Mono','Fira Code',Consolas,'Courier New',monospace;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 
 .log-line{display:flex;align-items:flex-start;gap:7px;font-size:11px;color:var(--text-muted);line-height:1.4}
 .log-line .dot{width:5px;height:5px;flex-shrink:0;margin-top:4px}
 .log-line .ts{font-family:'SF Mono',Consolas,monospace;color:var(--text-dim);flex-shrink:0}
 
 /* One full-width row per action, so the rows line up whatever set of
-   actions a component has: its own in a boxed group, the ones every
-   component has under a divider below it */
-.detail-actions{margin-top:10px;display:flex;flex-direction:column}
-.detail-action-group{display:flex;flex-direction:column;border:2px solid var(--border);border-radius:0;overflow:hidden}
-.detail-action-group.utility{border:0;border-top:2px solid var(--border);border-radius:0}
-.detail-action-group + .detail-action-group.utility{margin-top:8px;padding-top:4px}
-.detail-action{display:flex;align-items:center;justify-content:space-between;gap:8px;width:100%;background:transparent;border:0;border-top:2px solid var(--border);color:var(--text-muted);font-family:'Archivo Black','Arial Black',Inter,'Segoe UI',Roboto,-apple-system,BlinkMacSystemFont,Helvetica,Arial,sans-serif;font-size:11px;font-weight:600;letter-spacing:.03em;text-align:left;padding:6px 8px;cursor:pointer;transition:background .12s,color .12s}
-.detail-action:first-child,.detail-action-group.utility .detail-action{border-top:0}
+   actions a component has. The list runs to the popup's edges, hence the
+   negative margins matching .inspector-popup's padding */
+.detail-actions{margin:10px -16px -14px;padding:4px 0;border-top:2px solid var(--border);display:flex;flex-direction:column}
+.detail-action{display:flex;align-items:center;justify-content:space-between;gap:8px;width:100%;background:transparent;border:0;color:var(--text-muted);font-family:'Archivo Black','Arial Black',Inter,'Segoe UI',Roboto,-apple-system,BlinkMacSystemFont,Helvetica,Arial,sans-serif;font-size:11px;font-weight:600;letter-spacing:.03em;text-align:left;padding:6px 16px;cursor:pointer;transition:background .12s,color .12s}
 .detail-action:hover{background:var(--hover-bg);color:var(--text)}
-.detail-action.primary{color:var(--title-accent)}
 .detail-action.danger{color:var(--accent-alert)}
 .detail-action:disabled{opacity:.4;cursor:default;pointer-events:none}
 .detail-action-arrow{flex:none;opacity:.6}
