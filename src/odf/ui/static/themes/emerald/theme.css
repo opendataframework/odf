@@ -421,13 +421,13 @@ button.media-tile:hover,button.media-tile:focus-visible{border-color:var(--title
 .media-lightbox-close:hover{background:var(--hover-bg);border-color:var(--border-strong)}
 .media-lightbox-bar{display:flex;align-items:center;gap:8px;padding:8px 16px;border-top:1px solid var(--border)}
 .media-lightbox-bar .doc-header{flex:1;margin:0;padding:0;border:0}
-.media-lightbox-bar .data-btn{flex:none;margin-left:0;text-decoration:none;white-space:nowrap}
+.media-lightbox-bar .data-btn{flex:none;margin-left:0;text-decoration:none;white-space:nowrap;box-sizing:border-box;display:inline-flex;align-items:center;height:26px;padding-top:0;padding-bottom:0}
+.media-lightbox-bar .data-btn[hidden]{display:none}
 .media-lightbox-hint{flex:none;color:var(--text-muted);font-size:10.5px;white-space:nowrap}
 .media-lightbox-hint[hidden]{display:none}
 .image-box-size{flex:none;display:inline-flex;align-items:center;gap:4px;color:var(--text-muted);font-size:10.5px}
 .image-box-size[hidden]{display:none}
-.image-box-size input{width:52px;box-sizing:border-box;background:var(--panel);border:1px solid var(--border-strong);color:var(--text);font-family:inherit;font-size:11px;padding:4px 6px;border-radius:6px}
-.image-box-size input:focus{outline:none;border-color:var(--title-accent)}
+.image-box-size input{width:56px;cursor:text}
 .media-lightbox-stage{position:relative}
 .image-annotations{position:absolute;cursor:crosshair;touch-action:none;user-select:none;-webkit-user-select:none}
 .image-annotations[hidden]{display:none}
