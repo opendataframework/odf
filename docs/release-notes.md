@@ -26,7 +26,8 @@
   image's size and an ordered label list per repository, for a later pipeline to read
   with `json.load`. The
   [`11-image-view`](https://github.com/opendataframework/odf/tree/main/examples/11-image-view)
-  example describes the format.
+  example describes the format. `[ui] annotations = false` in `config.toml` turns
+  annotating off.
 - **UI**: the video and audio views list their records as cards, like the image view: a
   video card previews a frame of its clip, an audio card its waveform (for clips up to
   10 MB), both with the clip's length. Selecting a card opens the clip in a player and

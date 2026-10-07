@@ -120,7 +120,8 @@ class Server:
                 to the current working directory). Boxes drawn in the image
                 view persist to the file named by ``[project]
                 annotations-file`` (default ``"annotations.json"``, see
-                ``odf.ui.annotations``). The icon/color pickers can
+                ``odf.ui.annotations``), unless ``[ui] annotations = false``
+                turns annotating off. The icon/color pickers can
                 be extended beyond the built-in set via ``[ui] icon-scripts``
                 (paths to ``.js`` files, see ``odf.ui.extensions``) and
                 ``[ui.colors]`` (name → hex) in config, merged with anything
@@ -245,6 +246,12 @@ class Server:
             favicon = ui_cfg.get("favicon")
             logo = ui_cfg.get("logo")
             resolved_theme = theme if theme is not None else ui_cfg.get("theme", "default")
+            annotate = ui_cfg.get("annotations", True)
+            if not isinstance(annotate, bool):
+                raise ValueError(f"[ui] annotations must be true or false, got {annotate!r}.")
+            annotations_file = self.config.get("project", {}).get(
+                "annotations-file", "annotations.json"
+            )
             topology = TopologyView.from_config(ui_cfg.get("topology", {}))
             for key, name in topology.unmatched(self.context):
                 warnings.warn(
@@ -257,9 +264,7 @@ class Server:
                 host=ui_host,
                 port=ui_port,
                 layout_file=self.config.get("project", {}).get("layout-file", "layout.json"),
-                annotations_file=self.config.get("project", {}).get(
-                    "annotations-file", "annotations.json"
-                ),
+                annotations_file=annotations_file if annotate else None,
                 chat_engine=chat_engine,
                 icon_scripts=icon_scripts,
                 colors=colors,

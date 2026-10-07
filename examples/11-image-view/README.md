@@ -82,7 +82,8 @@ annotation tool or a one-off script would be more than the job needs:
 
 Every change is saved to `annotations.json` in the directory `odf run` was
 started from (`[project] annotations-file` in `config.toml` names another
-path):
+path). `annotations = false` under `[ui]` in `config.toml` turns annotating
+off for a project that doesn't need it. The file looks like this:
 
 ```json
 {
