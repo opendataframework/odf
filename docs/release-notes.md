@@ -15,7 +15,7 @@
 
 - **UI**: selecting a thumbnail in the image view opens that image full size, with the
   record's other fields as a caption, previous/next buttons (or the arrow keys), and
-  `Esc` to return to the grid. Images are now served with the media type detected from
+  the close button in the corner or `Esc` to return to the grid. Images are now served with the media type detected from
   their bytes (JPEG, PNG, GIF, WebP, BMP, TIFF, AVIF, HEIC) instead of always
   `image/jpeg`, and an image the browser can't decode, such as HEIC outside Safari, is
   labelled with its type instead of showing a broken-image icon.
@@ -33,14 +33,14 @@
   video card previews a frame of its clip, an audio card its waveform (for clips up to
   10 MB), both with the clip's length. Selecting a card opens the clip in a player and
   starts it, with the record's other fields as a caption, previous/next buttons, and
-  `Esc` to return to the grid. Clips are now served with the media type detected from
+  the close button in the corner or `Esc` to return to the grid. Clips are now served with the media type detected from
   their bytes (MP4, QuickTime, WebM, Ogg, AVI, WAV, MP3, AAC, FLAC) instead of always
   `video/mp4` or `audio/wav`, and with `Range` requests honored, so a clip can be seeked
   and plays in Safari. A clip the browser can't decode is labelled with its type.
 - **UI**: the document view lists its records as cards, like the image view, each
   previewing the start of its document. Selecting a card opens the document, with the
   record's other fields as a caption, previous/next buttons (or the arrow keys), and
-  `Esc` to return to the grid. A `DocumentView` field can now hold a file as well as a
+  the close button in the corner or `Esc` to return to the grid. A `DocumentView` field can now hold a file as well as a
   JSON-shaped value: `bytes` are shown as a PDF (drawn by pdf.js, loaded from a CDN when
   first needed) or as text, detected from their content, and a `str` as text, while a
   `dict` or `list` is still a collapsible tree. Text that parses as JSON, such as a

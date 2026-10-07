@@ -424,6 +424,8 @@ button.media-tile:hover,button.media-tile:focus-visible{border-color:var(--title
 .media-lightbox-stage audio{flex:0 1 480px;min-width:0;cursor:default}
 .media-lightbox-stage .media-fallback{flex:1;cursor:default}
 .media-lightbox-nav{flex:none;margin-left:0;font-size:18px;line-height:1;padding:10px 8px}
+.media-lightbox-close{position:absolute;top:8px;right:8px;z-index:1;width:28px;height:28px;padding:0;background:var(--panel);border:1px solid var(--border);color:var(--text);border-radius:2px;cursor:pointer;font-size:18px;line-height:1;display:flex;align-items:center;justify-content:center}
+.media-lightbox-close:hover{background:var(--hover-bg);border-color:var(--border-strong);box-shadow:0 0 0 1px var(--split-a),0 0 0 2px color-mix(in srgb, var(--split-b) 60%, transparent)}
 .media-lightbox-bar{display:flex;align-items:center;gap:8px;padding:8px 16px;border-top:1px solid var(--border)}
 .media-lightbox-bar .doc-header{flex:1;margin:0;padding:0;border:0}
 .media-lightbox-bar .data-btn{flex:none;margin-left:0;text-decoration:none;white-space:nowrap}
@@ -521,6 +523,7 @@ button.media-tile:hover,button.media-tile:focus-visible{border-color:var(--title
   #zoom-controls button:hover,
   #grid-controls button:hover,
   .map-back-btn:hover,
+  .media-lightbox-close:hover,
   .hdr-icon-btn:hover,
   .view-mode-select:hover,
   #hdr:hover{

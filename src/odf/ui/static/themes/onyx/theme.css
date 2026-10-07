@@ -424,6 +424,8 @@ button.media-tile:hover,button.media-tile:focus-visible{border-color:var(--title
 .media-lightbox-stage audio{flex:0 1 480px;min-width:0;cursor:default}
 .media-lightbox-stage .media-fallback{flex:1;cursor:default}
 .media-lightbox-nav{flex:none;margin-left:0;font-size:18px;line-height:1;padding:10px 8px}
+.media-lightbox-close{position:absolute;top:8px;right:8px;z-index:1;width:28px;height:28px;padding:0;background:var(--panel);border:1px solid var(--border);color:var(--text);border-radius:50%;cursor:pointer;font-size:18px;line-height:1;display:flex;align-items:center;justify-content:center}
+.media-lightbox-close:hover{background:var(--hover-bg);border-color:var(--border-strong)}
 .media-lightbox-bar{display:flex;align-items:center;gap:8px;padding:8px 16px;border-top:1px solid var(--border)}
 .media-lightbox-bar .doc-header{flex:1;margin:0;padding:0;border:0}
 .media-lightbox-bar .data-btn{flex:none;margin-left:0;text-decoration:none;white-space:nowrap}
@@ -557,7 +559,7 @@ button.media-tile:hover,button.media-tile:focus-visible{border-color:var(--title
 .theme-toggle:focus-visible,.data-btn:focus-visible,.map-back-btn:focus-visible,
 .sb-tab:focus-visible,.hdr-icon-btn:focus-visible,#sb-collapse:focus-visible,.icon-swatch:focus-visible,.color-swatch:focus-visible,
 .icon-picker-tab:focus-visible,
-.inspector-popup-close:focus-visible,#zoom-controls button:focus-visible,#grid-controls button:focus-visible{outline:2px solid var(--title-accent);outline-offset:2px}
+.inspector-popup-close:focus-visible,.media-lightbox-close:focus-visible,#zoom-controls button:focus-visible,#grid-controls button:focus-visible{outline:2px solid var(--title-accent);outline-offset:2px}
 
 /* Sidebar: navigation-rail indicator pill on the active tab, list items as
    fully rounded rows with the selected one filled. */
