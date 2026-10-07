@@ -433,14 +433,23 @@ button.media-tile:hover,button.media-tile:focus-visible{border-color:var(--title
 .media-lightbox-close:hover{background:var(--hover-bg);border-color:var(--border-strong)}
 .media-lightbox-bar{display:flex;align-items:center;gap:8px;padding:8px 16px;border-top:1px solid var(--border)}
 .media-lightbox-bar .doc-header{flex:1;margin:0;padding:0;border:0}
-.media-lightbox-bar .data-btn{flex:none;margin-left:0;text-decoration:none;white-space:nowrap;box-sizing:border-box;display:inline-flex;align-items:center;height:28px;padding-top:0;padding-bottom:0}
-.media-lightbox-bar .data-btn[hidden]{display:none}
 .media-lightbox-hint{flex:none;color:var(--text-muted);font-size:10.5px;white-space:nowrap}
 .media-lightbox-hint[hidden]{display:none}
-.image-box-size{flex:none;display:inline-flex;align-items:center;gap:4px;color:var(--text-muted);font-size:10.5px}
+/* Tool rail — the tools and actions of the open record, over its top-left corner. */
+.media-lightbox-rail{position:absolute;top:8px;left:8px;z-index:2;display:flex;flex-direction:column;gap:2px;padding:3px;background:var(--panel);border:1px solid var(--border);border-radius:16px;cursor:default}
+.media-lightbox-rail[hidden]{display:none}
+.lightbox-tool{width:26px;height:26px;padding:0;box-sizing:border-box;background:transparent;border:1px solid transparent;border-radius:999px;color:var(--text-muted);cursor:pointer;display:flex;align-items:center;justify-content:center;transition:background .12s,color .12s,border-color .12s}
+.lightbox-tool[hidden]{display:none}
+.lightbox-tool:hover{background:var(--hover-bg);color:var(--text)}
+.lightbox-tool[aria-pressed="true"]{background:var(--secondary-container);color:var(--on-secondary-container)}
+.lightbox-tool svg{width:16px;height:16px;fill:none;stroke:currentColor;stroke-width:1.6;stroke-linecap:round;stroke-linejoin:round}
+.media-lightbox-rail-sep{height:1px;margin:2px 3px;background:var(--border)}
+.media-lightbox-rail-sep[hidden]{display:none}
+.image-box-size{position:absolute;left:100%;margin-left:6px;display:flex;align-items:center;gap:4px;padding:3px 6px;background:var(--panel);border:1px solid var(--border);border-radius:16px;color:var(--text-muted);font-size:10.5px}
 .image-box-size[hidden]{display:none}
-.image-box-size input{width:64px;cursor:text}
-.image-box-size select.data-btn,.image-box-size select.data-btn:hover{appearance:none;-webkit-appearance:none;padding-right:28px;background-image:linear-gradient(45deg,transparent 50%,currentColor 50%),linear-gradient(135deg,currentColor 50%,transparent 50%);background-size:4px 4px;background-repeat:no-repeat;background-position:calc(100% - 18px) 50%,calc(100% - 14px) 50%}
+.image-box-size input{width:52px;height:20px;box-sizing:border-box;padding:0 4px;background:transparent;border:1px solid var(--border);border-radius:6px;color:var(--text);font-family:inherit;font-size:10.5px}
+.image-box-size input:focus{outline:none;border-color:var(--title-accent)}
+.media-lightbox[data-tool="select"] .image-annotations{cursor:default}
 .media-lightbox-stage{position:relative}
 .image-annotations{position:absolute;cursor:crosshair;touch-action:none;user-select:none;-webkit-user-select:none}
 .image-annotations[hidden]{display:none}
@@ -470,7 +479,7 @@ button.media-tile:hover,button.media-tile:focus-visible{border-color:var(--title
 .doc-preview{display:block;box-sizing:border-box;height:120px;padding:6px 8px;overflow:hidden;font-family:'Roboto Mono','SF Mono',Consolas,monospace;font-size:8.5px;line-height:1.4;text-align:left;white-space:pre;color:var(--text-dim)}
 .doc-preview-page{padding:0;background:#fff}
 .doc-preview-page canvas{display:block;width:100%}
-.doc-reader{flex:1;align-self:stretch;min-width:0;overflow:auto;cursor:default}
+.doc-reader{box-sizing:border-box;padding:0 34px;flex:1;align-self:stretch;min-width:0;overflow:auto;cursor:default}
 .doc-reader[hidden]{display:none}
 .doc-reader>*{box-sizing:border-box;max-width:860px;margin:0 auto}
 .doc-text{font-family:'Roboto Mono','SF Mono',Consolas,monospace;font-size:12px;line-height:1.6;white-space:pre-wrap;overflow-wrap:anywhere;color:var(--text)}

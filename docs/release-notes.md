@@ -19,10 +19,10 @@
   their bytes (JPEG, PNG, GIF, WebP, BMP, TIFF, AVIF, HEIC) instead of always
   `image/jpeg`, and an image the browser can't decode, such as HEIC outside Safari, is
   labelled with its type instead of showing a broken-image icon.
-- **UI**: labelled boxes can be drawn on an open image in the image view. Drag to draw a
-  box and type its label, or pick one already used from the list under the input; select a box to delete it,
+- **UI**: labelled boxes can be drawn on an open image in the image view. Pick `Draw a
+  box` in the tool rail at the top left of the image, drag to draw a box and type its label, or pick one already used from the list under the input; select a box to delete it,
   or select its label to change it. A box inside a larger one stays on top, so it can
-  still be selected. With `Fixed box` picked under the image, every new box takes the
+  still be selected. With `Place a fixed-size box` picked in the rail, every new box takes the
   width and height set beside it, in image pixels, for algorithms that need boxes of one
   size: click or drag to place one centred on the pointer, kept whole inside the image. A label no box uses any more is dropped from the list. Boxes are saved to `annotations.json`, or the file
   named by `[project] annotations-file` in `config.toml`, as pixel coordinates with each
@@ -51,11 +51,14 @@
   with that type and can be downloaded. The
   [`12-document-view`](https://github.com/opendataframework/odf/tree/main/examples/12-document-view)
   example shows each kind.
-- **UI**: an open document in the document view can be labelled. Select text to label
-  that span of it, or drag on a PDF page to draw a labelled box, as on an image; select a
+- **UI**: an open document in the document view can be labelled. With `Label text` picked
+  in the tool rail, select text to label that span of it, or with `Draw a box` drag on a
+  PDF page to draw a labelled box, as on an image; select a
   span or a box to delete it, or select its label to change it. Spans are drawn on text as
-  it is written, so a Markdown or JSON document is labelled from `View source`, and spans
-  don't overlap. A `dict` or `list` document takes no labels. They are saved to the same
+  it is written, so `Label text` shows a Markdown or JSON document as its source, and spans
+  don't overlap. An image or document opens on the `Select` tool, which adds nothing and
+  leaves selected text to be copied; the tool picked is remembered in the browser, and
+  `V`, `B`, `F` and `T` pick one from the keyboard. A `dict` or `list` document takes no labels. They are saved to the same
   `annotations.json` as image boxes: a span as its start and end in the text, counted in
   characters as Python indexes a `str`, with the text it covers, and a page box in PDF
   points with its page number and the page's size. The

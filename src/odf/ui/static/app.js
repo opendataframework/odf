@@ -2438,6 +2438,7 @@ window.addEventListener('keydown', e => {
     else if (mapMode !== 'image' && mapMode !== 'document') return; // the arrow keys seek within an open clip's own player
     else if (e.target.closest('input, textarea, select')) return;
     else if ((e.key === 'Delete' || e.key === 'Backspace') && selectedBox >= 0) deleteImageBox(selectedBox);
+    else if (LIGHTBOX_TOOL_KEYS[e.key.toLowerCase()] && !e.metaKey && !e.ctrlKey && !e.altKey) setLightboxTool(LIGHTBOX_TOOL_KEYS[e.key.toLowerCase()]);
     else if (e.key === 'ArrowLeft') stepLightbox(-1);
     else if (e.key === 'ArrowRight') stepLightbox(1);
     return;
@@ -2908,6 +2909,7 @@ function openLightbox(index) {
   const lightbox = document.getElementById('media-lightbox');
   lightbox.style.top = document.getElementById('map-panel-body').offsetTop + 'px';
   lightbox.hidden = false;
+  renderLightboxRail();
 }
 
 function closeLightbox() {
@@ -2950,15 +2952,24 @@ for (const player of Object.values(LIGHTBOX_PLAYERS)) {
 // are held in image pixels and drawn in percent of the image, so they follow
 // the lightbox as it resizes. They are painted largest first, so a box inside
 // another stays clickable whichever was drawn first. There is no move or
-// resize: a wrong box is deleted and drawn again. A box is dragged out
-// free-form, or, with "Fixed box" picked in the lightbox bar, placed at a set
-// size in image pixels (see boxSize). The pages of a PDF take boxes the same
-// way, and text takes labelled spans, through the state and the label input
-// here (see "Document annotations" below).
+// resize: a wrong box is deleted and drawn again. The pages of a PDF take
+// boxes the same way, and text takes labelled spans, through the state and
+// the label input here (see "Document annotations" below).
+//
+// What a press does is set by the tool picked in the rail over the view
+// (#media-lightbox-rail): "select" only selects, relabels and deletes what is
+// there, "box" drags a box out free-form, "fixed" places one at a set size in
+// image pixels (see boxSize), and "span" labels selected text. The rail also
+// holds the actions of the open record, its source toggle and original.
 
 const BOX_COLORS = ['#ff6b6b', '#4dabf7', '#51cf66', '#fcc419', '#cc5de8', '#ff922b', '#22b8cf', '#f06595'];
 const BOX_MIN_DRAG = 4; // px a pointer must travel before a press counts as drawing rather than a click
 const BOX_SIZE_KEY = 'odf-ui-box-size';
+const LIGHTBOX_TOOL_KEY = 'odf-ui-lightbox-tool';
+// The tools each kind of annotated surface takes (see lightboxSurfaceKind),
+// and the keys that pick them.
+const LIGHTBOX_TOOLS = { image: ['select', 'box', 'fixed'], pdf: ['select', 'box'], text: ['select', 'span'] };
+const LIGHTBOX_TOOL_KEYS = { v: 'select', b: 'box', f: 'fixed', t: 'span' };
 
 let annotationsEnabled = false; // whether the server keeps an annotations file (see loadUiExtensions)
 let imageAnnotations = { labels: [], records: {} }; // the active repository's labels and boxes
@@ -2972,16 +2983,17 @@ let lastBoxLabel = '';
 let labelOption = -1;    // index of the label option picked with the arrow keys, -1 for none
 let boxSaves = Promise.resolve(); // chains saves, so they reach the server in the order they were made
 let boxSaveCount = 0;    // saves made so far, so only the latest one's response sets the labels
-// Whether new boxes take a set size, in image pixels, rather than the dragged
-// one. A per-browser preference, so it lives in localStorage rather than the
-// annotations file.
-let boxSize = { fixed: false, width: 16, height: 16 };
+// The size, in image pixels, of the boxes the "fixed" tool places, and the
+// tool last picked for each kind of surface. Per-browser preferences, so they
+// live in localStorage rather than the annotations file.
+let boxSize = { width: 16, height: 16 };
+let lightboxTools = { image: 'select', pdf: 'select', text: 'select' };
 
 const imageOverlay = document.getElementById('image-annotations');
 const imageLabelForm = document.getElementById('image-label-form');
 const imageLabelInput = document.getElementById('image-label-input');
 const imageLabelOptions = document.getElementById('image-label-options');
-const imageBoxMode = document.getElementById('image-box-mode');
+const lightboxRail = document.getElementById('media-lightbox-rail');
 const imageBoxWidth = document.getElementById('image-box-width');
 const imageBoxHeight = document.getElementById('image-box-height');
 
@@ -2998,7 +3010,6 @@ function surfaceOf(overlay) {
 function loadBoxSize() {
   try {
     const s = JSON.parse(localStorage.getItem(BOX_SIZE_KEY) || '{}');
-    if (typeof s.fixed === 'boolean') boxSize.fixed = s.fixed;
     if (Number.isInteger(s.width) && s.width > 0) boxSize.width = s.width;
     if (Number.isInteger(s.height) && s.height > 0) boxSize.height = s.height;
   } catch {}
@@ -3008,25 +3019,88 @@ function saveBoxSize() {
   try { localStorage.setItem(BOX_SIZE_KEY, JSON.stringify(boxSize)); } catch {}
 }
 
+function loadLightboxTools() {
+  try {
+    const s = JSON.parse(localStorage.getItem(LIGHTBOX_TOOL_KEY) || '{}');
+    for (const [kind, tools] of Object.entries(LIGHTBOX_TOOLS)) {
+      if (tools.includes(s[kind])) lightboxTools[kind] = s[kind];
+    }
+  } catch {}
+}
+
+function saveLightboxTools() {
+  try { localStorage.setItem(LIGHTBOX_TOOL_KEY, JSON.stringify(lightboxTools)); } catch {}
+}
+
+// What the open record can be annotated as: 'image', 'pdf' or 'text'. Null
+// when it can't be, or isn't loaded yet.
+function lightboxSurfaceKind() {
+  if (!annotationsEnabled || lightboxIndex < 0) return null;
+  if (mapMode === 'image') return imageLoaded ? 'image' : null;
+  return openPdf ? 'pdf' : openText ? 'text' : null;
+}
+
+// The tool presses on the open record go to, null when it takes none. Spans
+// are only made on text shown as written, see "Document annotations".
+function activeTool() {
+  const kind = lightboxSurfaceKind();
+  if (!kind) return null;
+  return kind === 'text' && openText.rendered ? 'select' : lightboxTools[kind];
+}
+
+function setLightboxTool(tool) {
+  const kind = lightboxSurfaceKind();
+  if (!kind || !LIGHTBOX_TOOLS[kind].includes(tool)) return;
+  closeImageLabelForm();
+  lightboxTools[kind] = tool;
+  saveLightboxTools();
+  if (tool === 'span' && openText.rendered) {
+    selectedBox = -1;
+    openText.rendered = false;
+    renderDocumentText();
+    return;
+  }
+  renderLightboxRail();
+  // Text selected before the tool was picked is labelled as it would be after.
+  const selected = tool === 'span' && sourceSelection();
+  if (selected) startSpanFromSelection(selected.pre, selected.range);
+}
+
 // Whether the open image has room for a box of the set size.
 function fixedBoxFits() {
   const img = document.getElementById('media-lightbox-img');
   return boxSize.width <= img.naturalWidth && boxSize.height <= img.naturalHeight;
 }
 
-// Shows boxSize in the lightbox bar's controls, and in the hint beside them.
-function renderBoxSizeControl() {
-  imageBoxMode.value = boxSize.fixed ? 'fixed' : 'free';
-  imageBoxWidth.value = boxSize.width;
-  imageBoxHeight.value = boxSize.height;
-  for (const el of [imageBoxWidth, imageBoxHeight, document.querySelector('.image-box-size-x')]) {
-    el.hidden = !boxSize.fixed;
+// Shows the rail's tools for the open record, the active one pressed, and
+// says in the bar under it how that tool is used.
+function renderLightboxRail() {
+  const kind = lightboxSurfaceKind();
+  const tool = activeTool();
+  const tools = kind ? LIGHTBOX_TOOLS[kind] : [];
+  for (const button of lightboxRail.querySelectorAll('[data-tool]')) {
+    button.hidden = !tools.includes(button.dataset.tool);
+    button.setAttribute('aria-pressed', button.dataset.tool === tool);
+  }
+  const actions = ['media-lightbox-source', 'media-lightbox-open'].some(id => !document.getElementById(id).hidden);
+  document.getElementById('media-lightbox-rail-sep').hidden = !tools.length || !actions;
+  lightboxRail.hidden = !tools.length && !actions;
+  document.getElementById('media-lightbox').dataset.tool = tool || '';
+
+  const sizeControl = document.getElementById('image-box-size');
+  sizeControl.hidden = tool !== 'fixed';
+  if (tool === 'fixed') {
+    imageBoxWidth.value = boxSize.width;
+    imageBoxHeight.value = boxSize.height;
+    sizeControl.style.top = lightboxRail.querySelector('[data-tool="fixed"]').offsetTop + 'px';
   }
   const size = `${boxSize.width} × ${boxSize.height}`;
-  document.getElementById('media-lightbox-hint').textContent =
-    !boxSize.fixed ? 'Drag on the image to add a box'
-      : imageLoaded && !fixedBoxFits() ? `Image is smaller than the ${size} box`
-        : `Click the image to add a ${size} box`;
+  const hint = document.getElementById('media-lightbox-hint');
+  hint.textContent = tool === 'box' ? `Drag on ${kind === 'pdf' ? 'a page' : 'the image'} to add a box`
+    : tool === 'fixed' ? (fixedBoxFits() ? `Click the image to add a ${size} box` : `Image is smaller than the ${size} box`)
+      : tool === 'span' ? 'Select text to add a label'
+        : tool ? 'Pick a tool to add a label' : '';
+  hint.hidden = !tool;
 }
 
 // A box of the set size centred on `point` (0..1 fractions of the image),
@@ -3069,8 +3143,6 @@ function resetImageAnnotationState() {
   imageLabelForm.hidden = true;
   imageOverlay.appendChild(imageLabelForm); // back from the document it was opened in
   imageOverlay.hidden = true;
-  document.getElementById('media-lightbox-hint').hidden = true;
-  document.getElementById('image-box-size').hidden = true;
 }
 
 function imageRecordKey() {
@@ -3095,9 +3167,7 @@ function layoutImageAnnotations() {
   imageOverlay.style.width = width + 'px';
   imageOverlay.style.height = height + 'px';
   imageOverlay.hidden = false;
-  document.getElementById('media-lightbox-hint').hidden = false;
-  document.getElementById('image-box-size').hidden = false;
-  renderBoxSizeControl();
+  renderLightboxRail();
 }
 
 function boxColor(label) {
@@ -3272,13 +3342,13 @@ new ResizeObserver(layoutImageAnnotations).observe(document.getElementById('medi
 
 // A press on an overlay is a click (select a box, or act on its label or
 // delete button) until the pointer travels BOX_MIN_DRAG, when it becomes a
-// new box. The overlay captures the pointer, so a box can be drawn starting
-// inside another one and finished outside the image. A fixed-size box follows
-// the drag, centred on the pointer, and a click on a spot with no box places
-// one too, unless that click was closing the label input. Only an image
-// takes fixed-size boxes.
+// new box, unless the tool is "select". The overlay captures the pointer, so
+// a box can be drawn starting inside another one and finished outside the
+// image. A fixed-size box follows the drag, centred on the pointer, and a
+// click on a spot with no box places one too, unless that click was closing
+// the label input. Only an image takes fixed-size boxes.
 function wireBoxOverlay(overlay) {
-  const fixed = () => boxSize.fixed && overlay === imageOverlay;
+  const fixed = () => activeTool() === 'fixed';
   overlay.addEventListener('pointerdown', e => {
     if (e.button !== 0 || e.target.closest('.image-label-form')) return;
     e.preventDefault();
@@ -3288,7 +3358,7 @@ function wireBoxOverlay(overlay) {
     overlay.setPointerCapture(e.pointerId);
   });
   overlay.addEventListener('pointermove', e => {
-    if (!boxDrag) return;
+    if (!boxDrag || activeTool() === 'select') return;
     if (!boxDrag.drawing && Math.hypot(e.clientX - boxDrag.clientX, e.clientY - boxDrag.clientY) < BOX_MIN_DRAG) return;
     boxDrag.drawing = true;
     selectedBox = -1;
@@ -3360,18 +3430,22 @@ function updateBoxSize() {
     return Number.isInteger(value) && value > 0 ? value : previous;
   };
   boxSize = {
-    fixed: imageBoxMode.value === 'fixed',
     width: side(imageBoxWidth, boxSize.width),
     height: side(imageBoxHeight, boxSize.height),
   };
   saveBoxSize();
-  renderBoxSizeControl();
+  renderLightboxRail();
 }
 
-for (const control of [imageBoxMode, imageBoxWidth, imageBoxHeight]) {
+for (const control of [imageBoxWidth, imageBoxHeight]) {
   control.addEventListener('change', updateBoxSize);
 }
+lightboxRail.addEventListener('click', e => {
+  const button = e.target.closest('[data-tool]');
+  if (button) setLightboxTool(button.dataset.tool);
+});
 loadBoxSize();
+loadLightboxTools();
 
 // ── Media view (bounded Video/Audio) ────────────────────────────────────
 // Backs the "View Video"/"View Audio" action on repository nodes whose
@@ -3733,11 +3807,13 @@ function parseJsonDocument(text) {
 }
 
 // Shows a text document in the reader: as a tree if it is JSON, rendered if
-// it reads as Markdown. `note` is HTML to put under it.
+// it reads as Markdown, or as its source either way while the tool last
+// picked for text is the one that labels it. `note` is HTML to put under it.
 function showDocumentText(text, note) {
   const json = parseJsonDocument(text);
+  const labelling = annotationsEnabled && lightboxTools.text === 'span';
   // `astral`: whether it has characters that take two UTF-16 units, see unitsToPoints().
-  openText = { text, note, json, rendered: json !== undefined || looksLikeMarkdown(text), astral: /[\uD800-\uDFFF]/.test(text) };
+  openText = { text, note, json, rendered: !labelling && (json !== undefined || looksLikeMarkdown(text)), astral: /[\uD800-\uDFFF]/.test(text) };
   renderDocumentText();
 }
 
@@ -3759,9 +3835,12 @@ async function renderDocumentText() {
   }
   reader.innerHTML = (html === null ? '<div class="doc-source"><pre class="doc-text"></pre></div>' : html) + doc.note;
   if (html === null) renderDocumentSource();
-  renderDocumentHint();
-  toggle.textContent = doc.rendered ? 'View source' : (doc.json !== undefined ? 'View as tree' : 'View as Markdown');
+  const label = doc.rendered ? 'View source' : (doc.json !== undefined ? 'View as tree' : 'View as Markdown');
+  toggle.title = label;
+  toggle.setAttribute('aria-label', label);
+  toggle.setAttribute('aria-pressed', !doc.rendered);
   toggle.hidden = false;
+  renderLightboxRail();
 }
 
 document.getElementById('media-lightbox-source').addEventListener('click', () => {
@@ -3769,6 +3848,11 @@ document.getElementById('media-lightbox-source').addEventListener('click', () =>
   closeImageLabelForm();
   selectedBox = -1;
   openText.rendered = !openText.rendered;
+  if (openText.rendered && lightboxTools.text === 'span') {
+    // Leaving the source puts the tool that needs it down.
+    lightboxTools.text = 'select';
+    saveLightboxTools();
+  }
   renderDocumentText();
 });
 
@@ -3822,7 +3906,7 @@ async function openPdfDocument(reader, url, token) {
   const pdf = await lib.getDocument({ url }).promise;
   if (token !== docLoadToken) { pdf.destroy(); return; }
   openPdf = pdf;
-  renderDocumentHint();
+  renderLightboxRail();
   const first = (await pdf.getPage(1)).getViewport({ scale: 1 });
   if (token !== docLoadToken) return;
   pdfPageObserver = new IntersectionObserver(entries => {
@@ -3879,22 +3963,11 @@ function renderJsonTree(value) {
 // Labels on the document open in the lightbox, held in the same state and
 // saved through the same endpoint as the boxes of "Image annotations" above.
 // A PDF takes boxes, drawn on a page as they are on an image and held in PDF
-// points. Text takes spans: selecting some of it opens the label input. A
-// span is held as offsets into the text, so it is drawn, and can only be
+// points. Text takes spans: with the "span" tool picked, selecting some of it
+// opens the label input. A span is held as offsets into the text, so it is drawn, and can only be
 // made, where the text is shown as written, which for a Markdown or JSON
 // document is its source. A document held in the record as a JSON value (a
 // dict, say) has no text to count into, and takes none.
-
-// Says under the document how it is annotated, if it can be.
-function renderDocumentHint() {
-  const hint = document.getElementById('media-lightbox-hint');
-  const text = !annotationsEnabled ? ''
-    : openPdf ? 'Drag on a page to add a box'
-      : !openText ? ''
-        : openText.rendered ? 'View source to label text' : 'Select text to add a label';
-  hint.textContent = text;
-  hint.hidden = !text;
-}
 
 function renderDocumentAnnotations() {
   if (openPdf) {
@@ -4042,16 +4115,27 @@ function startSpanFromSelection(pre, range) {
   openImageLabelForm();
 }
 
-// A selection made in the source becomes a span wherever the pointer is let
-// go. Short of one, a click selects the span it is on, or acts on that span's
-// label or delete button.
+// The source <pre> and the range selected in it, null when nothing in it is.
+function sourceSelection() {
+  const pre = document.querySelector('#media-lightbox-doc .doc-text');
+  const selection = getSelection();
+  if (!pre || selection.isCollapsed || !selection.rangeCount) return null;
+  const range = selection.getRangeAt(0);
+  return pre.contains(range.commonAncestorContainer) ? { pre, range } : null;
+}
+
+// With the "span" tool, a selection made in the source becomes a span
+// wherever the pointer is let go; with "select" it is left as it is, to be
+// copied. Short of one, a click selects the span it is on, or acts on that
+// span's label or delete button.
 document.addEventListener('mouseup', e => {
   if (!annotationsEnabled || lightboxIndex < 0 || !openText || openText.rendered) return;
   const pre = document.querySelector('#media-lightbox-doc .doc-text');
   if (!pre || !(e.target instanceof Element) || e.target.closest('.image-label-form')) return;
-  const selection = getSelection();
-  if (!selection.isCollapsed && selection.rangeCount && pre.contains(selection.getRangeAt(0).commonAncestorContainer)) {
-    return startSpanFromSelection(pre, selection.getRangeAt(0));
+  const selected = sourceSelection();
+  if (selected) {
+    if (activeTool() === 'span') startSpanFromSelection(pre, selected.range);
+    return;
   }
   if (!pre.contains(e.target)) return;
   const dismissed = closeImageLabelForm();

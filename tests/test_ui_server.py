@@ -1291,13 +1291,17 @@ def test_ui_has_the_collapsible_sidebar_rail():
     assert "odf-ui-sidebar" in script
 
 
-def test_ui_has_the_fixed_size_annotation_box_control():
+def test_ui_has_the_lightbox_tool_rail():
     html = (themes.STATIC_DIR / "index.html").read_text()
     script = (themes.STATIC_DIR / "app.js").read_text()
 
-    for control in ("image-box-mode", "image-box-width", "image-box-height"):
+    assert 'id="media-lightbox-rail"' in html
+    for tool in ("select", "box", "fixed", "span"):
+        assert f'data-tool="{tool}"' in html
+    for control in ("image-box-width", "image-box-height"):
         assert f'id="{control}"' in html
     assert "odf-ui-box-size" in script
+    assert "odf-ui-lightbox-tool" in script
 
 
 def test_ui_takes_node_cells_from_the_topology_payload():

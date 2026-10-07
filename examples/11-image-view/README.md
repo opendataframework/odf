@@ -70,17 +70,20 @@ grid of thumbnails instead of a table.
 An open photo can be labelled with boxes, for simple cases where a separate
 annotation tool or a one-off script would be more than the job needs:
 
-- Drag on the photo to draw a box, type its label and press `Enter`. Labels
-  already used in the repository are listed under the input, to click or to
+- The tools are in the rail at the top left of the open photo. It opens on
+  **Select** (`V`), which draws nothing; the tool picked is remembered in the
+  browser.
+- With **Draw a box** (`B`), drag on the photo to draw a box, type its label
+  and press `Enter`. Labels already used in the repository are listed under the input, to click or to
   pick with `↓`/`↑` and `Enter`; typing narrows the list, and the last label
   is prefilled.
-- For boxes of one size, which some algorithms need, switch `Free box` to
-  `Fixed box` under the photo and set the width and height in image pixels
-  (16 × 16 to start with). A click on a spot with no box then places one
+- For boxes of one size, which some algorithms need, pick **Place a
+  fixed-size box** (`F`) and set the width and height beside it in image
+  pixels (16 × 16 to start with). A click on a spot with no box then places one
   centred on the pointer, and a drag carries it to where it is released, so
   it can also go on top of another box. Near an edge the box slides inside
   the photo rather than being cut, and a photo smaller than the box takes
-  none. The choice is remembered in the browser.
+  none. The size is remembered in the browser.
 - Select a box and press `Delete` (or its `×`) to remove it. There is no move
   or resize: delete the box and draw it again. A label no box in the
   repository uses any more is dropped from the list.

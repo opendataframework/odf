@@ -30,9 +30,9 @@ the UI goes by the text itself: headings, code fences, links and tables
 count for more than list items and bold text, and enough of them make it
 Markdown. It is then rendered by [marked](https://marked.js.org/), with
 [DOMPurify](https://github.com/cure53/DOMPurify) removing any markup that
-could run, both loaded from a CDN with the first Markdown document. **View
-source** and **View as Markdown** in the reader switch between the two, for
-when the guess is wrong. Text holding a JSON object or array, such as a
+could run, both loaded from a CDN with the first Markdown document. The
+**View source** button in the rail at the top left of the reader switches
+between the two, for when the guess is wrong. Text holding a JSON object or array, such as a
 `.json` file, opens as the same tree a `dict` does, with **View source**
 showing it as written.
 
@@ -100,17 +100,20 @@ An open receipt can be labelled, for simple cases where a separate annotation
 tool or a one-off script would be more than the job needs. What it takes
 follows from what it opens as:
 
-- **Text** (`order-103.txt`): select some of it, type a label and press
-  `Enter`. Labels already used in the repository are listed under the input,
+- **Text** (`order-103.txt`): pick **Label text** (`T`) in the rail at the top
+  left of the reader, select some of the text, type a label and press
+  `Enter`. With **Select** (`V`), the tool a document first opens on, selected
+  text is left alone, to be copied. The tool picked is remembered in the
+  browser. Labels already used in the repository are listed under the input,
   to click or to pick with `↓`/`↑` and `Enter`; typing narrows the list, and
   the last label is prefilled. White space at either end of the selection is
   left out, and a selection that runs into a span already there is refused,
   so spans never overlap.
-- **Markdown and JSON text** (`order-105.md`, `order-106.json`): the same, in
-  **View source**. A span is a place in the text as written, which the
-  rendered view doesn't show.
-- **A PDF** (`order-104.pdf`): drag on a page to draw a box, then label it the
-  same way. A box inside a larger one stays on top, so it can still be
+- **Markdown and JSON text** (`order-105.md`, `order-106.json`): the same.
+  **Label text** switches to the source, since a span is a place in the text
+  as written, which the rendered view doesn't show.
+- **A PDF** (`order-104.pdf`): pick **Draw a box** (`B`) and drag on a page
+  to draw one, then label it the same way. A box inside a larger one stays on top, so it can still be
   selected.
 - **A `dict` or `list`** (receipts 1 and 2) can't be labelled: it has no text
   of its own for a span to point into.
