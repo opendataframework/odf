@@ -1909,6 +1909,10 @@ function setMapMode(mode) {
   }
   if (mapMode === 'geo' && mode !== 'geo') destroyGeoMap();
   if ((mapMode === 'image' || mapMode === 'media' || mapMode === 'document') && mode !== mapMode) closeLightbox();
+  if (mapMode === 'timeseries' && mode !== 'timeseries') {
+    closeImageLabelForm(); // out of the chart before the next view replaces it
+    selectedBox = -1;
+  }
   if (mapMode === 'chart' && mode !== 'chart') {
     const frame = document.getElementById('chart-frame');
     if (frame) frame.src = 'about:blank';
@@ -2443,6 +2447,14 @@ window.addEventListener('keydown', e => {
     else if (e.key === 'ArrowRight') stepLightbox(1);
     return;
   }
+  if (mapMode === 'timeseries' && tsAnnotating()) {
+    // Esc backs out of a label input or a selection before leaving the chart.
+    if (e.key === 'Escape') { if (!cancelImageAnnotationStep()) backToTopology(); }
+    else if (e.target.closest('input, textarea, select')) return;
+    else if ((e.key === 'Delete' || e.key === 'Backspace') && selectedBox >= 0) deleteImageBox(selectedBox);
+    else if (TS_TOOL_KEYS[e.key.toLowerCase()] && !e.metaKey && !e.ctrlKey && !e.altKey) setTsTool(TS_TOOL_KEYS[e.key.toLowerCase()]);
+    return;
+  }
   if (e.key !== 'Escape') return;
   if (mapMode !== 'topology') backToTopology();
   else if (selectId) deselectNode();
@@ -2954,7 +2966,8 @@ for (const player of Object.values(LIGHTBOX_PLAYERS)) {
 // another stays clickable whichever was drawn first. There is no move or
 // resize: a wrong box is deleted and drawn again. The pages of a PDF take
 // boxes the same way, and text takes labelled spans, through the state and
-// the label input here (see "Document annotations" below).
+// the label input here (see "Document annotations" below), as do the time
+// ranges and points of a timeseries (see "Timeseries annotations").
 //
 // What a press does is set by the tool picked in the rail over the view
 // (#media-lightbox-rail): "select" only selects, relabels and deletes what is
@@ -2972,7 +2985,7 @@ const LIGHTBOX_TOOLS = { image: ['select', 'box', 'fixed'], pdf: ['select', 'box
 const LIGHTBOX_TOOL_KEYS = { v: 'select', b: 'box', f: 'fixed', t: 'span' };
 
 let annotationsEnabled = false; // whether the server keeps an annotations file (see loadUiExtensions)
-let imageAnnotations = { labels: [], records: {} }; // the active repository's labels and boxes
+let imageAnnotations = { labels: [], records: {} }; // the active repository's labels and boxes, or a timeseries' labels and `annotations`
 let imageLoaded = false; // whether the lightbox image has decoded, so its natural size is known
 let selectedBox = -1;    // index of the open image's selected box, -1 for none
 let boxDrag = null;      // the press in progress on an overlay, see wireBoxOverlay
@@ -3150,6 +3163,7 @@ function imageRecordKey() {
 }
 
 function imageBoxes() {
+  if (mapMode === 'timeseries') return imageAnnotations.annotations || [];
   const record = imageAnnotations.records[imageRecordKey()];
   return record ? record.annotations : [];
 }
@@ -3183,8 +3197,10 @@ function boxStyle(box, label, surface) {
 }
 
 // Redraws the open record's annotations: an image's boxes, or a document's
-// (see renderDocumentAnnotations).
+// (see renderDocumentAnnotations). A timeseries' are drawn over its chart
+// (see renderTsAnnotations).
 function renderImageBoxes() {
+  if (mapMode === 'timeseries') return renderTsAnnotations();
   if (lightboxIndex < 0) return;
   if (mapMode === 'document') renderDocumentAnnotations();
   else if (imageLoaded) renderSurfaceBoxes(surfaceOf(imageOverlay));
@@ -3253,6 +3269,7 @@ function openImageLabelForm() {
   const box = pendingBox || imageBoxes()[relabelBox];
   const value = pendingBox ? lastBoxLabel : box.label;
   if (box.type === 'span') return openSpanLabelForm(value);
+  if (mapMode === 'timeseries') return openTsLabelForm(box, value);
   const { overlay, width, height } = boxSurface;
   openLabelFormIn(overlay, box.x / width * overlay.clientWidth, (box.y + box.height) / height * overlay.clientHeight + 4, value);
 }
@@ -3294,18 +3311,29 @@ function deleteImageBox(index) {
   saveImageBoxes(imageBoxes().filter((_, i) => i !== index));
 }
 
-// Replaces the open record's annotations, showing the change at once and
-// reloading from the server if it could not be saved.
+// Replaces the open record's annotations, or the open timeseries', showing
+// the change at once and reloading from the server if it could not be saved.
 function saveImageBoxes(boxes) {
-  const img = document.getElementById('media-lightbox-img');
   const repoId = activeRepoId;
-  const key = imageRecordKey();
-  const body = mapMode === 'document' ? { annotations: boxes }
-    : { width: img.naturalWidth, height: img.naturalHeight, annotations: boxes };
-  if (boxes.length) imageAnnotations.records[key] = body;
-  else delete imageAnnotations.records[key];
+  let url = `/api/repositories/${repoId}/annotations`;
+  let body, saved, name = '';
+  if (mapMode === 'timeseries') {
+    // In time order, as the server keeps them.
+    body = { annotations: [...boxes].sort((a, b) => tsMarkStart(a) - tsMarkStart(b)) };
+    imageAnnotations.annotations = saved = body.annotations;
+  } else {
+    const img = document.getElementById('media-lightbox-img');
+    const key = imageRecordKey();
+    url = `/api/repositories/${repoId}/records/${encodeURIComponent(key)}/annotations`;
+    name = ` for ${key}`;
+    body = mapMode === 'document' ? { annotations: boxes }
+      : { width: img.naturalWidth, height: img.naturalHeight, annotations: boxes };
+    if (boxes.length) imageAnnotations.records[key] = body;
+    else delete imageAnnotations.records[key];
+    saved = Object.values(imageAnnotations.records).flatMap(record => record.annotations);
+  }
   // As the server will: drop the labels no box uses any more, then add the new ones.
-  const used = new Set(Object.values(imageAnnotations.records).flatMap(record => record.annotations.map(box => box.label)));
+  const used = new Set(saved.map(box => box.label));
   imageAnnotations.labels = imageAnnotations.labels.filter(label => used.has(label));
   for (const box of boxes) {
     if (!imageAnnotations.labels.includes(box.label)) imageAnnotations.labels.push(box.label);
@@ -3315,7 +3343,7 @@ function saveImageBoxes(boxes) {
   const save = ++boxSaveCount;
   boxSaves = boxSaves.then(async () => {
     try {
-      const res = await fetch(`/api/repositories/${repoId}/records/${encodeURIComponent(key)}/annotations`, {
+      const res = await fetch(url, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(body),
@@ -3326,7 +3354,7 @@ function saveImageBoxes(boxes) {
       imageAnnotations.labels = labels;
       if (!imageLabelForm.hidden) renderImageLabelOptions(imageLabelInput.value);
     } catch (err) {
-      addLog(`Failed to save annotations for ${key}`, ACCENT.alert);
+      addLog(`Failed to save annotations${name}`, ACCENT.alert);
       if (repoId === activeRepoId) await loadImageAnnotations();
     }
   });
@@ -4157,7 +4185,10 @@ document.addEventListener('mouseup', e => {
 // TimeseriesView — a line chart plotting every other numeric entity field
 // against the declared timestamp field. Plain inline SVG, no charting
 // dependency (see ChartProtocol/showChartView above for anything fancier —
-// that's a component-authored, server-rendered alternative).
+// that's a component-authored, server-rendered alternative). Time ranges and
+// points can be labelled on it (see "Timeseries annotations" below).
+
+let tsPlot = null; // the drawn chart's time axis, see renderTimeseriesChart; null when no chart is drawn
 
 async function showTimeseriesView(repoId) {
   enterRepoView(repoId);
@@ -4166,7 +4197,11 @@ async function showTimeseriesView(repoId) {
   document.getElementById('map-panel-title').textContent = `${schema.label} · timeline`;
   renderModeSwitcher(schema, 'timeseries');
   renderReplayToggle(schema);
-  await refreshTimeseriesView();
+  selectedBox = -1;
+  pendingBox = null;
+  relabelBox = -1;
+  boxDrag = null;
+  await Promise.all([refreshTimeseriesView(), loadImageAnnotations()]);
 }
 
 async function refreshTimeseriesView() {
@@ -4218,6 +4253,8 @@ function renderTsBottomBar(schema) {
 // and persists across page/mode switches for the same repository.
 function renderTimeseriesChart(schema, records) {
   const body = document.getElementById('map-panel-body');
+  if (body.contains(imageLabelForm)) closeImageLabelForm(); // out of the chart before it is redrawn
+  tsPlot = null;
   if (tsHiddenFieldsRepoId !== activeRepoId) {
     tsHiddenFields = new Set();
     tsHiddenFieldsRepoId = activeRepoId;
@@ -4261,11 +4298,23 @@ function renderTimeseriesChart(schema, records) {
     return `<label class="ts-legend-item${hidden ? ' hidden' : ''}" data-field="${escapeHtml(name)}" title="Click to ${hidden ? 'show' : 'hide'}">` +
       `<span class="ts-swatch" style="background:${colors[i % colors.length]}"></span>${escapeHtml(name)}</label>`;
   }).join('');
+  const annotating = tsAnnotating() && visibleFields.length > 0;
   const chart = visibleFields.length
-    ? `<svg class="timeseries-chart" viewBox="0 0 ${w} ${h}" preserveAspectRatio="none">${series}</svg>`
+    ? '<div class="ts-plot">' +
+      `<svg class="timeseries-chart" viewBox="0 0 ${w} ${h}" preserveAspectRatio="none">${series}</svg>` +
+      '<div class="ts-annotations"><div class="ts-marks"></div></div></div>'
     : '<span class="detail-empty">// select a column to plot</span>';
-  body.innerHTML = `<div class="ts-legend">${legend}</div>` + chart +
+  body.innerHTML = `<div class="ts-legend">${legend}${annotating ? TS_TOOLS_HTML : ''}</div>` + chart +
     `<div class="floating-pagination">${bottomBar.html}</div>`;
+  if (visibleFields.length) {
+    tsPlot = {
+      xMin, xMax, w, pad, x: xScale,
+      points: sorted.map((r, idx) => ({ at: xs[idx], key: String(r[schema.key]) })),
+    };
+    if (annotating) wireTsOverlay(body.querySelector('.ts-annotations'));
+    renderTsTools();
+    renderTsAnnotations();
+  }
 
   body.querySelectorAll('.ts-legend-item').forEach(el => {
     el.addEventListener('click', () => {
@@ -4277,6 +4326,176 @@ function renderTimeseriesChart(schema, records) {
   });
   bottomBar.wire();
 }
+
+// ── Timeseries annotations ────────────────────────────────────────────────
+// Labelled time ranges and points marked on the chart, for the simple cases a
+// one-off script would otherwise be written for: a stretch to train on or to
+// leave out, an event, a bad reading. They belong to the repository's time
+// axis rather than to one record, so they are saved as one list through
+// PUT /api/repositories/{id}/annotations (see odf.ui.annotations), a range as
+// its start and end in the timestamp field's own units and a point as the
+// timestamp and key of the record nearest the click. A mark covers every
+// series, and shows on each page of records whose time span it falls in.
+// They share the state and the label input of "Image annotations" above, and
+// like boxes are not moved or resized: a wrong one is deleted and made again.
+
+const TS_TOOL_KEY = 'odf-ui-ts-tool';
+const TS_TOOL_KEYS = { v: 'select', r: 'range', p: 'point' };
+const TS_TOOL_HINTS = {
+  select: 'Pick a tool to add a label',
+  range: 'Drag across the chart to label a range',
+  point: 'Click the chart to label the nearest record',
+};
+const TS_TOOLS_HTML = '<span class="ts-tools" role="toolbar" aria-label="Tools"><span class="ts-hint"></span>' +
+  '<button class="lightbox-tool" data-tool="select" title="Select (V)" aria-label="Select"><svg viewBox="0 0 16 16"><path d="M3.5 2.5 7.6 13l1.5-4.4 4.4-1.5z"/></svg></button>' +
+  '<button class="lightbox-tool" data-tool="range" title="Label a range (R)" aria-label="Label a range"><svg viewBox="0 0 16 16"><path d="M4 2.5v11M12 2.5v11M4 8h8"/></svg></button>' +
+  '<button class="lightbox-tool" data-tool="point" title="Label a point (P)" aria-label="Label a point"><svg viewBox="0 0 16 16"><path d="M8 2.5v3.5M8 10v3.5"/><circle cx="8" cy="8" r="2"/></svg></button>' +
+  '</span>';
+
+let tsTool = 'select'; // a per-browser preference, like lightboxTools
+
+function loadTsTool() {
+  try {
+    const tool = localStorage.getItem(TS_TOOL_KEY);
+    if (tool in TS_TOOL_HINTS) tsTool = tool;
+  } catch {}
+}
+
+// Whether the chart takes new labels. A replay redraws it frame by frame, so
+// it only shows the ones already made.
+function tsAnnotating() {
+  return annotationsEnabled && !(replayMode && replayRepoId === activeRepoId);
+}
+
+function setTsTool(tool) {
+  closeImageLabelForm();
+  tsTool = tool;
+  try { localStorage.setItem(TS_TOOL_KEY, tool); } catch {}
+  renderTsTools();
+}
+
+// Shows the active tool pressed, says beside it how it is used, and hands
+// the chart's presses to it.
+function renderTsTools() {
+  const tools = document.querySelector('#map-panel-body .ts-tools');
+  if (!tools) return;
+  for (const button of tools.querySelectorAll('[data-tool]')) {
+    button.setAttribute('aria-pressed', button.dataset.tool === tsTool);
+  }
+  tools.querySelector('.ts-hint').textContent = TS_TOOL_HINTS[tsTool];
+  document.querySelector('#map-panel-body .ts-annotations').dataset.tool = tsTool;
+}
+
+// Where a mark starts on the time axis, which is what the list is ordered by.
+function tsMarkStart(mark) {
+  return mark.type === 'range' ? mark.start : mark.at;
+}
+
+// Draws the marks over the chart in percent of its width, so they follow it
+// as it resizes: the part of each that falls in the time span of the records
+// shown. Ranges are painted widest first and points last, so a mark inside a
+// range stays selectable.
+function renderTsAnnotations() {
+  const layer = document.querySelector('#map-panel-body .ts-marks');
+  if (!layer || !tsPlot) return;
+  const { xMin, xMax } = tsPlot;
+  const pct = t => tsPlot.x(Math.min(Math.max(t, xMin), xMax)) / tsPlot.w * 100;
+  const span = mark => mark.type === 'range' ? mark.end - mark.start : 0;
+  const markHtml = (mark, index) => {
+    const draft = index < 0;
+    const from = tsMarkStart(mark);
+    const to = from + span(mark);
+    if (to < xMin || from > xMax) return '';
+    const style = `left:${pct(from)}%;` + (mark.type === 'range' ? `width:${pct(to) - pct(from)}%;` : '') +
+      `--box-color:${boxColor(draft ? lastBoxLabel : mark.label)}`;
+    const state = draft ? ' draft' : index === selectedBox ? ' selected' : '';
+    const head = draft ? '' : '<span class="ts-mark-head">' +
+      `<span class="ts-mark-label" title="Change label">${escapeHtml(mark.label)}</span>` +
+      (index === selectedBox ? '<button type="button" class="ts-mark-delete" title="Delete (Del)">&times;</button>' : '') +
+      '</span>';
+    return `<div class="ts-mark ts-${mark.type}${state}"${draft ? '' : ` data-index="${index}"`} style="${style}">${head}</div>`;
+  };
+  const widestFirst = imageBoxes().map((mark, index) => ({ mark, index })).sort((a, b) => span(b.mark) - span(a.mark));
+  layer.innerHTML = widestFirst.map(({ mark, index }) => markHtml(mark, index)).join('') +
+    (pendingBox ? markHtml(pendingBox, -1) : '');
+}
+
+// The time under a pointer, kept within the time span of the records shown.
+function tsTimeAt(e, overlay) {
+  const rect = overlay.getBoundingClientRect();
+  const { xMin, xMax, w, pad } = tsPlot;
+  const x = (e.clientX - rect.left) / rect.width * w;
+  return Math.min(Math.max(xMin + (x - pad) / (w - 2 * pad) * (xMax - xMin), xMin), xMax);
+}
+
+// A point on the record shown whose timestamp is nearest `time`.
+function tsPointAt(time) {
+  const nearest = tsPlot.points.reduce((a, b) => Math.abs(b.at - time) < Math.abs(a.at - time) ? b : a);
+  return { type: 'point', at: nearest.at, key: nearest.key };
+}
+
+function openTsLabelForm(mark, value) {
+  const overlay = document.querySelector('#map-panel-body .ts-annotations');
+  const at = Math.min(Math.max(tsMarkStart(mark), tsPlot.xMin), tsPlot.xMax);
+  openLabelFormIn(overlay, tsPlot.x(at) / tsPlot.w * overlay.clientWidth, 24, value);
+}
+
+// A press on the chart is a click until the pointer travels BOX_MIN_DRAG
+// sideways, when with the "range" tool it becomes a new range. A click selects
+// the mark under it, or acts on its label or delete button. With the "point"
+// tool a click anywhere but on a point or a mark's label places a point, so
+// one can be put inside a range.
+function wireTsOverlay(overlay) {
+  overlay.addEventListener('pointerdown', e => {
+    if (e.button !== 0 || e.target.closest('.image-label-form')) return;
+    e.preventDefault();
+    const dismissed = closeImageLabelForm();
+    boxDrag = { from: tsTimeAt(e, overlay), clientX: e.clientX, target: e.target, drawing: false, dismissed };
+    overlay.setPointerCapture(e.pointerId);
+  });
+  overlay.addEventListener('pointermove', e => {
+    if (!boxDrag || tsTool !== 'range') return;
+    if (!boxDrag.drawing && Math.abs(e.clientX - boxDrag.clientX) < BOX_MIN_DRAG) return;
+    boxDrag.drawing = true;
+    selectedBox = -1;
+    const to = tsTimeAt(e, overlay);
+    pendingBox = to === boxDrag.from ? null
+      : { type: 'range', start: Math.min(boxDrag.from, to), end: Math.max(boxDrag.from, to) };
+    renderTsAnnotations();
+  });
+  overlay.addEventListener('pointerup', () => {
+    const drag = boxDrag;
+    if (!drag) return;
+    boxDrag = null;
+    if (drag.drawing) {
+      if (pendingBox) openImageLabelForm();
+      return;
+    }
+    const mark = drag.target.closest('.ts-mark[data-index]');
+    const onMark = mark && (tsTool !== 'point' || mark.classList.contains('ts-point') || drag.target.closest('.ts-mark-head'));
+    const index = onMark ? Number(mark.dataset.index) : -1;
+    if (index >= 0 && drag.target.closest('.ts-mark-delete')) return deleteImageBox(index);
+    selectedBox = index;
+    if (index < 0 && tsTool === 'point' && !drag.dismissed) pendingBox = tsPointAt(drag.from);
+    renderTsAnnotations();
+    if (pendingBox) return openImageLabelForm();
+    if (index >= 0 && drag.target.closest('.ts-mark-label')) {
+      relabelBox = index;
+      openImageLabelForm();
+    }
+  });
+  overlay.addEventListener('pointercancel', () => {
+    boxDrag = null;
+    pendingBox = null;
+    renderTsAnnotations();
+  });
+}
+
+document.getElementById('map-panel-body').addEventListener('click', e => {
+  const button = e.target.closest('.ts-tools [data-tool]');
+  if (button) setTsTool(button.dataset.tool);
+});
+loadTsTool();
 
 // ── Logs view ─────────────────────────────────────────────────────────────
 // Backs the "Show Logs" action, present on every node. Reads

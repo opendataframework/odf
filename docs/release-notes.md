@@ -65,6 +65,18 @@
   [`12-document-view`](https://github.com/opendataframework/odf/tree/main/examples/12-document-view)
   example describes the format. `[ui] annotations = false` in `config.toml` turns
   annotating off.
+- **UI**: time ranges and points can be labelled on the chart of the timeseries view, for
+  the simple cases a one-off script would otherwise be written for, such as a stretch to
+  train on or leave out, an event, or a bad reading. Pick `Label a range` (`R`) beside the
+  legend and drag across the chart, or `Label a point` (`P`) and click to mark the nearest
+  record, then type a label or pick one already used; select a mark to delete it, or select
+  its label to change it. A mark covers every series and ranges may overlap. They are saved
+  to the same `annotations.json` as image boxes, as one list per repository: a range as its
+  start and end in the timestamp field's own units, and a point as its record's timestamp
+  and key. The
+  [`13-timeseries-view`](https://github.com/opendataframework/odf/tree/main/examples/13-timeseries-view)
+  example describes the format. `[ui] annotations = false` in `config.toml` turns
+  annotating off.
 
 ### Changed
 

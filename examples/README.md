@@ -19,7 +19,7 @@ check that the split works for external consumers.
 | 10 | [`10-audio-view/`](10-audio-view/) | A `VoiceMemos` repository (`data_view() -> AudioView`) rendered as a grid of audio cards, each showing its clip's waveform and opening it in a player. |
 | 11 | [`11-image-view/`](11-image-view/) | A `DeliveryPhotos` repository (`data_view() -> ImageView`) rendered as a grid of thumbnails that open full size. |
 | 12 | [`12-document-view/`](12-document-view/) | An `OrderReceipts` repository (`data_view() -> DocumentView`) rendered as cards that open each record's document: a JSON tree, text, or a PDF. |
-| 13 | [`13-timeseries-view/`](13-timeseries-view/) | An `Orders` repository (`data_view() -> TimeseriesView`) rendered as a line chart, one point per record. |
+| 13 | [`13-timeseries-view/`](13-timeseries-view/) | An `Orders` repository (`data_view() -> TimeseriesView`) rendered as a line chart, one point per record, where time ranges and points can be labelled. |
 | 14 | [`14-chart/`](14-chart/) | A `SalesByStore` component implementing `chart() -> str`, a matplotlib-backed self-contained HTML chart the dev UI renders behind a **View Chart** button. |
 | 15 | [`15-chart-plotly/`](15-chart-plotly/) | The same `ChartProtocol` contract as `14-chart`, backed by Plotly instead of matplotlib for real hover tooltips. |
 | 16 | [`16-mcp-chat/`](16-mcp-chat/) | `odf.server.Server.start(ui=True, mcp=True, chat=True)` — the same resolved `Context` exposed as MCP tools and driven by a local Ollama chat window. |

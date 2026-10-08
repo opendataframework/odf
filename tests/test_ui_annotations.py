@@ -266,3 +266,89 @@ def test_set_document_record_rejects_malformed_input(items):
         annotations.set_document_record(data, "papers", "a", items)
 
     assert annotations.repository(data, "papers") == {"labels": [], "records": {}}
+
+
+def time_range(label="promo", start=100.0, end=200.5):
+    return {"type": "range", "label": label, "start": start, "end": end}
+
+
+def point(label="outlier", at=150.25, key="2"):
+    return {"type": "point", "label": label, "at": at, "key": key}
+
+
+def test_series_returns_empty_block_for_unknown_repository():
+    assert annotations.series({}, "orders") == {"labels": [], "annotations": []}
+
+
+def test_set_series_stores_ranges_and_points_in_time_order():
+    early = point("spike", at=50, key="1")
+    block = annotations.set_series({}, "orders", [point(), time_range(), early])
+
+    assert block == {
+        "labels": ["outlier", "promo", "spike"],
+        "annotations": [early, time_range(), point()],
+    }
+
+
+def test_set_series_allows_ranges_that_overlap():
+    items = [time_range(), time_range("sale", start=150, end=300)]
+
+    block = annotations.set_series({}, "orders", items)
+
+    assert block["annotations"] == items
+
+
+def test_set_series_strips_labels():
+    block = annotations.set_series({}, "orders", [time_range("  promo ")])
+
+    assert block == {"labels": ["promo"], "annotations": [time_range()]}
+
+
+def test_set_series_drops_labels_no_annotation_uses_any_more():
+    data = {}
+    annotations.set_series(data, "orders", [time_range(), point()])
+
+    block = annotations.set_series(data, "orders", [point()])
+
+    assert block == {"labels": ["outlier"], "annotations": [point()]}
+    assert annotations.set_series(data, "orders", []) == {"labels": [], "annotations": []}
+
+
+def test_set_series_leaves_other_repositories_alone():
+    data = {}
+    annotations.set_record(data, "photos", "a", 100, 100, [box()])
+
+    annotations.set_series(data, "orders", [time_range()])
+
+    assert annotations.repository(data, "photos") == {
+        "labels": ["parcel"],
+        "records": {"a": {"width": 100, "height": 100, "annotations": [box()]}},
+    }
+
+
+@pytest.mark.parametrize(
+    "items",
+    [
+        "nope",
+        ["nope"],
+        [{**time_range(), "type": "box"}],
+        [time_range(label="   ")],
+        [time_range(start=200, end=100)],
+        [time_range(start=100, end=100)],
+        [time_range(start="100")],
+        [time_range(end=float("inf"))],
+        [time_range(start=float("nan"))],
+        [point(at=None)],
+        [point(at=True)],
+        [point(key="")],
+        [point(key=2)],
+        [{"type": "point", "label": "outlier", "at": 150.25}],
+    ],
+)
+def test_set_series_rejects_malformed_input(items):
+    data = {}
+
+    with pytest.raises(ValueError):
+        annotations.set_series(data, "orders", items)
+
+    assert annotations.series(data, "orders") == {"labels": [], "annotations": []}

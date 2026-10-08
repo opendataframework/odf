@@ -511,9 +511,27 @@ button.media-tile:hover,button.media-tile:focus-visible{border-color:var(--title
 
 /* Timeseries view — inline SVG line chart, no charting dependency. */
 #map.mode-timeseries #map-panel-body{position:relative;padding-bottom:52px}
-.ts-legend{display:flex;flex-wrap:wrap;gap:14px;font-size:10.5px;color:var(--text-dim);margin-bottom:10px}
+.ts-legend{display:flex;flex-wrap:wrap;align-items:center;gap:14px;font-size:10.5px;color:var(--text-dim);margin-bottom:10px}
 .ts-legend-item{display:flex;align-items:center;gap:5px;cursor:pointer;user-select:none;transition:opacity .12s}
 .ts-legend-item:hover{color:var(--title-accent)}
 .ts-legend-item.hidden{opacity:.4;text-decoration:line-through}
 .ts-swatch{width:9px;height:9px;border-radius:1px;display:inline-block}
-.timeseries-chart{width:100%;height:calc(100% - 30px)}
+/* Timeseries annotations — labelled time ranges and points over the chart. */
+.ts-plot{position:relative;height:calc(100% - 36px)}
+.timeseries-chart{display:block;width:100%;height:100%}
+.ts-tools{margin-left:auto;display:flex;align-items:center;gap:2px}
+.ts-hint{margin-right:8px;color:var(--text-muted);white-space:nowrap}
+.ts-annotations{position:absolute;inset:0;pointer-events:none;touch-action:none;user-select:none;-webkit-user-select:none}
+.ts-annotations[data-tool]{pointer-events:auto}
+.ts-annotations[data-tool="range"],.ts-annotations[data-tool="point"]{cursor:crosshair}
+.ts-mark{position:absolute;top:0;bottom:0;box-sizing:border-box}
+.ts-range{min-width:2px;border:solid var(--box-color);border-width:0 1px;background:color-mix(in srgb, var(--box-color) 14%, transparent)}
+.ts-range.selected{background:color-mix(in srgb, var(--box-color) 30%, transparent)}
+.ts-range.draft{border-style:dashed}
+.ts-point{width:9px;margin-left:-4.5px;background:linear-gradient(var(--box-color),var(--box-color)) center/2px 100% no-repeat}
+.ts-point.selected{background-size:4px 100%}
+.ts-point.draft{opacity:.6}
+.ts-mark-head{position:absolute;left:0;top:0;display:flex;align-items:stretch}
+.ts-point .ts-mark-head{left:50%;top:auto;bottom:0}
+.ts-mark-label{max-width:160px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;padding:1px 5px;background:var(--box-color);color:#111;font-size:10.5px;font-weight:600;line-height:1.4;cursor:pointer}
+.ts-mark-delete{width:18px;padding:0;border:0;border-left:1px solid rgba(0,0,0,.25);background:var(--box-color);color:#111;font-family:inherit;font-size:13px;line-height:1;cursor:pointer}

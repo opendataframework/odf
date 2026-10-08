@@ -118,7 +118,7 @@ class Server:
                 dragging a node persist to the file named by ``[project]
                 layout-file`` in config (default ``"layout.json"``, relative
                 to the current working directory). Annotations drawn in the
-                image and document views persist to the file named by
+                image, document and timeseries views persist to the file named by
                 ``[project] annotations-file`` (default ``"annotations.json"``, see
                 ``odf.ui.annotations``), unless ``[ui] annotations = false``
                 turns annotating off. The icon/color pickers can

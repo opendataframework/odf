@@ -1,9 +1,11 @@
 """Persists annotations drawn in the UI to a JSON sidecar file.
 
-Backs the labelled boxes drawn over an open image in the image view, and the
+Backs the labelled boxes drawn over an open image in the image view, the
 labelled text spans and page boxes drawn on an open document in the document
-view (see ``app.js``'s "Image annotations" and "Document annotations"
-sections), so a project can label its data in the dev UI and read the result
+view, and the labelled time ranges and points marked on the chart of the
+timeseries view (see ``app.js``'s "Image annotations", "Document annotations"
+and "Timeseries annotations" sections), so a project can label its data in
+the dev UI and read the result
 from a later pipeline with nothing more than ``json.load``. Scoped to whatever
 ``Path`` a ``UiServer`` is constructed with, like ``odf.ui.layout`` (see
 ``Server.start``'s ``annotations-file`` config key).
@@ -43,6 +45,15 @@ The file holds one block per repository id::
               ]
             }
           }
+        },
+        "orders": {
+          "labels": ["promo", "outlier"],
+          "annotations": [
+            {"type": "range", "label": "promo",
+             "start": 1787782427.2, "end": 1787955227.2},
+            {"type": "point", "label": "outlier",
+             "at": 1787868827.2, "key": "2"}
+          ]
         }
       }
     }
@@ -64,9 +75,17 @@ can tell a document that has changed since. Spans in one record don't overlap
 and are kept in the order they appear in the text. A box on a PDF page is in
 PDF points from the top-left corner of the page as displayed, with ``page``
 counted from 1 and the page's own size beside it.
+
+A timeseries repository's annotations belong to its time axis rather than to
+one record, so its block holds them in one ``annotations`` list and has no
+``records``. A range's ``start`` and ``end`` and a point's ``at`` are values
+of the view's timestamp field, in that field's own units. A point is made on
+a record: ``at`` is that record's timestamp and ``key`` its key, as a string.
+The list is kept in time order, and ranges may overlap.
 """
 
 import json
+import math
 import os
 from itertools import pairwise
 from pathlib import Path
@@ -197,6 +216,51 @@ def set_document_record(data: dict, repo_id: str, key: str, annotations: object)
     return _store(data, repo_id, key, {"annotations": spans + boxes})
 
 
+def series(data: dict, repo_id: str) -> dict:
+    """Return a timeseries repository's block, or an empty one if it has no annotations.
+
+    Args:
+        data: The document described in the module docstring.
+        repo_id: The repository's kebab-case id.
+
+    Returns:
+        ``{"labels": [...], "annotations": [...]}``.
+    """
+    block = data.get("repositories", {}).get(repo_id, {})
+    return {
+        "labels": list(block.get("labels", [])),
+        "annotations": list(block.get("annotations", [])),
+    }
+
+
+def set_series(data: dict, repo_id: str, annotations: object) -> dict:
+    """Replace a timeseries repository's annotations in ``data``, in place.
+
+    Labels are kept as ``set_record`` keeps them.
+
+    Args:
+        data: The document described in the module docstring.
+        repo_id: The repository's kebab-case id.
+        annotations: The repository's full list of annotations: time ranges,
+            points, or both.
+
+    Returns:
+        The repository's updated block, as ``series()`` returns it.
+
+    Raises:
+        ValueError: If any annotation is malformed.
+    """
+    if not isinstance(annotations, list):
+        raise ValueError("annotations must be a list")
+    items = [_series_item(item) for item in annotations]
+    block = data.setdefault("repositories", {}).setdefault(repo_id, {})
+    block["annotations"] = sorted(
+        items, key=lambda item: item["start"] if item["type"] == "range" else item["at"]
+    )
+    _keep_labels(block, items, items)
+    return series(data, repo_id)
+
+
 def _store(data: dict, repo_id: str, key: str, record: dict) -> dict:
     """Put ``record`` under ``key``, or drop the key if it has no annotations."""
     items = record["annotations"]
@@ -206,17 +270,24 @@ def _store(data: dict, repo_id: str, key: str, record: dict) -> dict:
         records[key] = record
     else:
         records.pop(key, None)
-    used = {item["label"] for saved in records.values() for item in saved["annotations"]}
-    labels = [label for label in block.get("labels", []) if label in used]
-    for item in items:
-        if item["label"] not in labels:
-            labels.append(item["label"])
-    block["labels"] = labels
+    _keep_labels(
+        block, [item for saved in records.values() for item in saved["annotations"]], items
+    )
     return repository(data, repo_id)
 
 
+def _keep_labels(block: dict, used: list[dict], added: list[dict]) -> None:
+    """Drop the labels none of ``used`` has, then append the new ones of ``added``."""
+    in_use = {item["label"] for item in used}
+    labels = [label for label in block.get("labels", []) if label in in_use]
+    for item in added:
+        if item["label"] not in labels:
+            labels.append(item["label"])
+    block["labels"] = labels
+
+
 def _number(value: object, name: str) -> float:
-    if isinstance(value, bool) or not isinstance(value, (int, float)):
+    if isinstance(value, bool) or not isinstance(value, (int, float)) or not math.isfinite(value):
         raise ValueError(f"{name} must be a number")
     return value
 
@@ -320,3 +391,31 @@ def _page_box(item: dict) -> dict:
         "page_width": page_width,
         "page_height": page_height,
     }
+
+
+def _series_item(item: object) -> dict:
+    """Validate one annotation of a timeseries: a time range or a point."""
+    kind = item.get("type") if isinstance(item, dict) else None
+    if kind == "range":
+        return _range(item)
+    if kind == "point":
+        return _series_point(item)
+    raise ValueError('each annotation must be an object with "type": "range" or "point"')
+
+
+def _range(item: dict) -> dict:
+    label = _label(item)
+    start = _number(item.get("start"), "start")
+    end = _number(item.get("end"), "end")
+    if end <= start:
+        raise ValueError("a range needs start < end")
+    return {"type": "range", "label": label, "start": start, "end": end}
+
+
+def _series_point(item: dict) -> dict:
+    label = _label(item)
+    at = _number(item.get("at"), "at")
+    key = item.get("key")
+    if not isinstance(key, str) or not key:
+        raise ValueError("a point needs the key of its record")
+    return {"type": "point", "label": label, "at": at, "key": key}

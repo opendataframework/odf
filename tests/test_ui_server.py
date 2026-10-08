@@ -15,6 +15,7 @@ from opendataframework.view import (
     ImageView,
     StreamingAudioView,
     StreamingVideoView,
+    TimeseriesView,
     VideoView,
 )
 
@@ -1041,7 +1042,93 @@ def test_document_annotations_put_rejects_a_malformed_body(tmp_path):
     assert not annotations_file.exists()
 
 
-def test_annotations_are_only_served_for_image_and_document_repositories(tmp_path):
+@dataclass
+class Reading:
+    id: int
+    value: float
+    at: float
+
+
+def readings_namespace():
+    """A namespace holding a ``Readings`` repository with a ``TimeseriesView``."""
+    NS = make_ns()
+
+    @NS
+    @Repository(Reading)
+    class Readings:
+        def all(self):
+            return [Reading(id=1, value=1.5, at=100.0), Reading(id=2, value=9.0, at=200.0)]
+
+        def data_view(self):
+            return TimeseriesView(field="at")
+
+    return NS
+
+
+def test_timeseries_annotations_round_trip_in_time_order(tmp_path):
+    annotations_file = tmp_path / "ann.json"
+    NS = readings_namespace()
+    time_range = {"type": "range", "label": "drift", "start": 120.5, "end": 180}
+    point = {"type": "point", "label": "spike", "at": 100.0, "key": "1"}
+    with Context(namespaces={NS}) as ctx:
+        client = TestClient(UiServer(ctx, "proj", annotations_file=annotations_file)._app)
+
+        empty = client.get("/api/repositories/readings/annotations")
+        saved = client.put(
+            "/api/repositories/readings/annotations", json={"annotations": [time_range, point]}
+        )
+        block = client.get("/api/repositories/readings/annotations").json()
+
+    assert empty.json() == {"labels": [], "annotations": []}
+    assert saved.json() == {"labels": ["drift", "spike"]}
+    assert block == {"labels": ["drift", "spike"], "annotations": [point, time_range]}
+    assert json.loads(annotations_file.read_text())["repositories"]["readings"] == block
+
+
+def test_timeseries_annotations_put_rejects_a_malformed_body(tmp_path):
+    annotations_file = tmp_path / "ann.json"
+    NS = readings_namespace()
+    with Context(namespaces={NS}) as ctx:
+        client = TestClient(UiServer(ctx, "proj", annotations_file=annotations_file)._app)
+
+        r = client.put(
+            "/api/repositories/readings/annotations",
+            json={"annotations": [{"type": "range", "label": "drift", "start": 9, "end": 3}]},
+        )
+
+    assert r.status_code == 400
+    assert not annotations_file.exists()
+
+
+def test_timeseries_annotations_are_disabled_without_a_file():
+    NS = readings_namespace()
+    with Context(namespaces={NS}) as ctx:
+        client = TestClient(UiServer(ctx, "proj")._app)
+
+        block = client.get("/api/repositories/readings/annotations")
+        r = client.put("/api/repositories/readings/annotations", json={"annotations": []})
+
+    assert block.json() == {"labels": [], "annotations": []}
+    assert r.status_code == 404
+
+
+def test_timeseries_and_record_annotations_are_put_through_their_own_routes(tmp_path):
+    annotations_file = tmp_path / "ann.json"
+    with Context(namespaces={readings_namespace(), photos_namespace([])}) as ctx:
+        client = TestClient(UiServer(ctx, "proj", annotations_file=annotations_file)._app)
+
+        on_record = client.put(
+            "/api/repositories/readings/records/1/annotations",
+            json={"width": 10, "height": 20, "annotations": [parcel_box()]},
+        )
+        on_repository = client.put("/api/repositories/photos/annotations", json={"annotations": []})
+
+    assert on_record.status_code == 404
+    assert on_repository.status_code == 404
+    assert not annotations_file.exists()
+
+
+def test_annotations_are_not_served_for_other_repositories(tmp_path):
     NS = make_ns()
 
     @NS
