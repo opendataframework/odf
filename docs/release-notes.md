@@ -90,6 +90,16 @@
   [`10-audio-view`](https://github.com/opendataframework/odf/tree/main/examples/10-audio-view)
   example describes the format. `[ui] annotations = false` in `config.toml` turns
   annotating off.
+- **UI**: labelled regions can be drawn on the map of the location view, for "everything
+  inside this area", such as a region of interest, a geofence or a split by area. Pick
+  `Draw a region` (`B`) at the top right of the map, drag out a rectangle and type its
+  label or pick one already used. With `Select` (`V`) the map moves as before: select a
+  region to delete it, or select its label to change it. A region inside a larger one
+  stays on top. Regions are saved to the same `annotations.json`, as one list per
+  repository, each as its south, west, north and east bounds in degrees. The
+  [`06-location-view`](https://github.com/opendataframework/odf/tree/main/examples/06-location-view)
+  example describes the format. `[ui] annotations = false` in `config.toml` turns
+  annotating off.
 - **UI**: a record can be given a class, for simple classification such as good or bad,
   relevant or not. Under an image, document, video or audio clip open from its grid there
   is a row of the repository's classes: select one, or press its number (`1` to `9`), to

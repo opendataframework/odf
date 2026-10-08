@@ -3,10 +3,11 @@
 Backs the labelled boxes drawn over an open image in the image view, the
 labelled text spans and page boxes drawn on an open document in the document
 view, the labelled time ranges and points marked on a clip open in the video
-and audio views and on the chart of the timeseries view, and the class given
+and audio views and on the chart of the timeseries view, the labelled regions
+drawn on the map of the location view, and the class given
 to a whole record in the table, image, document, video and audio views (see
 ``app.js``'s "Image annotations", "Document annotations", "Clip annotations",
-"Timeseries annotations" and "Record classes" sections), so a project can
+"Timeseries annotations", "Map annotations" and "Record classes" sections), so a project can
 label its data in the dev UI and read the result from a later pipeline with
 nothing more than ``json.load``. Scoped to whatever
 ``Path`` a ``UiServer`` is constructed with, like ``odf.ui.layout`` (see
@@ -70,6 +71,13 @@ The file holds one block per repository id::
             {"type": "point", "label": "outlier",
              "at": 1787868827.2, "key": "2"}
           ]
+        },
+        "stores": {
+          "labels": ["downtown"],
+          "annotations": [
+            {"type": "box", "label": "downtown",
+             "south": 50.44, "west": 30.5, "north": 50.46, "east": 30.54}
+          ]
         }
       }
     }
@@ -102,6 +110,13 @@ one record, so its block holds them in one ``annotations`` list and has no
 of the view's timestamp field, in that field's own units. A point is made on
 a record: ``at`` is that record's timestamp and ``key`` its key, as a string.
 The list is kept in time order, and ranges may overlap.
+
+A location repository's annotations are regions of its map, held the same way
+in one ``annotations`` list. A region is a box between two latitudes,
+``south`` and ``north``, and two longitudes, ``west`` and ``east``, in
+degrees as the view's latitude and longitude fields are, to six decimal
+places. One never crosses the antimeridian, so ``west`` is less than
+``east``.
 
 A record of any repository can also be given one class, for classification.
 ``record_classes`` maps a record's key to its class, and ``classes`` holds
@@ -243,7 +258,9 @@ def set_document_record(data: dict, repo_id: str, key: str, annotations: object)
 
 
 def series(data: dict, repo_id: str) -> dict:
-    """Return a timeseries repository's block, or an empty one if it has no annotations.
+    """Return a timeseries or location repository's block, or an empty one.
+
+    Their annotations belong to the repository rather than to one record.
 
     Args:
         data: The document described in the module docstring.
@@ -368,6 +385,31 @@ def set_clip_record(
         raise ValueError("annotations must be a list")
     items = sorted((_clip_item(item, length) for item in annotations), key=_mark_time)
     return _store(data, repo_id, key, {"duration": length, "annotations": items})
+
+
+def set_regions(data: dict, repo_id: str, annotations: object) -> dict:
+    """Replace a location repository's annotations in ``data``, in place.
+
+    Labels are kept as ``set_record`` keeps them.
+
+    Args:
+        data: The document described in the module docstring.
+        repo_id: The repository's kebab-case id.
+        annotations: The repository's full list of regions.
+
+    Returns:
+        The repository's updated block, as ``series()`` returns it.
+
+    Raises:
+        ValueError: If any region is malformed.
+    """
+    if not isinstance(annotations, list):
+        raise ValueError("annotations must be a list")
+    items = [_region(item) for item in annotations]
+    block = data.setdefault("repositories", {}).setdefault(repo_id, {})
+    block["annotations"] = items
+    _keep_labels(block, items, items)
+    return series(data, repo_id)
 
 
 def _store(data: dict, repo_id: str, key: str, record: dict) -> dict:
@@ -499,6 +541,28 @@ def _page_box(item: dict) -> dict:
         "height": round(bottom - top, 2),
         "page_width": page_width,
         "page_height": page_height,
+    }
+
+
+def _region(item: object) -> dict:
+    """Validate one region of a map: a box between two latitudes and two longitudes."""
+    if not isinstance(item, dict) or item.get("type") != "box":
+        raise ValueError('each annotation must be an object with "type": "box"')
+    label = _label(item)
+    south, west, north, east = (
+        round(_number(item.get(side), side), 6) for side in ("south", "west", "north", "east")
+    )
+    if not (-90 <= south < north <= 90):
+        raise ValueError("a region needs -90 <= south < north <= 90")
+    if not (-180 <= west < east <= 180):
+        raise ValueError("a region needs -180 <= west < east <= 180")
+    return {
+        "type": "box",
+        "label": label,
+        "south": south,
+        "west": west,
+        "north": north,
+        "east": east,
     }
 
 

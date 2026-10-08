@@ -29,6 +29,7 @@ from opendataframework.view import (
     DataView,
     DocumentView,
     ImageView,
+    LocationView,
     StreamingAudioView,
     StreamingVideoView,
     TimeseriesView,
@@ -50,6 +51,9 @@ _MEDIA_CONTENT_TYPES: dict[type, str] = {
     DocumentView: "application/octet-stream",
 }
 
+# The views whose annotations are one list for the repository, not per record.
+_LIST_VIEWS = (TimeseriesView, LocationView)
+
 
 class UiServer:
     """Serves the UI for a single ``Context`` over HTTP.
@@ -68,7 +72,7 @@ class UiServer:
             ``Context``'s ``log_dir=None`` disables file logging. ``Project``
             opts in to a real path when starting the UI.
         annotations_file: Path to persist annotations drawn in the image,
-            document, video, audio and timeseries views, and the classes given to records,
+            document, video, audio, timeseries and location views, and the classes given to records,
             to, as JSON (see ``odf.ui.annotations``). ``None`` (the default)
             disables annotation — the UI offers no drawing and the save
             endpoint returns 404. ``Project`` opts in to a real path when
@@ -338,13 +342,12 @@ class UiServer:
         def repository_annotations(repo_id: str) -> dict:
             """Return a repository's labels and annotations.
 
-            An image or document repository's are per record, a timeseries
-            repository's one list (see ``odf.ui.annotations``).
+            An image, document, video or audio repository's are per record,
+            a timeseries or location repository's one list (see
+            ``odf.ui.annotations``).
             """
             view = self._get_annotatable_view(repo_id)
-            block = (
-                annotations.series if isinstance(view, TimeseriesView) else annotations.repository
-            )
+            block = annotations.series if isinstance(view, _LIST_VIEWS) else annotations.repository
             if self._annotations_path is None:
                 return block({}, repo_id)
             with self._annotations_lock:
@@ -352,16 +355,23 @@ class UiServer:
 
         @app.put("/api/repositories/{repo_id}/annotations")
         def put_repository_annotations(repo_id: str, body: dict) -> dict:
-            """Replace a timeseries repository's annotations, returning its labels."""
+            """Replace a timeseries or location repository's annotations, returning its labels."""
             view = self._get_annotatable_view(repo_id)
-            if not isinstance(view, TimeseriesView):
-                raise HTTPException(status_code=404, detail="Repository has no timeseries view")
+            if not isinstance(view, _LIST_VIEWS):
+                raise HTTPException(
+                    status_code=404, detail="Repository's annotations are per record"
+                )
+            replace = (
+                annotations.set_series
+                if isinstance(view, TimeseriesView)
+                else annotations.set_regions
+            )
             if self._annotations_path is None:
                 raise HTTPException(status_code=404, detail="Annotations are not enabled")
             with self._annotations_lock:
                 saved = self._load_annotations()
                 try:
-                    block = annotations.set_series(saved, repo_id, body.get("annotations"))
+                    block = replace(saved, repo_id, body.get("annotations"))
                 except ValueError as exc:
                     raise HTTPException(status_code=400, detail=str(exc)) from exc
                 annotations.save(self._annotations_path, saved)
@@ -371,9 +381,9 @@ class UiServer:
         def put_record_annotations(repo_id: str, key: str, body: dict) -> dict:
             """Replace one record's annotations, returning the repository's labels."""
             view = self._get_annotatable_view(repo_id)
-            if isinstance(view, TimeseriesView):
+            if isinstance(view, _LIST_VIEWS):
                 raise HTTPException(
-                    status_code=404, detail="Repository has no image or document view"
+                    status_code=404, detail="Repository's annotations are not per record"
                 )
             if self._annotations_path is None:
                 raise HTTPException(status_code=404, detail="Annotations are not enabled")
@@ -600,7 +610,7 @@ class UiServer:
     def _get_annotatable_view(self, repo_id: str) -> DataView:
         """Resolve a repository id's data view, or raise 404 if it can't be annotated."""
         view = self._get_data_view(repo_id)
-        if not isinstance(view, (ImageView, DocumentView, VideoView, AudioView, TimeseriesView)):
+        if not isinstance(view, (ImageView, DocumentView, VideoView, AudioView, *_LIST_VIEWS)):
             raise HTTPException(status_code=404, detail="Repository's view takes no annotations")
         return view
 

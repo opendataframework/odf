@@ -486,6 +486,12 @@ button.media-tile:hover,button.media-tile:focus-visible{border-color:var(--title
 .media-lightbox[data-tool="range"] .clip-strip,.media-lightbox[data-tool="point"] .clip-strip{cursor:crosshair}
 .clip-wave{position:absolute;inset:0;width:100%;height:100%;color:var(--text-dim);opacity:.6;pointer-events:none}
 .clip-playhead{position:absolute;top:0;bottom:0;width:1px;background:var(--text);pointer-events:none}
+/* Map annotations — labelled regions drawn on the location view's map. */
+.geo-tools{position:absolute;top:10px;right:10px;z-index:1000;display:flex;align-items:center;gap:2px;padding:3px;background:var(--panel);border:1px solid var(--border);border-radius:2px}
+.geo-hint{margin:0 6px;color:var(--text-muted);font-size:10.5px;white-space:nowrap}
+#geo-map.geo-drawing,#geo-map.geo-drawing .leaflet-interactive{cursor:crosshair}
+.geo-region-head .ts-mark-head{top:auto;bottom:0}
+#map.mode-geo .image-label-form{z-index:1001}
 
 /* Bounded Video/Audio view — a list of seekable clips, one per record. */
 .media-list{display:flex;flex-direction:column;gap:14px}

@@ -501,3 +501,74 @@ def test_set_clip_record_rejects_malformed_input(duration, items):
         annotations.set_clip_record(data, "memos", "a", duration, items)
 
     assert annotations.repository(data, "memos") == {"labels": [], "records": {}}
+
+
+def region(label="downtown", south=50.44, west=30.5, north=50.46, east=30.54):
+    return {
+        "type": "box",
+        "label": label,
+        "south": south,
+        "west": west,
+        "north": north,
+        "east": east,
+    }
+
+
+def test_set_regions_stores_regions_in_the_order_given():
+    items = [region(), region("suburb", south=50.3, north=50.4)]
+
+    block = annotations.set_regions({}, "stores", items)
+
+    assert block == {"labels": ["downtown", "suburb"], "annotations": items}
+
+
+def test_set_regions_strips_labels_and_rounds_to_six_decimal_places():
+    block = annotations.set_regions(
+        {}, "stores", [region(" downtown ", south=50.44000049, east=30.5399996)]
+    )
+
+    assert block["annotations"] == [region(south=50.44, east=30.54)]
+
+
+def test_set_regions_allows_the_whole_world_and_regions_inside_each_other():
+    items = [region("world", south=-90, west=-180, north=90, east=180), region()]
+
+    assert annotations.set_regions({}, "stores", items)["annotations"] == items
+
+
+def test_set_regions_drops_labels_no_region_uses_any_more():
+    data = {}
+    annotations.set_regions(data, "stores", [region(), region("suburb", south=50.3, north=50.4)])
+
+    block = annotations.set_regions(data, "stores", [region()])
+
+    assert block == {"labels": ["downtown"], "annotations": [region()]}
+    assert annotations.set_regions(data, "stores", []) == {"labels": [], "annotations": []}
+
+
+@pytest.mark.parametrize(
+    "items",
+    [
+        "nope",
+        ["nope"],
+        [{**region(), "type": "polygon"}],
+        [region(label="  ")],
+        [region(south=50.46, north=50.44)],
+        [region(south=50.44, north=50.44)],
+        [region(west=30.54, east=30.5)],
+        [region(north=90.5)],
+        [region(south=-91)],
+        [region(east=180.5)],
+        [region(west=170, east=-170)],
+        [region(south="50")],
+        [region(north=float("nan"))],
+        [{"type": "box", "label": "downtown", "south": 1, "west": 1, "north": 2}],
+    ],
+)
+def test_set_regions_rejects_malformed_input(items):
+    data = {}
+
+    with pytest.raises(ValueError):
+        annotations.set_regions(data, "stores", items)
+
+    assert annotations.series(data, "stores") == {"labels": [], "annotations": []}

@@ -13,6 +13,7 @@ from opendataframework.view import (
     AudioView,
     DocumentView,
     ImageView,
+    LocationView,
     StreamingAudioView,
     StreamingVideoView,
     TimeseriesView,
@@ -1125,6 +1126,70 @@ def test_timeseries_and_record_annotations_are_put_through_their_own_routes(tmp_
 
     assert on_record.status_code == 404
     assert on_repository.status_code == 404
+    assert not annotations_file.exists()
+
+
+@dataclass
+class Store:
+    id: int
+    lat: float
+    lon: float
+
+
+def stores_namespace():
+    """A namespace holding a ``Stores`` repository with a ``LocationView``."""
+    NS = make_ns()
+
+    @NS
+    @Repository(Store)
+    class Stores:
+        def all(self):
+            return [Store(id=1, lat=50.45, lon=30.52)]
+
+        def data_view(self):
+            return LocationView(fields=("lat", "lon"))
+
+    return NS
+
+
+def test_map_annotations_round_trip(tmp_path):
+    annotations_file = tmp_path / "ann.json"
+    region = {
+        "type": "box",
+        "label": "downtown",
+        "south": 50.44,
+        "west": 30.5,
+        "north": 50.46,
+        "east": 30.54,
+    }
+    with Context(namespaces={stores_namespace()}) as ctx:
+        client = TestClient(UiServer(ctx, "proj", annotations_file=annotations_file)._app)
+
+        empty = client.get("/api/repositories/stores/annotations")
+        saved = client.put("/api/repositories/stores/annotations", json={"annotations": [region]})
+        block = client.get("/api/repositories/stores/annotations").json()
+
+    assert empty.json() == {"labels": [], "annotations": []}
+    assert saved.json() == {"labels": ["downtown"]}
+    assert block == {"labels": ["downtown"], "annotations": [region]}
+    assert json.loads(annotations_file.read_text())["repositories"]["stores"] == block
+
+
+def test_map_annotations_put_rejects_a_malformed_body_and_the_record_route(tmp_path):
+    annotations_file = tmp_path / "ann.json"
+    with Context(namespaces={stores_namespace()}) as ctx:
+        client = TestClient(UiServer(ctx, "proj", annotations_file=annotations_file)._app)
+
+        malformed = client.put(
+            "/api/repositories/stores/annotations",
+            json={"annotations": [{"type": "range", "label": "x", "start": 1, "end": 2}]},
+        )
+        on_record = client.put(
+            "/api/repositories/stores/records/1/annotations", json={"annotations": []}
+        )
+
+    assert malformed.status_code == 400
+    assert on_record.status_code == 404
     assert not annotations_file.exists()
 
 

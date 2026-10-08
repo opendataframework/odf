@@ -1909,8 +1909,8 @@ function setMapMode(mode) {
   }
   if (mapMode === 'geo' && mode !== 'geo') destroyGeoMap();
   if ((mapMode === 'image' || mapMode === 'media' || mapMode === 'document') && mode !== mapMode) closeLightbox();
-  if (mapMode === 'timeseries' && mode !== 'timeseries') {
-    closeImageLabelForm(); // out of the chart before the next view replaces it
+  if (annotatesRepository() && mode !== mapMode) {
+    closeImageLabelForm(); // out of the chart or the map before the next view replaces it
     selectedBox = -1;
   }
   if (mapMode === 'chart' && mode !== 'chart') {
@@ -2462,12 +2462,13 @@ window.addEventListener('keydown', e => {
     else if (e.key === 'ArrowRight') stepLightbox(1);
     return;
   }
-  if (mapMode === 'timeseries' && tsAnnotating()) {
-    // Esc backs out of a label input or a selection before leaving the chart.
+  if (annotatesRepository() && viewAnnotating()) {
+    // Esc backs out of a label input or a selection before leaving the chart or the map.
+    const [toolKeys, setTool] = mapMode === 'geo' ? [GEO_TOOL_KEYS, setGeoTool] : [TS_TOOL_KEYS, setTsTool];
     if (e.key === 'Escape') { if (!cancelImageAnnotationStep()) backToTopology(); }
     else if (e.target.closest('input, textarea, select')) return;
     else if ((e.key === 'Delete' || e.key === 'Backspace') && selectedBox >= 0) deleteImageBox(selectedBox);
-    else if (TS_TOOL_KEYS[e.key.toLowerCase()] && !e.metaKey && !e.ctrlKey && !e.altKey) setTsTool(TS_TOOL_KEYS[e.key.toLowerCase()]);
+    else if (toolKeys[e.key.toLowerCase()] && !e.metaKey && !e.ctrlKey && !e.altKey) setTool(toolKeys[e.key.toLowerCase()]);
     return;
   }
   if (e.key !== 'Escape') return;
@@ -2647,9 +2648,10 @@ async function playAudioStream(repoId) {
 
 let geoMap = null;
 let geoMarkers = null;
+let geoRegions = null; // the layer of labelled regions, see "Map annotations"
 
 function destroyGeoMap() {
-  if (geoMap) { geoMap.remove(); geoMap = null; geoMarkers = null; }
+  if (geoMap) { geoMap.remove(); geoMap = null; geoMarkers = null; geoRegions = null; }
 }
 
 async function showMapView(repoId) {
@@ -2660,9 +2662,15 @@ async function showMapView(repoId) {
   document.getElementById('map-panel-title').textContent = `${schema.label} · map`;
   renderModeSwitcher(schema, 'location');
   renderReplayToggle(schema);
-  document.getElementById('map-panel-body').innerHTML =
-    '<div id="geo-map"></div><div id="geo-pagination" class="floating-pagination"></div>';
-  await refreshGeoMap();
+  const body = document.getElementById('map-panel-body');
+  if (body.contains(imageLabelForm)) closeImageLabelForm(); // out of the map before it is replaced
+  selectedBox = -1;
+  pendingBox = null;
+  relabelBox = -1;
+  geoDrag = null;
+  body.innerHTML = '<div id="geo-map"></div>' + (viewAnnotating() ? GEO_TOOLS_HTML : '') +
+    '<div id="geo-pagination" class="floating-pagination"></div>';
+  await Promise.all([refreshGeoMap(), loadImageAnnotations()]);
 }
 
 // Fetches one page of records at a time (same tableOffset/tablePageSize as
@@ -2685,7 +2693,11 @@ async function refreshGeoMap() {
     tableTotal = Number(res.headers.get('X-Total-Count') ?? records.length);
   } catch (err) {
     const body = document.getElementById('map-panel-body');
-    if (mapMode === 'geo') { destroyGeoMap(); body.innerHTML = '<span class="detail-empty">// failed to load records</span>'; }
+    if (mapMode === 'geo') {
+      if (body.contains(imageLabelForm)) closeImageLabelForm();
+      destroyGeoMap();
+      body.innerHTML = '<span class="detail-empty">// failed to load records</span>';
+    }
     return;
   }
   if (!records.length && tableOffset > 0) {
@@ -2748,6 +2760,9 @@ function renderGeoMap(schema, records, opts = {}) {
       attribution: '&copy; <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">OpenStreetMap</a> contributors',
     }).addTo(geoMap);
     geoMarkers = L.layerGroup().addTo(geoMap);
+    geoRegions = L.layerGroup().addTo(geoMap);
+    wireGeoDrawing(geoMap);
+    renderGeoTools();
   } else {
     geoMarkers.clearLayers();
   }
@@ -2783,7 +2798,168 @@ function renderGeoMap(schema, records, opts = {}) {
   }
 
   geoMap.invalidateSize();
+  renderGeoRegions();
 }
+
+// ── Map annotations ───────────────────────────────────────────────────────
+// Labelled regions drawn on the map, for "everything inside this area": a
+// region of interest, a geofence, a split by area. A region is a box between
+// two latitudes and two longitudes. Like the marks of a timeseries, regions
+// belong to the repository rather than to one record, so they are saved as
+// one list through PUT /api/repositories/{id}/annotations (see
+// odf.ui.annotations), and they share the state and the label input of "Image
+// annotations" below. There is no move or resize, and no other shape.
+//
+// With the "box" tool a drag draws a region instead of moving the map, which
+// the "select" tool leaves as it was: there a region is selected by a click,
+// and relabelled or deleted from the label at its corner.
+
+const GEO_TOOL_KEY = 'odf-ui-geo-tool';
+const GEO_TOOL_KEYS = { v: 'select', b: 'box' };
+const GEO_TOOL_HINTS = { select: 'Pick the tool to add a region', box: 'Drag on the map to add a region' };
+const GEO_TOOLS_HTML = '<div class="geo-tools" role="toolbar" aria-label="Tools"><span class="geo-hint"></span>' +
+  '<button class="lightbox-tool" data-tool="select" title="Select and move the map (V)" aria-label="Select"><svg viewBox="0 0 16 16"><path d="M3.5 2.5 7.6 13l1.5-4.4 4.4-1.5z"/></svg></button>' +
+  '<button class="lightbox-tool" data-tool="box" title="Draw a region (B)" aria-label="Draw a region"><svg viewBox="0 0 16 16"><path d="M2.5 3.5h11v9h-11z"/></svg></button>' +
+  '</div>';
+
+let geoTool = 'select'; // a per-browser preference, like lightboxTools
+let geoDrag = null;     // the press in progress on the map with the "box" tool
+let geoDrew = false;    // whether that press drew a region, so the click that ends it isn't taken for one on the map
+
+function loadGeoTool() {
+  try {
+    const tool = localStorage.getItem(GEO_TOOL_KEY);
+    if (tool in GEO_TOOL_HINTS) geoTool = tool;
+  } catch {}
+}
+
+function setGeoTool(tool) {
+  closeImageLabelForm();
+  geoTool = tool;
+  try { localStorage.setItem(GEO_TOOL_KEY, tool); } catch {}
+  renderGeoTools();
+  renderGeoRegions();
+}
+
+// Shows the active tool pressed, says beside it how it is used, and has a
+// drag on the map draw with the "box" tool rather than move it.
+function renderGeoTools() {
+  if (!geoMap) return;
+  const drawing = viewAnnotating() && geoTool === 'box';
+  geoMap.dragging[drawing ? 'disable' : 'enable']();
+  geoMap.getContainer().classList.toggle('geo-drawing', drawing);
+  const tools = document.querySelector('#map-panel-body .geo-tools');
+  if (!tools) return;
+  for (const button of tools.querySelectorAll('[data-tool]')) {
+    button.setAttribute('aria-pressed', button.dataset.tool === geoTool);
+  }
+  tools.querySelector('.geo-hint').textContent = GEO_TOOL_HINTS[geoTool];
+}
+
+// The region between two corners, to six decimal places of a degree. Null
+// when it has no area.
+function geoBox(a, b) {
+  const within = (value, limit) => Math.round(Math.min(Math.max(value, -limit), limit) * 1e6) / 1e6;
+  const box = {
+    south: within(Math.min(a.lat, b.lat), 90), west: within(Math.min(a.lng, b.lng), 180),
+    north: within(Math.max(a.lat, b.lat), 90), east: within(Math.max(a.lng, b.lng), 180),
+  };
+  return box.south < box.north && box.west < box.east ? box : null;
+}
+
+// Redraws the regions under the record markers, smallest on top, so a region
+// inside another stays selectable, each with its label at its top-left
+// corner.
+function renderGeoRegions() {
+  if (!geoMap || !geoRegions) return;
+  geoRegions.clearLayers();
+  const annotating = viewAnnotating();
+  const bounds = region => [[region.south, region.west], [region.north, region.east]];
+  const area = region => (region.north - region.south) * (region.east - region.west);
+  const smallestFirst = imageBoxes().map((region, index) => ({ region, index })).sort((a, b) => area(a.region) - area(b.region));
+  for (const { region, index } of smallestFirst) {
+    const selected = index === selectedBox;
+    const color = boxColor(region.label);
+    L.rectangle(bounds(region), { color, weight: selected ? 3 : 2, fillOpacity: selected ? 0.28 : 0.12, interactive: annotating && geoTool === 'select' })
+      .on('click', e => {
+        L.DomEvent.stopPropagation(e);
+        closeImageLabelForm();
+        selectedBox = index;
+        renderGeoRegions();
+      })
+      .addTo(geoRegions)
+      .bringToBack();
+    const head = `<span class="ts-mark-head" style="--box-color:${color}">` +
+      `<span class="ts-mark-label"${annotating ? ' title="Change label"' : ''}>${escapeHtml(region.label)}</span>` +
+      (selected ? '<button type="button" class="ts-mark-delete" title="Delete (Del)">&times;</button>' : '') + '</span>';
+    L.marker([region.north, region.west], {
+      icon: L.divIcon({ className: 'geo-region-head', html: head, iconSize: null, iconAnchor: [0, 0] }),
+      interactive: annotating,
+      keyboard: false,
+    })
+      .on('click', e => {
+        L.DomEvent.stopPropagation(e);
+        if (e.originalEvent.target.closest('.ts-mark-delete')) return deleteImageBox(index);
+        closeImageLabelForm();
+        selectedBox = index;
+        relabelBox = index;
+        renderGeoRegions();
+        openImageLabelForm();
+      })
+      .addTo(geoRegions);
+  }
+  if (pendingBox) {
+    L.rectangle(bounds(pendingBox), { color: boxColor(lastBoxLabel), weight: 2, dashArray: '5 4', fillOpacity: 0.12, interactive: false })
+      .addTo(geoRegions);
+  }
+}
+
+function openGeoLabelForm(region, value) {
+  const corner = geoMap.latLngToContainerPoint([region.south, region.west]);
+  openLabelFormIn(document.getElementById('map-panel-body'), corner.x, corner.y + 4, value);
+}
+
+// A press on the map with the "box" tool becomes a new region once the
+// pointer travels BOX_MIN_DRAG. The release is taken from the window, since
+// it can come outside the map. A click on the map itself drops the selection.
+function wireGeoDrawing(map) {
+  map.on('mousedown', e => {
+    geoDrew = false;
+    if (geoTool !== 'box' || !viewAnnotating() || e.originalEvent.button !== 0) return;
+    if (e.originalEvent.target.closest('.geo-region-head')) return;
+    e.originalEvent.preventDefault();
+    closeImageLabelForm();
+    geoDrag = { from: e.latlng, point: e.containerPoint, drawing: false };
+  });
+  map.on('mousemove', e => {
+    if (!geoDrag) return;
+    if (!geoDrag.drawing && e.containerPoint.distanceTo(geoDrag.point) < BOX_MIN_DRAG) return;
+    geoDrag.drawing = true;
+    selectedBox = -1;
+    pendingBox = geoBox(geoDrag.from, e.latlng);
+    renderGeoRegions();
+  });
+  map.on('click', () => {
+    if (geoDrew) { geoDrew = false; return; }
+    if (!viewAnnotating()) return;
+    if (!closeImageLabelForm() && selectedBox < 0) return;
+    selectedBox = -1;
+    renderGeoRegions();
+  });
+}
+
+window.addEventListener('mouseup', () => {
+  const drag = geoDrag;
+  if (!drag) return;
+  geoDrag = null;
+  geoDrew = drag.drawing;
+  if (drag.drawing && pendingBox && mapMode === 'geo') openImageLabelForm();
+});
+document.getElementById('map-panel-body').addEventListener('click', e => {
+  const button = e.target.closest('.geo-tools [data-tool]');
+  if (button) setGeoTool(button.dataset.tool);
+});
+loadGeoTool();
 
 // ── Image view ────────────────────────────────────────────────────────────
 // Backs the "View Images" action on repository nodes whose DataView is an
@@ -3193,8 +3369,14 @@ function imageRecordKey() {
   return String(lightboxRecords[lightboxIndex][repoSchemas[activeRepoId].key]);
 }
 
+// Whether the view in front keeps one list of annotations for its repository,
+// a chart's or a map's, rather than a list for each record.
+function annotatesRepository() {
+  return mapMode === 'timeseries' || mapMode === 'geo';
+}
+
 function imageBoxes() {
-  if (mapMode === 'timeseries') return imageAnnotations.annotations || [];
+  if (annotatesRepository()) return imageAnnotations.annotations || [];
   const record = imageAnnotations.records[imageRecordKey()];
   return record ? record.annotations : [];
 }
@@ -3232,6 +3414,7 @@ function boxStyle(box, label, surface) {
 // (see renderTsAnnotations).
 function renderImageBoxes() {
   if (mapMode === 'timeseries') return renderTsAnnotations();
+  if (mapMode === 'geo') return renderGeoRegions();
   if (mapMode === 'media') return renderClipMarks();
   if (lightboxIndex < 0) return;
   if (mapMode === 'document') renderDocumentAnnotations();
@@ -3302,6 +3485,7 @@ function openImageLabelForm() {
   const value = pendingBox ? lastBoxLabel : box.label;
   if (box.type === 'span') return openSpanLabelForm(value);
   if (mapMode === 'timeseries') return openTsLabelForm(box, value);
+  if (mapMode === 'geo') return openGeoLabelForm(box, value);
   if (mapMode === 'media') return openClipLabelForm(box, value);
   const { overlay, width, height } = boxSurface;
   openLabelFormIn(overlay, box.x / width * overlay.clientWidth, (box.y + box.height) / height * overlay.clientHeight + 4, value);
@@ -3350,15 +3534,15 @@ function deleteImageBox(index) {
   saveImageBoxes(imageBoxes().filter((_, i) => i !== index));
 }
 
-// Replaces the open record's annotations, or the open timeseries', showing
-// the change at once and reloading from the server if it could not be saved.
+// Replaces the open record's annotations, or the open chart's or map's,
+// showing the change at once and reloading from the server if it could not be saved.
 function saveImageBoxes(boxes) {
   const repoId = activeRepoId;
   let url = `/api/repositories/${repoId}/annotations`;
   let body, saved, name = '';
-  if (mapMode === 'timeseries') {
-    // In time order, as the server keeps them.
-    body = { annotations: [...boxes].sort((a, b) => tsMarkStart(a) - tsMarkStart(b)) };
+  if (annotatesRepository()) {
+    // A chart's in time order, as the server keeps them.
+    body = { annotations: mapMode === 'geo' ? boxes : [...boxes].sort((a, b) => tsMarkStart(a) - tsMarkStart(b)) };
     imageAnnotations.annotations = saved = body.annotations;
   } else {
     const img = document.getElementById('media-lightbox-img');
@@ -4576,7 +4760,7 @@ function renderTimeseriesChart(schema, records) {
     return `<label class="ts-legend-item${hidden ? ' hidden' : ''}" data-field="${escapeHtml(name)}" title="Click to ${hidden ? 'show' : 'hide'}">` +
       `<span class="ts-swatch" style="background:${colors[i % colors.length]}"></span>${escapeHtml(name)}</label>`;
   }).join('');
-  const annotating = tsAnnotating() && visibleFields.length > 0;
+  const annotating = viewAnnotating() && visibleFields.length > 0;
   const chart = visibleFields.length
     ? '<div class="ts-plot">' +
       `<svg class="timeseries-chart" viewBox="0 0 ${w} ${h}" preserveAspectRatio="none">${series}</svg>` +
@@ -4642,9 +4826,9 @@ function loadTsTool() {
   } catch {}
 }
 
-// Whether the chart takes new labels. A replay redraws it frame by frame, so
-// it only shows the ones already made.
-function tsAnnotating() {
+// Whether the chart, or the map, takes new labels. A replay redraws it frame
+// by frame, so it only shows the ones already made.
+function viewAnnotating() {
   return annotationsEnabled && !(replayMode && replayRepoId === activeRepoId);
 }
 
