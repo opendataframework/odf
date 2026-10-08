@@ -1128,6 +1128,103 @@ def test_timeseries_and_record_annotations_are_put_through_their_own_routes(tmp_
     assert not annotations_file.exists()
 
 
+def items_namespace():
+    """A namespace holding an ``Items`` repository shown as the default table."""
+    NS = make_ns()
+
+    @NS
+    @Repository(Item)
+    class Items:
+        def all(self):
+            return [Item(id=1, name="a"), Item(id=2, name="b")]
+
+    return NS
+
+
+def test_record_classes_round_trip_for_a_table_repository(tmp_path):
+    annotations_file = tmp_path / "ann.json"
+    with Context(namespaces={items_namespace()}) as ctx:
+        client = TestClient(UiServer(ctx, "proj", annotations_file=annotations_file)._app)
+
+        empty = client.get("/api/repositories/items/classes")
+        first = client.put("/api/repositories/items/records/1/class", json={"class": "good"})
+        second = client.put("/api/repositories/items/records/2/class", json={"class": "bad"})
+        block = client.get("/api/repositories/items/classes").json()
+
+    assert empty.json() == {"classes": [], "records": {}}
+    assert first.json() == {"classes": ["good"]}
+    assert second.json() == {"classes": ["good", "bad"]}
+    assert block == {"classes": ["good", "bad"], "records": {"1": "good", "2": "bad"}}
+    saved = json.loads(annotations_file.read_text())["repositories"]["items"]
+    assert saved == {"classes": ["good", "bad"], "record_classes": {"1": "good", "2": "bad"}}
+
+
+def test_record_class_is_cleared_with_null_and_kept_apart_from_boxes(tmp_path):
+    annotations_file = tmp_path / "ann.json"
+    NS = photos_namespace([Photo(name="a", image=b"jpg")])
+    with Context(namespaces={NS}) as ctx:
+        client = TestClient(UiServer(ctx, "proj", annotations_file=annotations_file)._app)
+
+        client.put(
+            "/api/repositories/photos/records/a/annotations",
+            json={"width": 10, "height": 20, "annotations": [parcel_box()]},
+        )
+        client.put("/api/repositories/photos/records/a/class", json={"class": "ok"})
+        cleared = client.put("/api/repositories/photos/records/a/class", json={"class": None})
+        classes = client.get("/api/repositories/photos/classes").json()
+        boxes = client.get("/api/repositories/photos/annotations").json()
+
+    assert cleared.json() == {"classes": []}
+    assert classes == {"classes": [], "records": {}}
+    assert boxes == {
+        "labels": ["parcel"],
+        "records": {"a": {"width": 10, "height": 20, "annotations": [parcel_box()]}},
+    }
+
+
+def test_record_class_put_rejects_a_malformed_body(tmp_path):
+    annotations_file = tmp_path / "ann.json"
+    with Context(namespaces={items_namespace()}) as ctx:
+        client = TestClient(UiServer(ctx, "proj", annotations_file=annotations_file)._app)
+
+        r = client.put("/api/repositories/items/records/1/class", json={"class": "  "})
+
+    assert r.status_code == 400
+    assert not annotations_file.exists()
+
+
+def test_record_classes_are_disabled_without_a_file():
+    with Context(namespaces={items_namespace()}) as ctx:
+        client = TestClient(UiServer(ctx, "proj")._app)
+
+        block = client.get("/api/repositories/items/classes")
+        r = client.put("/api/repositories/items/records/1/class", json={"class": "good"})
+
+    assert block.json() == {"classes": [], "records": {}}
+    assert r.status_code == 404
+
+
+def test_record_classes_are_not_served_for_streaming_or_unknown_repositories(tmp_path):
+    NS = make_ns()
+
+    @NS
+    @Repository(Frame)
+    class Cam:
+        def stream(self):
+            yield Frame(id=1, data=b"jpg")
+
+        def data_view(self):
+            return StreamingVideoView(field="data")
+
+    with Context(namespaces={NS}) as ctx:
+        client = TestClient(UiServer(ctx, "proj", annotations_file=tmp_path / "ann.json")._app)
+
+        assert client.get("/api/repositories/cam/classes").status_code == 404
+        r = client.put("/api/repositories/cam/records/1/class", json={"class": "good"})
+        assert r.status_code == 404
+        assert client.get("/api/repositories/nope/classes").status_code == 404
+
+
 def test_annotations_are_not_served_for_other_repositories(tmp_path):
     NS = make_ns()
 

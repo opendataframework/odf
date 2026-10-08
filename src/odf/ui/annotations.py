@@ -2,10 +2,11 @@
 
 Backs the labelled boxes drawn over an open image in the image view, the
 labelled text spans and page boxes drawn on an open document in the document
-view, and the labelled time ranges and points marked on the chart of the
-timeseries view (see ``app.js``'s "Image annotations", "Document annotations"
-and "Timeseries annotations" sections), so a project can label its data in
-the dev UI and read the result
+view, the labelled time ranges and points marked on the chart of the
+timeseries view, and the class given to a whole record in the table, image,
+document, video and audio views (see ``app.js``'s "Image annotations",
+"Document annotations", "Timeseries annotations" and "Record classes"
+sections), so a project can label its data in the dev UI and read the result
 from a later pipeline with nothing more than ``json.load``. Scoped to whatever
 ``Path`` a ``UiServer`` is constructed with, like ``odf.ui.layout`` (see
 ``Server.start``'s ``annotations-file`` config key).
@@ -17,6 +18,8 @@ The file holds one block per repository id::
       "repositories": {
         "delivery-photos": {
           "labels": ["parcel", "door"],
+          "classes": ["ok", "damaged"],
+          "record_classes": {"1": "ok", "2": "damaged"},
           "records": {
             "1": {
               "width": 1280,
@@ -82,6 +85,12 @@ one record, so its block holds them in one ``annotations`` list and has no
 of the view's timestamp field, in that field's own units. A point is made on
 a record: ``at`` is that record's timestamp and ``key`` its key, as a string.
 The list is kept in time order, and ranges may overlap.
+
+A record of any repository can also be given one class, for classification.
+``record_classes`` maps a record's key to its class, and ``classes`` holds
+the classes in use, kept as ``labels`` is: in the order each was first used,
+with a class no record has any more dropped. Classes are apart from
+``labels``, and a record needs no other annotation to have one.
 """
 
 import json
@@ -259,6 +268,60 @@ def set_series(data: dict, repo_id: str, annotations: object) -> dict:
     )
     _keep_labels(block, items, items)
     return series(data, repo_id)
+
+
+def classes(data: dict, repo_id: str) -> dict:
+    """Return a repository's classes and the class of each record that has one.
+
+    Args:
+        data: The document described in the module docstring.
+        repo_id: The repository's kebab-case id.
+
+    Returns:
+        ``{"classes": [...], "records": {key: class}}``.
+    """
+    block = data.get("repositories", {}).get(repo_id, {})
+    return {
+        "classes": list(block.get("classes", [])),
+        "records": dict(block.get("record_classes", {})),
+    }
+
+
+def set_class(data: dict, repo_id: str, key: str, value: object) -> dict:
+    """Set or clear one record's class in ``data``, in place.
+
+    A class not seen before in this repository is appended to its
+    ``classes``, and classes none of its records has any more are dropped
+    from it.
+
+    Args:
+        data: The document described in the module docstring.
+        repo_id: The repository's kebab-case id.
+        key: The record's key, as it appears in the URL.
+        value: The record's class, or ``None`` to leave it with none.
+
+    Returns:
+        The repository's updated classes, as ``classes()`` returns them.
+
+    Raises:
+        ValueError: If ``value`` is neither a non-empty string nor ``None``.
+    """
+    if value is not None:
+        if not isinstance(value, str) or not value.strip():
+            raise ValueError("class must be a non-empty string, or null for none")
+        value = value.strip()
+    block = data.setdefault("repositories", {}).setdefault(repo_id, {})
+    records = block.setdefault("record_classes", {})
+    if value is None:
+        records.pop(key, None)
+    else:
+        records[key] = value
+    used = set(records.values())
+    names = [name for name in block.get("classes", []) if name in used]
+    if value is not None and value not in names:
+        names.append(value)
+    block["classes"] = names
+    return classes(data, repo_id)
 
 
 def _store(data: dict, repo_id: str, key: str, record: dict) -> dict:

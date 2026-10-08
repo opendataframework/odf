@@ -46,3 +46,10 @@ starts empty (fresh in-memory process), so use the table's **Add Row**
 control to create a book or two — `id` is assigned automatically,
 `title`/`author` are plain text inputs — and watch the rows appear
 immediately.
+
+The table also has a `class` column, for simple classification: pick a class
+for a row, or **New…** to add one. Classes are saved to `annotations.json`
+beside `config.toml`, keyed by record `id` (see
+[`11-image-view`](../11-image-view#classifying) for the format), so they
+outlive this example's in-memory books: a book added in a later run takes the
+class last given to its `id`.

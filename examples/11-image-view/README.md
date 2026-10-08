@@ -126,6 +126,43 @@ off for a project that doesn't need it. The file looks like this:
   box's top-left corner. `width` and `height` on the record are the image's own
   size, so boxes can be normalised without opening the image.
 
+### Classifying
+
+A whole photo can also be given one class, such as `ok` or `damaged`, with or
+without boxes:
+
+- Under the open photo is a row of the repository's classes. Select **+**,
+  type a class and press `Enter` to add one and give it to the photo.
+- Select a class, or press its number (`1` to `9`), to give it to the open
+  photo. A photo has one class, so this replaces the one it had; selecting its
+  own class takes it away. The photo stays open: `→` moves to the next.
+- Each card in the grid shows its photo's class.
+
+Classes are two more keys in the repository's block, apart from the boxes and
+their `labels`:
+
+```json
+"delivery-photos": {
+  "classes": ["ok", "damaged"],
+  "record_classes": {"1": "ok", "2": "damaged"}
+}
+```
+
+- `record_classes` maps a record key (as a string) to its class. A record with
+  no class has no entry.
+- `classes` lists the classes in use, in the order each was first used. A
+  class no record has any more is dropped.
+
+```python
+block = json.load(open("annotations.json"))["repositories"]["delivery-photos"]
+df["class"] = df["id"].astype(str).map(block["record_classes"])
+```
+
+The same row is under an open document, video or audio clip, and the table
+view has a `class` column with the same choice per row.
+
+### Reading the boxes
+
 The file is plain JSON, so a training pipeline reads it without importing
 `odf`, and converts to whatever its model expects:
 

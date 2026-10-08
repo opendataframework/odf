@@ -68,8 +68,8 @@ class UiServer:
             ``Context``'s ``log_dir=None`` disables file logging. ``Project``
             opts in to a real path when starting the UI.
         annotations_file: Path to persist annotations drawn in the image,
-            document and timeseries views to, as JSON (see
-            ``odf.ui.annotations``). ``None`` (the default)
+            document and timeseries views, and the classes given to records,
+            to, as JSON (see ``odf.ui.annotations``). ``None`` (the default)
             disables annotation — the UI offers no drawing and the save
             endpoint returns 404. ``Project`` opts in to a real path when
             starting the UI.
@@ -398,6 +398,30 @@ class UiServer:
                 annotations.save(self._annotations_path, saved)
             return {"labels": block["labels"]}
 
+        @app.get("/api/repositories/{repo_id}/classes")
+        def repository_classes(repo_id: str) -> dict:
+            """Return a repository's classes and the class of each record that has one."""
+            self._get_classifiable_view(repo_id)
+            if self._annotations_path is None:
+                return annotations.classes({}, repo_id)
+            with self._annotations_lock:
+                return annotations.classes(self._load_annotations(), repo_id)
+
+        @app.put("/api/repositories/{repo_id}/records/{key}/class")
+        def put_record_class(repo_id: str, key: str, body: dict) -> dict:
+            """Set one record's class, or clear it, returning the repository's classes."""
+            self._get_classifiable_view(repo_id)
+            if self._annotations_path is None:
+                raise HTTPException(status_code=404, detail="Annotations are not enabled")
+            with self._annotations_lock:
+                saved = self._load_annotations()
+                try:
+                    block = annotations.set_class(saved, repo_id, key, body.get("class"))
+                except ValueError as exc:
+                    raise HTTPException(status_code=400, detail=str(exc)) from exc
+                annotations.save(self._annotations_path, saved)
+            return {"classes": block["classes"]}
+
         @app.get("/api/components/{component_id}/logs")
         def component_logs(component_id: str) -> list[dict]:
             """Return a component's tailed log records."""
@@ -576,6 +600,13 @@ class UiServer:
             raise HTTPException(
                 status_code=404, detail="Repository has no image, document or timeseries view"
             )
+        return view
+
+    def _get_classifiable_view(self, repo_id: str) -> DataView:
+        """Resolve a repository id's data view, or raise 404 if its records take no class."""
+        view = self._get_data_view(repo_id)
+        if isinstance(view, (StreamingVideoView, StreamingAudioView)):
+            raise HTTPException(status_code=404, detail="Repository has no stored records")
         return view
 
     def _load_annotations(self) -> dict:

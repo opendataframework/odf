@@ -2065,7 +2065,7 @@ async function showTableView(repoId) {
   setMapMode('data');
   document.getElementById('map-panel-title').textContent = `${schema.label} · ${schema.entity}`;
   renderModeSwitcher(schema, 'table');
-  await refreshDataTable();
+  await Promise.all([refreshDataTable(), loadRecordClasses()]);
 }
 
 async function refreshDataTable() {
@@ -2098,21 +2098,26 @@ function renderDataTable(schema, records) {
 
   let html = '<table class="data-table"><thead><tr>';
   for (const f of cols) html += `<th>${f.name}</th>`;
+  // The class given to each record, see "Record classes".
+  const classCol = annotationsEnabled ? 1 : 0;
+  html += classCol ? '<th>class</th>' : '';
   html += schema.writable ? '<th></th>' : '';
   html += '</tr><tr class="filter-row">';
   for (const f of cols) {
     const value = escapeHtml(tableFilters[f.name] || '');
     html += `<th><input class="col-filter" data-field="${f.name}" placeholder="Filter…" value="${value}"></th>`;
   }
+  html += classCol ? '<th></th>' : '';
   html += schema.writable ? '<th></th>' : '';
   html += '</tr></thead><tbody>';
 
   if (!records.length) {
-    html += `<tr class="empty-row"><td colspan="${cols.length + 1}">// no records</td></tr>`;
+    html += `<tr class="empty-row"><td colspan="${cols.length + 1 + classCol}">// no records</td></tr>`;
   }
   for (const record of records) {
     html += `<tr data-key="${escapeHtml(record[schema.key])}">`;
     for (const f of cols) html += `<td data-field="${f.name}">${escapeHtml(record[f.name] ?? '')}</td>`;
+    if (classCol) html += '<td class="record-class"></td>';
     if (schema.writable) {
       html += '<td class="actions">' +
         '<button class="data-btn edit-row">Edit</button>' +
@@ -2124,6 +2129,7 @@ function renderDataTable(schema, records) {
   html += renderPaginationBar();
   if (schema.writable) html += '<button class="data-btn primary block" id="add-row-btn">+ Add</button>';
   body.innerHTML = html;
+  renderTableClasses();
   wirePaginationBar(refreshDataTable);
   wireColumnFilters(body);
 
@@ -2391,6 +2397,7 @@ function startAddRow(schema) {
       ? '<td class="detail-empty">auto</td>'
       : `<td><input placeholder="${f.name}"></td>`;
   }
+  if (annotationsEnabled) html += '<td></td>'; // a record takes its class once it is saved
   html += '<td class="actions">' +
     '<button class="data-btn primary save-new">Save</button>' +
     '<button class="data-btn cancel-new">Cancel</button></td>';
@@ -2439,8 +2446,12 @@ window.addEventListener('keydown', e => {
     // An open image, clip or document takes the keys first, so Esc returns
     // to the grid rather than all the way to the topology.
     if (e.key === 'Escape') { if (!cancelImageAnnotationStep()) closeLightbox(); }
-    else if (mapMode !== 'image' && mapMode !== 'document') return; // the arrow keys seek within an open clip's own player
     else if (e.target.closest('input, textarea, select')) return;
+    else if (/^[1-9]$/.test(e.key) && !e.metaKey && !e.ctrlKey && !e.altKey) {
+      const name = recordClasses.classes[Number(e.key) - 1];
+      if (name) toggleRecordClass(imageRecordKey(), name);
+    }
+    else if (mapMode !== 'image' && mapMode !== 'document') return; // the arrow keys seek within an open clip's own player
     else if ((e.key === 'Delete' || e.key === 'Backspace') && selectedBox >= 0) deleteImageBox(selectedBox);
     else if (LIGHTBOX_TOOL_KEYS[e.key.toLowerCase()] && !e.metaKey && !e.ctrlKey && !e.altKey) setLightboxTool(LIGHTBOX_TOOL_KEYS[e.key.toLowerCase()]);
     else if (e.key === 'ArrowLeft') stepLightbox(-1);
@@ -2849,8 +2860,9 @@ async function renderMediaGrid(previewHtml) {
     const key = escapeHtml(r[schema.key]);
     return `<button class="media-tile" data-index="${i}" title="Open ${key}">` +
       previewHtml(escapeHtml(mediaUrl(activeRepoId, r[schema.key])), key) +
-      `<span class="media-duration"></span><div class="media-caption">${key}</div></button>`;
+      `<span class="media-class"></span><span class="media-duration"></span><div class="media-caption">${key}</div></button>`;
   }).join('') + '</div>';
+  renderTileClasses();
   const grid = body.querySelector('.media-grid');
   grid.addEventListener('click', e => {
     const tile = e.target.closest('.media-tile');
@@ -2869,7 +2881,7 @@ async function showImageView(repoId) {
   setMapMode('image');
   closeLightbox();
   document.getElementById('map-panel-title').textContent = `${schema.label} · images`;
-  await Promise.all([refreshImageView(), loadImageAnnotations()]);
+  await Promise.all([refreshImageView(), loadImageAnnotations(), loadRecordClasses()]);
 }
 
 async function refreshImageView() {
@@ -2922,6 +2934,7 @@ function openLightbox(index) {
   lightbox.style.top = document.getElementById('map-panel-body').offsetTop + 'px';
   lightbox.hidden = false;
   renderLightboxRail();
+  renderLightboxClasses();
 }
 
 function closeLightbox() {
@@ -2930,6 +2943,7 @@ function closeLightbox() {
   lightboxIndex = -1;
   resetImageAnnotationState();
   document.getElementById('media-lightbox').hidden = true;
+  renderLightboxClasses();
   unloadLightboxPlayers();
   if (tile) tile.focus();
 }
@@ -3475,6 +3489,141 @@ lightboxRail.addEventListener('click', e => {
 loadBoxSize();
 loadLightboxTools();
 
+// ── Record classes ────────────────────────────────────────────────────────
+// One class per record, for classification: good or bad, relevant or not.
+// It is set from the row of chips under a record open in the lightbox (an
+// image, a document, a clip), where the keys 1 to 9 pick one of the first
+// nine, or from the class column of the table view. Picking a record's own
+// class takes it away. Saved through
+// PUT /api/repositories/{id}/records/{key}/class into the project's
+// annotations file (see odf.ui.annotations), apart from the labels of boxes,
+// spans and ranges.
+
+let recordClasses = { classes: [], records: {} }; // the active repository's classes, and each record's by key
+
+const lightboxClasses = document.getElementById('media-lightbox-classes');
+
+async function loadRecordClasses() {
+  recordClasses = { classes: [], records: {} };
+  if (!annotationsEnabled) return;
+  const repoId = activeRepoId;
+  try {
+    const res = await fetch(`/api/repositories/${repoId}/classes`);
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    const block = await res.json();
+    if (repoId === activeRepoId) recordClasses = block;
+  } catch (err) {
+    addLog('Failed to load classes', ACCENT.alert);
+  }
+  renderRecordClasses();
+}
+
+function classColor(name) {
+  const index = recordClasses.classes.indexOf(name);
+  return BOX_COLORS[(index < 0 ? recordClasses.classes.length : index) % BOX_COLORS.length];
+}
+
+// Shows each record's class wherever it is on screen.
+function renderRecordClasses() {
+  renderLightboxClasses();
+  renderTileClasses();
+  renderTableClasses();
+}
+
+function renderLightboxClasses() {
+  lightboxClasses.hidden = !annotationsEnabled || lightboxIndex < 0;
+  if (lightboxClasses.hidden) return;
+  const current = recordClasses.records[imageRecordKey()];
+  lightboxClasses.innerHTML = '<span>Class</span>' + recordClasses.classes.map((name, i) =>
+    `<button type="button" class="class-chip" data-class="${escapeHtml(name)}" aria-pressed="${name === current}" style="--box-color:${classColor(name)}">` +
+    (i < 9 ? `<kbd>${i + 1}</kbd>` : '') + `${escapeHtml(name)}</button>`).join('') +
+    '<button type="button" class="class-chip class-add" title="Add a class" aria-label="Add a class">+</button>';
+}
+
+function renderTileClasses() {
+  for (const tile of document.querySelectorAll('#map-panel-body .media-tile')) {
+    const badge = tile.querySelector('.media-class');
+    const record = lightboxRecords[tile.dataset.index];
+    if (!badge || !record) continue;
+    const name = recordClasses.records[String(record[repoSchemas[activeRepoId].key])] || '';
+    badge.textContent = name;
+    badge.style.setProperty('--box-color', classColor(name));
+  }
+}
+
+function renderTableClasses() {
+  for (const cell of document.querySelectorAll('#map-panel-body td.record-class')) {
+    const current = recordClasses.records[cell.parentElement.dataset.key] || '';
+    cell.innerHTML = `<select class="class-select" aria-label="Class" style="--box-color:${current ? classColor(current) : 'transparent'}">` +
+      '<option value=""></option>' +
+      recordClasses.classes.map(name => `<option${name === current ? ' selected' : ''}>${escapeHtml(name)}</option>`).join('') +
+      '<option data-new>New…</option></select>';
+  }
+}
+
+// Gives a record `value` as its class, or none when it is null, showing the
+// change at once and reloading from the server if it could not be saved.
+function setRecordClass(key, value) {
+  const repoId = activeRepoId;
+  if (value) recordClasses.records[key] = value;
+  else delete recordClasses.records[key];
+  // As the server will: drop the classes no record has any more, then add the new one.
+  const used = new Set(Object.values(recordClasses.records));
+  recordClasses.classes = recordClasses.classes.filter(name => used.has(name));
+  if (value && !recordClasses.classes.includes(value)) recordClasses.classes.push(value);
+  renderRecordClasses();
+  boxSaves = boxSaves.then(async () => {
+    try {
+      const res = await fetch(`/api/repositories/${repoId}/records/${encodeURIComponent(key)}/class`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ class: value }),
+      });
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    } catch (err) {
+      addLog(`Failed to save the class of ${key}`, ACCENT.alert);
+      if (repoId === activeRepoId) await loadRecordClasses();
+    }
+  });
+}
+
+function toggleRecordClass(key, name) {
+  setRecordClass(key, recordClasses.records[key] === name ? null : name);
+}
+
+// Swaps `control` for an input taking a new class for the record `key`:
+// Enter gives it, Esc or leaving the input puts the control back.
+function openClassInput(control, key) {
+  const input = document.createElement('input');
+  input.className = 'class-input';
+  input.placeholder = 'Class, then Enter';
+  input.setAttribute('aria-label', 'New class');
+  control.replaceWith(input);
+  input.addEventListener('keydown', e => {
+    if (e.key !== 'Enter' && e.key !== 'Escape') return;
+    e.stopPropagation(); // Esc closes the input, not the record
+    const value = input.value.trim();
+    if (e.key === 'Enter' && value) setRecordClass(key, value);
+    else renderRecordClasses();
+  });
+  input.addEventListener('blur', renderRecordClasses);
+  input.focus();
+}
+
+lightboxClasses.addEventListener('click', e => {
+  const chip = e.target.closest('.class-chip');
+  if (!chip) return;
+  if (chip.classList.contains('class-add')) openClassInput(chip, imageRecordKey());
+  else toggleRecordClass(imageRecordKey(), chip.dataset.class);
+});
+document.getElementById('map-panel-body').addEventListener('change', e => {
+  const select = e.target.closest('.class-select');
+  if (!select) return;
+  const key = select.closest('tr').dataset.key;
+  if (select.selectedOptions[0].dataset.new !== undefined) openClassInput(select, key);
+  else setRecordClass(key, select.value || null);
+});
+
 // ── Media view (bounded Video/Audio) ────────────────────────────────────
 // Backs the "View Video"/"View Audio" action on repository nodes whose
 // DataView is a VideoView/AudioView — a grid of cards, one per record, as in
@@ -3494,7 +3643,7 @@ async function showMediaView(repoId) {
   setMapMode('media');
   document.getElementById('map-panel-title').textContent = `${schema.label} · ${schema.view.kind}`;
   renderReplayToggle(schema);
-  await refreshMediaView();
+  await Promise.all([refreshMediaView(), loadRecordClasses()]);
 }
 
 async function refreshMediaView() {
@@ -3747,7 +3896,7 @@ async function showDocumentView(repoId) {
   setMapMode('document');
   closeLightbox();
   document.getElementById('map-panel-title').textContent = `${schema.label} · documents`;
-  await Promise.all([refreshDocumentView(), loadImageAnnotations()]);
+  await Promise.all([refreshDocumentView(), loadImageAnnotations(), loadRecordClasses()]);
 }
 
 async function refreshDocumentView() {

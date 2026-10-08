@@ -448,6 +448,19 @@ button.media-tile:hover,button.media-tile:focus-visible{border-color:var(--title
 .image-label-option{display:flex;align-items:center;gap:6px;flex:none;padding:4px 8px;border:0;background:none;color:var(--text);font-family:inherit;font-size:11.5px;text-align:left;cursor:pointer;overflow:hidden;white-space:nowrap}
 .image-label-option:hover,.image-label-option.active{background:color-mix(in srgb, var(--box-color) 28%, transparent)}
 .image-label-swatch{flex:none;width:8px;height:8px;background:var(--box-color)}
+/* Record classes — one class per record, set under an open record or in the table. */
+.record-classes{display:flex;flex-wrap:wrap;align-items:center;gap:6px;padding:6px 16px;border-top:1px solid var(--border);color:var(--text-dim);font-size:10.5px}
+.record-classes[hidden]{display:none}
+.class-chip{display:flex;align-items:center;gap:5px;height:22px;box-sizing:border-box;padding:0 8px;background:transparent;border:1px solid var(--border);border-radius:2px;color:var(--text-muted);font-family:inherit;font-size:10.5px;cursor:pointer}
+.class-chip:hover{background:var(--hover-bg);color:var(--text)}
+.class-chip[data-class]::before{content:"";flex:none;width:8px;height:8px;background:var(--box-color)}
+.class-chip[aria-pressed="true"]{border-color:var(--box-color);background:color-mix(in srgb, var(--box-color) 28%, transparent);color:var(--text)}
+.class-chip kbd{font-family:inherit;font-size:9.5px;color:var(--text-dim)}
+.class-input,.data-table .class-input{width:130px;height:22px;box-sizing:border-box;padding:0 6px;background:var(--panel);border:1px solid var(--border-strong);border-radius:2px;color:var(--text);font-family:inherit;font-size:10.5px}
+.class-input:focus{outline:none;border-color:var(--title-accent)}
+.class-select{max-width:140px;height:22px;padding:0 4px;background:transparent;border:1px solid var(--border);border-left:3px solid var(--box-color);border-radius:2px;color:var(--text);font-family:inherit;font-size:10.5px;cursor:pointer}
+.media-class{position:absolute;top:6px;left:6px;max-width:calc(100% - 60px);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;padding:1px 5px;border-radius:2px;background:var(--box-color);color:#111;font-size:10px;font-weight:600}
+.media-class:empty{display:none}
 
 /* Bounded Video/Audio view — a list of seekable clips, one per record. */
 .media-list{display:flex;flex-direction:column;gap:14px}

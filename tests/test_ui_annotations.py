@@ -352,3 +352,69 @@ def test_set_series_rejects_malformed_input(items):
         annotations.set_series(data, "orders", items)
 
     assert annotations.series(data, "orders") == {"labels": [], "annotations": []}
+
+
+def test_classes_returns_empty_block_for_unknown_repository():
+    assert annotations.classes({}, "photos") == {"classes": [], "records": {}}
+
+
+def test_set_class_keeps_classes_in_first_used_order():
+    data = {}
+    annotations.set_class(data, "photos", "a", "ok")
+    annotations.set_class(data, "photos", "b", "damaged")
+
+    block = annotations.set_class(data, "photos", "c", "ok")
+
+    assert block == {
+        "classes": ["ok", "damaged"],
+        "records": {"a": "ok", "b": "damaged", "c": "ok"},
+    }
+
+
+def test_set_class_replaces_a_records_class_and_drops_the_unused_one():
+    data = {}
+    annotations.set_class(data, "photos", "a", "ok")
+    annotations.set_class(data, "photos", "b", "damaged")
+
+    block = annotations.set_class(data, "photos", "a", "damaged")
+
+    assert block == {"classes": ["damaged"], "records": {"a": "damaged", "b": "damaged"}}
+
+
+def test_set_class_with_none_clears_the_record():
+    data = {}
+    annotations.set_class(data, "photos", "a", "ok")
+
+    assert annotations.set_class(data, "photos", "a", None) == {"classes": [], "records": {}}
+    assert annotations.set_class(data, "photos", "b", None) == {"classes": [], "records": {}}
+
+
+def test_set_class_strips_the_class():
+    block = annotations.set_class({}, "photos", "a", "  ok ")
+
+    assert block == {"classes": ["ok"], "records": {"a": "ok"}}
+
+
+def test_classes_and_other_annotations_leave_each_other_alone():
+    data = {}
+    annotations.set_record(data, "photos", "a", 100, 100, [box()])
+    annotations.set_class(data, "photos", "a", "ok")
+    annotations.set_record(data, "photos", "a", 100, 100, [])
+
+    assert annotations.repository(data, "photos") == {"labels": [], "records": {}}
+    assert annotations.classes(data, "photos") == {"classes": ["ok"], "records": {"a": "ok"}}
+
+    annotations.set_record(data, "photos", "b", 100, 100, [box()])
+    annotations.set_class(data, "photos", "a", None)
+
+    assert annotations.repository(data, "photos")["labels"] == ["parcel"]
+
+
+@pytest.mark.parametrize("value", ["", "   ", 7, True, ["ok"], {"class": "ok"}])
+def test_set_class_rejects_malformed_input(value):
+    data = {}
+
+    with pytest.raises(ValueError):
+        annotations.set_class(data, "photos", "a", value)
+
+    assert data == {}

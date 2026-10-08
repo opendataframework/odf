@@ -77,6 +77,18 @@
   [`13-timeseries-view`](https://github.com/opendataframework/odf/tree/main/examples/13-timeseries-view)
   example describes the format. `[ui] annotations = false` in `config.toml` turns
   annotating off.
+- **UI**: a record can be given a class, for simple classification such as good or bad,
+  relevant or not. Under an image, document, video or audio clip open from its grid there
+  is a row of the repository's classes: select one, or press its number (`1` to `9`), to
+  give it to the open record, select `+` to add a class, and select the record's own class
+  to take it away. The grid shows each record's class on its card. The table view has a
+  `class` column with the same choice per row. A record has one class, and a class no
+  record has any more is dropped from the list. Classes are saved to the same
+  `annotations.json`, apart from box, span and range labels, as a map from record key to
+  class with the list of classes in use. The
+  [`11-image-view`](https://github.com/opendataframework/odf/tree/main/examples/11-image-view)
+  example describes the format. `[ui] annotations = false` in `config.toml` turns
+  it off.
 
 ### Changed
 
