@@ -1128,6 +1128,44 @@ def test_timeseries_and_record_annotations_are_put_through_their_own_routes(tmp_
     assert not annotations_file.exists()
 
 
+@pytest.mark.parametrize("view", [VideoView(field="clip"), AudioView(field="clip")])
+def test_clip_annotations_round_trip(tmp_path, view):
+    annotations_file = tmp_path / "ann.json"
+    NS = clips_namespace([Clip(name="a", clip=b"clip")], view)
+    time_range = {"type": "range", "label": "speech", "start": 0.8, "end": 4.25}
+    point = {"type": "point", "label": "cough", "at": 0.5}
+    with Context(namespaces={NS}) as ctx:
+        client = TestClient(UiServer(ctx, "proj", annotations_file=annotations_file)._app)
+
+        saved = client.put(
+            "/api/repositories/clips/records/a/annotations",
+            json={"duration": 12.48, "annotations": [time_range, point]},
+        )
+        block = client.get("/api/repositories/clips/annotations").json()
+
+    assert saved.json() == {"labels": ["cough", "speech"]}
+    assert block == {
+        "labels": ["cough", "speech"],
+        "records": {"a": {"duration": 12.48, "annotations": [point, time_range]}},
+    }
+    assert json.loads(annotations_file.read_text())["repositories"]["clips"] == block
+
+
+def test_clip_annotations_put_rejects_a_malformed_body(tmp_path):
+    annotations_file = tmp_path / "ann.json"
+    NS = clips_namespace([Clip(name="a", clip=b"clip")], AudioView(field="clip"))
+    with Context(namespaces={NS}) as ctx:
+        client = TestClient(UiServer(ctx, "proj", annotations_file=annotations_file)._app)
+
+        r = client.put(
+            "/api/repositories/clips/records/a/annotations",
+            json={"annotations": [{"type": "point", "label": "cough", "at": 0.5}]},
+        )
+
+    assert r.status_code == 400
+    assert not annotations_file.exists()
+
+
 def items_namespace():
     """A namespace holding an ``Items`` repository shown as the default table."""
     NS = make_ns()

@@ -2451,9 +2451,13 @@ window.addEventListener('keydown', e => {
       const name = recordClasses.classes[Number(e.key) - 1];
       if (name) toggleRecordClass(imageRecordKey(), name);
     }
-    else if (mapMode !== 'image' && mapMode !== 'document') return; // the arrow keys seek within an open clip's own player
     else if ((e.key === 'Delete' || e.key === 'Backspace') && selectedBox >= 0) deleteImageBox(selectedBox);
     else if (LIGHTBOX_TOOL_KEYS[e.key.toLowerCase()] && !e.metaKey && !e.ctrlKey && !e.altKey) setLightboxTool(LIGHTBOX_TOOL_KEYS[e.key.toLowerCase()]);
+    else if (e.key.toLowerCase() === 'm' && !e.metaKey && !e.ctrlKey && !e.altKey && lightboxSurfaceKind() === 'clip') {
+      e.preventDefault();
+      markAtPlayhead();
+    }
+    else if (mapMode !== 'image' && mapMode !== 'document') return; // the arrow keys seek within an open clip's own player
     else if (e.key === 'ArrowLeft') stepLightbox(-1);
     else if (e.key === 'ArrowRight') stepLightbox(1);
     return;
@@ -2981,12 +2985,14 @@ for (const player of Object.values(LIGHTBOX_PLAYERS)) {
 // resize: a wrong box is deleted and drawn again. The pages of a PDF take
 // boxes the same way, and text takes labelled spans, through the state and
 // the label input here (see "Document annotations" below), as do the time
-// ranges and points of a timeseries (see "Timeseries annotations").
+// ranges and points of a clip (see "Clip annotations") and of a timeseries
+// (see "Timeseries annotations").
 //
 // What a press does is set by the tool picked in the rail over the view
 // (#media-lightbox-rail): "select" only selects, relabels and deletes what is
 // there, "box" drags a box out free-form, "fixed" places one at a set size in
-// image pixels (see boxSize), and "span" labels selected text. The rail also
+// image pixels (see boxSize), "span" labels selected text, and "range" and
+// "point" mark a clip's timeline. The rail also
 // holds the actions of the open record, its source toggle and original.
 
 const BOX_COLORS = ['#ff6b6b', '#4dabf7', '#51cf66', '#fcc419', '#cc5de8', '#ff922b', '#22b8cf', '#f06595'];
@@ -2995,8 +3001,8 @@ const BOX_SIZE_KEY = 'odf-ui-box-size';
 const LIGHTBOX_TOOL_KEY = 'odf-ui-lightbox-tool';
 // The tools each kind of annotated surface takes (see lightboxSurfaceKind),
 // and the keys that pick them.
-const LIGHTBOX_TOOLS = { image: ['select', 'box', 'fixed'], pdf: ['select', 'box'], text: ['select', 'span'] };
-const LIGHTBOX_TOOL_KEYS = { v: 'select', b: 'box', f: 'fixed', t: 'span' };
+const LIGHTBOX_TOOLS = { image: ['select', 'box', 'fixed'], pdf: ['select', 'box'], text: ['select', 'span'], clip: ['select', 'range', 'point'] };
+const LIGHTBOX_TOOL_KEYS = { v: 'select', b: 'box', f: 'fixed', t: 'span', r: 'range', p: 'point' };
 
 let annotationsEnabled = false; // whether the server keeps an annotations file (see loadUiExtensions)
 let imageAnnotations = { labels: [], records: {} }; // the active repository's labels and boxes, or a timeseries' labels and `annotations`
@@ -3014,7 +3020,7 @@ let boxSaveCount = 0;    // saves made so far, so only the latest one's response
 // tool last picked for each kind of surface. Per-browser preferences, so they
 // live in localStorage rather than the annotations file.
 let boxSize = { width: 16, height: 16 };
-let lightboxTools = { image: 'select', pdf: 'select', text: 'select' };
+let lightboxTools = { image: 'select', pdf: 'select', text: 'select', clip: 'select' };
 
 const imageOverlay = document.getElementById('image-annotations');
 const imageLabelForm = document.getElementById('image-label-form');
@@ -3059,11 +3065,12 @@ function saveLightboxTools() {
   try { localStorage.setItem(LIGHTBOX_TOOL_KEY, JSON.stringify(lightboxTools)); } catch {}
 }
 
-// What the open record can be annotated as: 'image', 'pdf' or 'text'. Null
-// when it can't be, or isn't loaded yet.
+// What the open record can be annotated as: 'image', 'pdf', 'text' or
+// 'clip'. Null when it can't be, or isn't loaded yet.
 function lightboxSurfaceKind() {
   if (!annotationsEnabled || lightboxIndex < 0) return null;
   if (mapMode === 'image') return imageLoaded ? 'image' : null;
+  if (mapMode === 'media') return clipDuration ? 'clip' : null;
   return openPdf ? 'pdf' : openText ? 'text' : null;
 }
 
@@ -3088,6 +3095,10 @@ function setLightboxTool(tool) {
     return;
   }
   renderLightboxRail();
+  if (kind === 'clip') {
+    clipRangeStart = null;
+    renderClipMarks();
+  }
   // Text selected before the tool was picked is labelled as it would be after.
   const selected = tool === 'span' && sourceSelection();
   if (selected) startSpanFromSelection(selected.pre, selected.range);
@@ -3126,6 +3137,8 @@ function renderLightboxRail() {
   hint.textContent = tool === 'box' ? `Drag on ${kind === 'pdf' ? 'a page' : 'the image'} to add a box`
     : tool === 'fixed' ? (fixedBoxFits() ? `Click the image to add a ${size} box` : `Image is smaller than the ${size} box`)
       : tool === 'span' ? 'Select text to add a label'
+      : tool === 'range' ? 'Drag on the timeline, or press M at each end, to add a range'
+      : tool === 'point' ? 'Click the timeline, or press M, to add a point'
         : tool ? 'Pick a tool to add a label' : '';
   hint.hidden = !tool;
 }
@@ -3170,6 +3183,10 @@ function resetImageAnnotationState() {
   imageLabelForm.hidden = true;
   imageOverlay.appendChild(imageLabelForm); // back from the document it was opened in
   imageOverlay.hidden = true;
+  clipDuration = null;
+  clipRangeStart = null;
+  clipStrip.hidden = true;
+  clipWave.innerHTML = '';
 }
 
 function imageRecordKey() {
@@ -3215,6 +3232,7 @@ function boxStyle(box, label, surface) {
 // (see renderTsAnnotations).
 function renderImageBoxes() {
   if (mapMode === 'timeseries') return renderTsAnnotations();
+  if (mapMode === 'media') return renderClipMarks();
   if (lightboxIndex < 0) return;
   if (mapMode === 'document') renderDocumentAnnotations();
   else if (imageLoaded) renderSurfaceBoxes(surfaceOf(imageOverlay));
@@ -3284,6 +3302,7 @@ function openImageLabelForm() {
   const value = pendingBox ? lastBoxLabel : box.label;
   if (box.type === 'span') return openSpanLabelForm(value);
   if (mapMode === 'timeseries') return openTsLabelForm(box, value);
+  if (mapMode === 'media') return openClipLabelForm(box, value);
   const { overlay, width, height } = boxSurface;
   openLabelFormIn(overlay, box.x / width * overlay.clientWidth, (box.y + box.height) / height * overlay.clientHeight + 4, value);
 }
@@ -3310,10 +3329,16 @@ function closeImageLabelForm() {
   return true;
 }
 
-// Esc backs out one step at a time: the label input, then the selection.
-// Returns false when there was nothing to back out of.
+// Esc backs out one step at a time: the label input, a range started on a
+// clip, then the selection. Returns false when there was nothing to back out
+// of.
 function cancelImageAnnotationStep() {
   if (closeImageLabelForm()) return true;
+  if (clipRangeStart !== null) {
+    clipRangeStart = null;
+    renderClipMarks();
+    return true;
+  }
   if (selectedBox < 0) return false;
   selectedBox = -1;
   renderImageBoxes();
@@ -3340,8 +3365,11 @@ function saveImageBoxes(boxes) {
     const key = imageRecordKey();
     url = `/api/repositories/${repoId}/records/${encodeURIComponent(key)}/annotations`;
     name = ` for ${key}`;
+    // A clip's in time order, as the server keeps them.
+    if (mapMode === 'media') boxes = [...boxes].sort((a, b) => tsMarkStart(a) - tsMarkStart(b));
     body = mapMode === 'document' ? { annotations: boxes }
-      : { width: img.naturalWidth, height: img.naturalHeight, annotations: boxes };
+      : mapMode === 'media' ? { duration: clipDuration, annotations: boxes }
+        : { width: img.naturalWidth, height: img.naturalHeight, annotations: boxes };
     if (boxes.length) imageAnnotations.records[key] = body;
     else delete imageAnnotations.records[key];
     saved = Object.values(imageAnnotations.records).flatMap(record => record.annotations);
@@ -3624,6 +3652,107 @@ document.getElementById('map-panel-body').addEventListener('change', e => {
   else setRecordClass(key, select.value || null);
 });
 
+// ── Clip annotations ──────────────────────────────────────────────────────
+// Labelled time ranges and points on the video or audio clip open in the
+// lightbox, for marking its segments and events: speech, an action, an onset.
+// They are the marks of "Timeseries annotations" below, drawn and made the
+// same way on the timeline strip under the player (#media-lightbox-strip),
+// which spans the whole clip, shows where it is playing and, for audio, its
+// waveform. M marks at the playhead instead, which is finer than the strip on
+// a long clip: a point with the "point" tool, and with "range" one end of a
+// range, then the other. A click on the strip that makes or selects nothing
+// seeks the clip there. Saved per record with the clip's length, in seconds
+// to the millisecond, through the endpoint of "Image annotations" above.
+
+const CLIP_WAVE_BARS = 240; // bars in the strip's waveform
+
+let clipDuration = null;   // the open clip's length in whole milliseconds, as seconds; null until it is known
+let clipRangeStart = null; // where M began a range that it has yet to end, null for none
+
+const clipStrip = document.getElementById('media-lightbox-strip');
+const clipWave = document.getElementById('clip-wave');
+clipWave.setAttribute('viewBox', `0 0 ${CLIP_WAVE_BARS} 100`);
+
+function clipPlayer() {
+  return LIGHTBOX_PLAYERS[repoSchemas[activeRepoId].view.kind];
+}
+
+// The player's position, to the millisecond and within the clip.
+function clipTime() {
+  return Math.min(Math.round(clipPlayer().currentTime * 1000) / 1000, clipDuration);
+}
+
+function renderClipPlayhead() {
+  if (!clipDuration) return;
+  document.getElementById('clip-playhead').style.left = clipTime() / clipDuration * 100 + '%';
+}
+
+function renderClipMarks() {
+  if (!clipDuration) return;
+  const layer = document.getElementById('clip-marks');
+  renderTimeMarks(layer, 0, clipDuration, time => time / clipDuration * 100);
+  if (clipRangeStart !== null) {
+    layer.insertAdjacentHTML('beforeend', '<div class="ts-mark ts-point draft" ' +
+      `style="left:${clipRangeStart / clipDuration * 100}%;--box-color:${boxColor(lastBoxLabel)}"></div>`);
+  }
+}
+
+// The label input goes above the strip, which is too low to hold it.
+function openClipLabelForm(mark, value) {
+  openLabelFormIn(clipStrip, tsMarkStart(mark) / clipDuration * clipStrip.clientWidth, 0, value);
+  imageLabelForm.style.top = -(imageLabelForm.offsetHeight + 4) + 'px';
+}
+
+function markAtPlayhead() {
+  const tool = activeTool();
+  if (tool !== 'range' && tool !== 'point') return;
+  closeImageLabelForm();
+  selectedBox = -1;
+  const at = clipTime();
+  if (tool === 'point') {
+    pendingBox = { type: 'point', at };
+  } else if (clipRangeStart === null) {
+    clipRangeStart = at;
+  } else {
+    if (at !== clipRangeStart) pendingBox = { type: 'range', start: Math.min(clipRangeStart, at), end: Math.max(clipRangeStart, at) };
+    clipRangeStart = null;
+  }
+  renderClipMarks();
+  if (pendingBox) openImageLabelForm();
+}
+
+// A clip takes marks once its length is known, which a stream without one
+// never is.
+for (const player of [LIGHTBOX_PLAYERS.video, LIGHTBOX_PLAYERS.audio]) {
+  player.addEventListener('loadedmetadata', () => {
+    const duration = Math.floor(player.duration * 1000) / 1000;
+    if (!annotationsEnabled || lightboxIndex < 0 || !Number.isFinite(duration) || duration <= 0) return;
+    clipDuration = duration;
+    clipStrip.hidden = false;
+    renderLightboxRail();
+    renderClipMarks();
+    renderClipPlayhead();
+    if (player !== LIGHTBOX_PLAYERS.audio) return;
+    const url = player.src;
+    decodeAudioClip(url).then(clip => {
+      if (clip && clipDuration && player.src === url) clipWave.innerHTML = waveBarsSvg(clip, CLIP_WAVE_BARS);
+    });
+  });
+  player.addEventListener('timeupdate', renderClipPlayhead);
+  player.addEventListener('seeked', renderClipPlayhead);
+}
+
+wireTimeMarks(clipStrip, {
+  timeAt: e => {
+    const rect = clipStrip.getBoundingClientRect();
+    const part = Math.min(Math.max((e.clientX - rect.left) / rect.width, 0), 1);
+    return Math.round(part * clipDuration * 1000) / 1000;
+  },
+  pointAt: at => ({ type: 'point', at }),
+  tool: activeTool,
+  onEmptyClick: at => { clipPlayer().currentTime = at; },
+});
+
 // ── Media view (bounded Video/Audio) ────────────────────────────────────
 // Backs the "View Video"/"View Audio" action on repository nodes whose
 // DataView is a VideoView/AudioView — a grid of cards, one per record, as in
@@ -3643,7 +3772,7 @@ async function showMediaView(repoId) {
   setMapMode('media');
   document.getElementById('map-panel-title').textContent = `${schema.label} · ${schema.view.kind}`;
   renderReplayToggle(schema);
-  await Promise.all([refreshMediaView(), loadRecordClasses()]);
+  await Promise.all([refreshMediaView(), loadImageAnnotations(), loadRecordClasses()]);
 }
 
 async function refreshMediaView() {
@@ -3724,11 +3853,11 @@ function audioDuration(url) {
 // One bar per slice of the clip, as tall as that slice's loudest sample
 // relative to the clip's loudest. Filled with currentColor, so a theme
 // colors the waveform through .media-wave.
-function waveBarsSvg(clip) {
+function waveBarsSvg(clip, bars = WAVE_BARS) {
   const samples = clip.getChannelData(0);
-  const step = Math.max(1, Math.floor(samples.length / WAVE_BARS));
+  const step = Math.max(1, Math.floor(samples.length / bars));
   const peaks = [];
-  for (let bar = 0; bar < WAVE_BARS; bar++) {
+  for (let bar = 0; bar < bars; bar++) {
     let peak = 0;
     const end = Math.min((bar + 1) * step, samples.length);
     for (let i = bar * step; i < end; i++) peak = Math.max(peak, Math.abs(samples[i]));
@@ -4460,7 +4589,10 @@ function renderTimeseriesChart(schema, records) {
       xMin, xMax, w, pad, x: xScale,
       points: sorted.map((r, idx) => ({ at: xs[idx], key: String(r[schema.key]) })),
     };
-    if (annotating) wireTsOverlay(body.querySelector('.ts-annotations'));
+    if (annotating) {
+      const overlay = body.querySelector('.ts-annotations');
+      wireTimeMarks(overlay, { timeAt: e => tsTimeAt(e, overlay), pointAt: tsPointAt, tool: () => tsTool });
+    }
     renderTsTools();
     renderTsAnnotations();
   }
@@ -4540,15 +4672,19 @@ function tsMarkStart(mark) {
   return mark.type === 'range' ? mark.start : mark.at;
 }
 
-// Draws the marks over the chart in percent of its width, so they follow it
-// as it resizes: the part of each that falls in the time span of the records
-// shown. Ranges are painted widest first and points last, so a mark inside a
-// range stays selectable.
 function renderTsAnnotations() {
   const layer = document.querySelector('#map-panel-body .ts-marks');
   if (!layer || !tsPlot) return;
-  const { xMin, xMax } = tsPlot;
-  const pct = t => tsPlot.x(Math.min(Math.max(t, xMin), xMax)) / tsPlot.w * 100;
+  renderTimeMarks(layer, tsPlot.xMin, tsPlot.xMax, time => tsPlot.x(time) / tsPlot.w * 100);
+}
+
+// Draws the open marks into `layer`, over a chart or a clip's strip, in
+// percent of its width so they follow it as it resizes: the part of each that
+// falls between the times `xMin` and `xMax` it shows, with `pctAt` placing a
+// time. Ranges are painted widest first and points last, so a mark inside a
+// range stays selectable.
+function renderTimeMarks(layer, xMin, xMax, pctAt) {
+  const pct = t => pctAt(Math.min(Math.max(t, xMin), xMax));
   const span = mark => mark.type === 'range' ? mark.end - mark.start : 0;
   const markHtml = (mark, index) => {
     const draft = index < 0;
@@ -4589,28 +4725,31 @@ function openTsLabelForm(mark, value) {
   openLabelFormIn(overlay, tsPlot.x(at) / tsPlot.w * overlay.clientWidth, 24, value);
 }
 
-// A press on the chart is a click until the pointer travels BOX_MIN_DRAG
-// sideways, when with the "range" tool it becomes a new range. A click selects
-// the mark under it, or acts on its label or delete button. With the "point"
-// tool a click anywhere but on a point or a mark's label places a point, so
-// one can be put inside a range.
-function wireTsOverlay(overlay) {
+// Takes the presses on `overlay`, a chart's or a clip's strip. `surface` says
+// what time a pointer is over (`timeAt`), what point a click at a time makes
+// (`pointAt`) and the tool in use (`tool`). A press is a click until the
+// pointer travels BOX_MIN_DRAG sideways, when with the "range" tool it becomes
+// a new range. A click selects the mark under it, or acts on its label or
+// delete button. With the "point" tool a click anywhere but on a point or a
+// mark's label places a point, so one can be put inside a range. A click that
+// does none of these goes to `onEmptyClick`, if the surface has one.
+function wireTimeMarks(overlay, surface) {
   overlay.addEventListener('pointerdown', e => {
     if (e.button !== 0 || e.target.closest('.image-label-form')) return;
     e.preventDefault();
     const dismissed = closeImageLabelForm();
-    boxDrag = { from: tsTimeAt(e, overlay), clientX: e.clientX, target: e.target, drawing: false, dismissed };
+    boxDrag = { from: surface.timeAt(e), clientX: e.clientX, target: e.target, drawing: false, dismissed };
     overlay.setPointerCapture(e.pointerId);
   });
   overlay.addEventListener('pointermove', e => {
-    if (!boxDrag || tsTool !== 'range') return;
+    if (!boxDrag || surface.tool() !== 'range') return;
     if (!boxDrag.drawing && Math.abs(e.clientX - boxDrag.clientX) < BOX_MIN_DRAG) return;
     boxDrag.drawing = true;
     selectedBox = -1;
-    const to = tsTimeAt(e, overlay);
+    const to = surface.timeAt(e);
     pendingBox = to === boxDrag.from ? null
       : { type: 'range', start: Math.min(boxDrag.from, to), end: Math.max(boxDrag.from, to) };
-    renderTsAnnotations();
+    renderImageBoxes();
   });
   overlay.addEventListener('pointerup', () => {
     const drag = boxDrag;
@@ -4621,22 +4760,25 @@ function wireTsOverlay(overlay) {
       return;
     }
     const mark = drag.target.closest('.ts-mark[data-index]');
-    const onMark = mark && (tsTool !== 'point' || mark.classList.contains('ts-point') || drag.target.closest('.ts-mark-head'));
+    const tool = surface.tool();
+    const onMark = mark && (tool !== 'point' || mark.classList.contains('ts-point') || drag.target.closest('.ts-mark-head'));
     const index = onMark ? Number(mark.dataset.index) : -1;
     if (index >= 0 && drag.target.closest('.ts-mark-delete')) return deleteImageBox(index);
     selectedBox = index;
-    if (index < 0 && tsTool === 'point' && !drag.dismissed) pendingBox = tsPointAt(drag.from);
-    renderTsAnnotations();
+    if (index < 0 && tool === 'point' && !drag.dismissed) pendingBox = surface.pointAt(drag.from);
+    renderImageBoxes();
     if (pendingBox) return openImageLabelForm();
     if (index >= 0 && drag.target.closest('.ts-mark-label')) {
       relabelBox = index;
       openImageLabelForm();
+    } else if (index < 0 && !drag.dismissed && surface.onEmptyClick) {
+      surface.onEmptyClick(drag.from);
     }
   });
   overlay.addEventListener('pointercancel', () => {
     boxDrag = null;
     pendingBox = null;
-    renderTsAnnotations();
+    renderImageBoxes();
   });
 }
 

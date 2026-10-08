@@ -463,6 +463,12 @@ button.media-tile:hover,button.media-tile:focus-visible{border-color:var(--title
 .class-select{max-width:140px;height:22px;padding:0 4px;background:transparent;border:1px solid var(--border);border-left:3px solid var(--box-color);border-radius:2px;color:var(--text);font-family:inherit;font-size:10.5px;cursor:pointer}
 .media-class{position:absolute;top:6px;left:6px;max-width:calc(100% - 60px);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;padding:1px 5px;border-radius:2px;background:var(--box-color);color:#111;font-size:10px;font-weight:600}
 .media-class:empty{display:none}
+/* Clip annotations — the timeline strip under an open video or audio clip. */
+.clip-strip{position:relative;flex:none;height:56px;margin:0 16px 8px;border:1px solid var(--border);background:var(--hover-bg);cursor:pointer;touch-action:none;user-select:none;-webkit-user-select:none}
+.clip-strip[hidden]{display:none}
+.media-lightbox[data-tool="range"] .clip-strip,.media-lightbox[data-tool="point"] .clip-strip{cursor:crosshair}
+.clip-wave{position:absolute;inset:0;width:100%;height:100%;color:var(--text-dim);opacity:.6;pointer-events:none}
+.clip-playhead{position:absolute;top:0;bottom:0;width:1px;background:var(--text);pointer-events:none}
 
 /* Bounded Video/Audio view — a list of seekable clips, one per record. */
 .media-list{display:flex;flex-direction:column;gap:14px}

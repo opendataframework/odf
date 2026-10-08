@@ -77,6 +77,19 @@
   [`13-timeseries-view`](https://github.com/opendataframework/odf/tree/main/examples/13-timeseries-view)
   example describes the format. `[ui] annotations = false` in `config.toml` turns
   annotating off.
+- **UI**: time ranges and points can be labelled on a clip open in the video and audio
+  views, for marking its segments and events, such as speech, an action or an onset. A
+  timeline under the player spans the clip, with its waveform for audio and a line where
+  it is playing. Pick `Label a range` (`R`) in the tool rail and drag on the timeline, or
+  `Label a point` (`P`) and click it, then type a label or pick one already used. `M` marks
+  where the clip is playing instead, which is finer on a long clip: a point, or one end of
+  a range and then the other. Select a mark to delete it, or select its label to change
+  it; a click elsewhere on the timeline seeks the clip there. Marks are saved to the same
+  `annotations.json`, per record, in seconds from the start of the clip with the clip's
+  length beside them. The
+  [`10-audio-view`](https://github.com/opendataframework/odf/tree/main/examples/10-audio-view)
+  example describes the format. `[ui] annotations = false` in `config.toml` turns
+  annotating off.
 - **UI**: a record can be given a class, for simple classification such as good or bad,
   relevant or not. Under an image, document, video or audio clip open from its grid there
   is a row of the repository's classes: select one, or press its number (`1` to `9`), to

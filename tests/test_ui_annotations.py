@@ -418,3 +418,86 @@ def test_set_class_rejects_malformed_input(value):
         annotations.set_class(data, "photos", "a", value)
 
     assert data == {}
+
+
+def clip_range(label="speech", start=0.8, end=4.25):
+    return {"type": "range", "label": label, "start": start, "end": end}
+
+
+def clip_point(label="cough", at=6.1):
+    return {"type": "point", "label": label, "at": at}
+
+
+def test_set_clip_record_stores_marks_in_time_order_with_the_duration():
+    block = annotations.set_clip_record({}, "memos", "a", 12.48, [clip_point(), clip_range()])
+
+    assert block == {
+        "labels": ["speech", "cough"],
+        "records": {"a": {"duration": 12.48, "annotations": [clip_range(), clip_point()]}},
+    }
+
+
+def test_set_clip_record_rounds_to_milliseconds_and_clamps_ranges_to_the_clip():
+    block = annotations.set_clip_record(
+        {},
+        "memos",
+        "a",
+        10.00049,
+        [clip_range(" speech ", start=-1, end=3.14159), clip_range(start=8, end=99)],
+    )
+
+    assert block["records"]["a"] == {
+        "duration": 10.0,
+        "annotations": [clip_range(start=0, end=3.142), clip_range(start=8, end=10.0)],
+    }
+
+
+def test_set_clip_record_allows_ranges_that_overlap_and_points_at_the_ends():
+    items = [clip_point(at=0), clip_range(), clip_range("music", start=2, end=9), clip_point(at=10)]
+
+    block = annotations.set_clip_record({}, "memos", "a", 10, items)
+
+    assert block["records"]["a"]["annotations"] == items
+
+
+def test_set_clip_record_with_no_annotations_removes_the_record_and_its_labels():
+    data = {}
+    annotations.set_clip_record(data, "memos", "a", 10, [clip_range()])
+    annotations.set_clip_record(data, "memos", "b", 10, [clip_point()])
+
+    block = annotations.set_clip_record(data, "memos", "a", 10, [])
+
+    assert block == {
+        "labels": ["cough"],
+        "records": {"b": {"duration": 10, "annotations": [clip_point()]}},
+    }
+
+
+@pytest.mark.parametrize(
+    ("duration", "items"),
+    [
+        (0, [clip_range()]),
+        (-5, [clip_range()]),
+        ("10", [clip_range()]),
+        (float("inf"), [clip_range()]),
+        (10, "nope"),
+        (10, ["nope"]),
+        (10, [{**clip_range(), "type": "box"}]),
+        (10, [clip_range(label="  ")]),
+        (10, [clip_range(start=4, end=4)]),
+        (10, [clip_range(start=5, end=2)]),
+        (10, [clip_range(start=11, end=12)]),
+        (10, [clip_range(start="1")]),
+        (10, [clip_point(at=10.5)]),
+        (10, [clip_point(at=-0.5)]),
+        (10, [clip_point(at=None)]),
+        (10, [clip_point(at=float("nan"))]),
+    ],
+)
+def test_set_clip_record_rejects_malformed_input(duration, items):
+    data = {}
+
+    with pytest.raises(ValueError):
+        annotations.set_clip_record(data, "memos", "a", duration, items)
+
+    assert annotations.repository(data, "memos") == {"labels": [], "records": {}}

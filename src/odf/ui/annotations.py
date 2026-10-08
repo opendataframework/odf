@@ -2,12 +2,13 @@
 
 Backs the labelled boxes drawn over an open image in the image view, the
 labelled text spans and page boxes drawn on an open document in the document
-view, the labelled time ranges and points marked on the chart of the
-timeseries view, and the class given to a whole record in the table, image,
-document, video and audio views (see ``app.js``'s "Image annotations",
-"Document annotations", "Timeseries annotations" and "Record classes"
-sections), so a project can label its data in the dev UI and read the result
-from a later pipeline with nothing more than ``json.load``. Scoped to whatever
+view, the labelled time ranges and points marked on a clip open in the video
+and audio views and on the chart of the timeseries view, and the class given
+to a whole record in the table, image, document, video and audio views (see
+``app.js``'s "Image annotations", "Document annotations", "Clip annotations",
+"Timeseries annotations" and "Record classes" sections), so a project can
+label its data in the dev UI and read the result from a later pipeline with
+nothing more than ``json.load``. Scoped to whatever
 ``Path`` a ``UiServer`` is constructed with, like ``odf.ui.layout`` (see
 ``Server.start``'s ``annotations-file`` config key).
 
@@ -49,6 +50,18 @@ The file holds one block per repository id::
             }
           }
         },
+        "voice-memos": {
+          "labels": ["speech", "cough"],
+          "records": {
+            "1": {
+              "duration": 12.48,
+              "annotations": [
+                {"type": "range", "label": "speech", "start": 0.8, "end": 4.25},
+                {"type": "point", "label": "cough", "at": 6.1}
+              ]
+            }
+          }
+        },
         "orders": {
           "labels": ["promo", "outlier"],
           "annotations": [
@@ -78,6 +91,10 @@ can tell a document that has changed since. Spans in one record don't overlap
 and are kept in the order they appear in the text. A box on a PDF page is in
 PDF points from the top-left corner of the page as displayed, with ``page``
 counted from 1 and the page's own size beside it.
+
+A video or audio clip's record carries the clip's ``duration`` in seconds. A
+range's ``start`` and ``end`` and a point's ``at`` are seconds from the start
+of the clip, to the millisecond, kept in time order; ranges may overlap.
 
 A timeseries repository's annotations belong to its time axis rather than to
 one record, so its block holds them in one ``annotations`` list and has no
@@ -263,9 +280,7 @@ def set_series(data: dict, repo_id: str, annotations: object) -> dict:
         raise ValueError("annotations must be a list")
     items = [_series_item(item) for item in annotations]
     block = data.setdefault("repositories", {}).setdefault(repo_id, {})
-    block["annotations"] = sorted(
-        items, key=lambda item: item["start"] if item["type"] == "range" else item["at"]
-    )
+    block["annotations"] = sorted(items, key=_mark_time)
     _keep_labels(block, items, items)
     return series(data, repo_id)
 
@@ -322,6 +337,37 @@ def set_class(data: dict, repo_id: str, key: str, value: object) -> dict:
         names.append(value)
     block["classes"] = names
     return classes(data, repo_id)
+
+
+def set_clip_record(
+    data: dict, repo_id: str, key: str, duration: object, annotations: object
+) -> dict:
+    """Replace one video or audio record's annotations in ``data``, in place.
+
+    Labels are kept as ``set_record`` keeps them, and an empty ``annotations``
+    removes the record's entry.
+
+    Args:
+        data: The document described in the module docstring.
+        repo_id: The repository's kebab-case id.
+        key: The record's key, as it appears in the URL.
+        duration: The clip's length in seconds.
+        annotations: The record's full list of annotations: time ranges,
+            points, or both.
+
+    Returns:
+        The repository's updated block, as ``repository()`` returns it.
+
+    Raises:
+        ValueError: If the duration or any annotation is malformed.
+    """
+    length = round(_number(duration, "duration"), 3)
+    if length <= 0:
+        raise ValueError("duration must be positive")
+    if not isinstance(annotations, list):
+        raise ValueError("annotations must be a list")
+    items = sorted((_clip_item(item, length) for item in annotations), key=_mark_time)
+    return _store(data, repo_id, key, {"duration": length, "annotations": items})
 
 
 def _store(data: dict, repo_id: str, key: str, record: dict) -> dict:
@@ -454,6 +500,30 @@ def _page_box(item: dict) -> dict:
         "page_width": page_width,
         "page_height": page_height,
     }
+
+
+def _mark_time(item: dict) -> float:
+    """Where a time range or a point starts, which is what they are ordered by."""
+    return item["start"] if item["type"] == "range" else item["at"]
+
+
+def _clip_item(item: object, length: float) -> dict:
+    """Validate one annotation of a clip, a time range or a point, within its length."""
+    kind = item.get("type") if isinstance(item, dict) else None
+    if kind == "range":
+        label = _label(item)
+        start = max(round(_number(item.get("start"), "start"), 3), 0)
+        end = min(round(_number(item.get("end"), "end"), 3), length)
+        if end <= start:
+            raise ValueError("a range needs start < end, within the clip")
+        return {"type": "range", "label": label, "start": start, "end": end}
+    if kind == "point":
+        label = _label(item)
+        at = round(_number(item.get("at"), "at"), 3)
+        if not 0 <= at <= length:
+            raise ValueError("a point lies outside the clip")
+        return {"type": "point", "label": label, "at": at}
+    raise ValueError('each annotation must be an object with "type": "range" or "point"')
 
 
 def _series_item(item: object) -> dict:

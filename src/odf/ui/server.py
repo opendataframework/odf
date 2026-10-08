@@ -68,7 +68,7 @@ class UiServer:
             ``Context``'s ``log_dir=None`` disables file logging. ``Project``
             opts in to a real path when starting the UI.
         annotations_file: Path to persist annotations drawn in the image,
-            document and timeseries views, and the classes given to records,
+            document, video, audio and timeseries views, and the classes given to records,
             to, as JSON (see ``odf.ui.annotations``). ``None`` (the default)
             disables annotation — the UI offers no drawing and the save
             endpoint returns 404. ``Project`` opts in to a real path when
@@ -384,6 +384,10 @@ class UiServer:
                         block = annotations.set_document_record(
                             saved, repo_id, key, body.get("annotations")
                         )
+                    elif isinstance(view, (VideoView, AudioView)):
+                        block = annotations.set_clip_record(
+                            saved, repo_id, key, body.get("duration"), body.get("annotations")
+                        )
                     else:
                         block = annotations.set_record(
                             saved,
@@ -593,13 +597,11 @@ class UiServer:
             raise HTTPException(status_code=403, detail="Repository has no data view")
         return view
 
-    def _get_annotatable_view(self, repo_id: str) -> ImageView | DocumentView | TimeseriesView:
+    def _get_annotatable_view(self, repo_id: str) -> DataView:
         """Resolve a repository id's data view, or raise 404 if it can't be annotated."""
         view = self._get_data_view(repo_id)
-        if not isinstance(view, (ImageView, DocumentView, TimeseriesView)):
-            raise HTTPException(
-                status_code=404, detail="Repository has no image, document or timeseries view"
-            )
+        if not isinstance(view, (ImageView, DocumentView, VideoView, AudioView, TimeseriesView)):
+            raise HTTPException(status_code=404, detail="Repository's view takes no annotations")
         return view
 
     def _get_classifiable_view(self, repo_id: str) -> DataView:

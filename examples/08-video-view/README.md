@@ -70,3 +70,10 @@ Each clip is served from
 detected from its bytes (MP4, QuickTime, WebM, Ogg, AVI), so `clip` isn't
 limited to mp4, and with `Range` requests honored, which is what lets the
 player seek.
+
+Time ranges and points can be labelled on an open clip, on the timeline under
+the player or with `M` where it is playing, and are saved to
+`annotations.json`. It works as for audio: see
+[`10-audio-view`](../10-audio-view#annotating) for the tools and the format.
+There are no boxes on video frames; frames saved as images can be boxed in the
+[image view](../11-image-view#annotating).
