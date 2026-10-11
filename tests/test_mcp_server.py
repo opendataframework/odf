@@ -6,6 +6,7 @@ import pytest
 from mcp.server.fastmcp.exceptions import ToolError
 from opendataframework.component import Component, McpTool
 from opendataframework.context import Context
+from opendataframework.entity import Entity
 from opendataframework.namespace import Namespace
 from opendataframework.repository import Repository
 from opendataframework.service import Service
@@ -14,6 +15,7 @@ from opendataframework.task import Task
 from odf.mcp.server import McpServer
 
 
+@Entity(name="mcp-widget")
 @dataclass
 class Widget:
     id: int

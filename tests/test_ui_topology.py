@@ -1,6 +1,7 @@
 import pytest
 from opendataframework.component import Component
 from opendataframework.context import Context
+from opendataframework.entity import Entity
 from opendataframework.layer import Storage
 from opendataframework.namespace import Namespace
 from opendataframework.pipeline import Pipeline
@@ -35,6 +36,7 @@ def test_classifies_node_types_and_config():
     @Component
     class TopoComponent: ...
 
+    @Entity
     class TopoEntity: ...
 
     @NS
@@ -233,6 +235,7 @@ def test_layout_orders_nodes_by_dependency_depth():
 def test_decorator_label_excludes_layer_and_includes_repository_entity():
     NS = make_ns()
 
+    @Entity
     class TopoUser: ...
 
     @NS

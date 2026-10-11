@@ -1,6 +1,7 @@
 from dataclasses import dataclass
 
 from opendataframework.context import Context
+from opendataframework.entity import Entity
 from opendataframework.namespace import Namespace
 from opendataframework.repository import Repository
 from opendataframework.view import LocationView, TableView, TimeseriesView
@@ -29,6 +30,7 @@ def make_ns():
     return NS
 
 
+@Entity
 @dataclass
 class Widget:
     id: int | None
@@ -68,6 +70,7 @@ def test_build_repositories_includes_dataclass_entity_repo():
 def test_build_repositories_excludes_non_dataclass_entity():
     NS = make_ns()
 
+    @Entity
     class PlainEntity: ...
 
     @NS
@@ -214,6 +217,7 @@ def test_key_field_name_is_first_field():
 # --- resolve_view -------------------------------------------------------------
 
 
+@Entity
 @dataclass
 class Store:
     id: int | None

@@ -7,6 +7,7 @@ import pytest
 from fastapi.testclient import TestClient
 from opendataframework.component import Component
 from opendataframework.context import Context
+from opendataframework.entity import Entity
 from opendataframework.namespace import Namespace
 from opendataframework.repository import Repository
 from opendataframework.view import (
@@ -30,6 +31,9 @@ def make_ns():
     return NS
 
 
+# Named apart from the `Item` entity every `odf init` template scaffolds, which
+# tests/test_cli.py imports into the same process-wide registry.
+@Entity(name="server-item")
 @dataclass
 class Item:
     id: int | None
@@ -444,6 +448,7 @@ def test_lifecycle_endpoints_unknown_component_returns_404():
 # --- streaming endpoints -------------------------------------------------------
 
 
+@Entity
 @dataclass
 class Frame:
     id: int | None
@@ -568,6 +573,7 @@ def test_stream_endpoint_serves_one_chunk_per_request_for_audio():
     assert r.content.startswith(b"chunk-")
 
 
+@Entity
 @dataclass
 class Photo:
     name: str
@@ -614,6 +620,7 @@ def test_record_media_serves_an_image_with_its_detected_type(content, content_ty
     assert r.content == content
 
 
+@Entity
 @dataclass
 class Clip:
     name: str
@@ -716,6 +723,7 @@ def test_record_media_returns_404_for_a_missing_record_or_missing_bytes():
     assert no_bytes.status_code == 404
 
 
+@Entity
 @dataclass
 class Paper:
     name: str
@@ -1043,6 +1051,7 @@ def test_document_annotations_put_rejects_a_malformed_body(tmp_path):
     assert not annotations_file.exists()
 
 
+@Entity
 @dataclass
 class Reading:
     id: int
@@ -1129,6 +1138,7 @@ def test_timeseries_and_record_annotations_are_put_through_their_own_routes(tmp_
     assert not annotations_file.exists()
 
 
+@Entity(name="server-store")
 @dataclass
 class Store:
     id: int
