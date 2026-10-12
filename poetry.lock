@@ -2604,15 +2604,20 @@ numpy = {version = ">=2", markers = "python_version >= \"3.9\""}
 
 [[package]]
 name = "opendataframework"
-version = "0.2.0"
+version = "0.3.0"
 description = "Lightweight, config-driven dependency-injection framework for data applications."
 optional = false
 python-versions = ">=3.14"
 groups = ["main"]
 files = [
-    {file = "opendataframework-0.2.0-py3-none-any.whl", hash = "sha256:354c4caa3c6f11e480c87185662f08f6b7f05d77a766ce2cb66e806c68d45f9d"},
-    {file = "opendataframework-0.2.0.tar.gz", hash = "sha256:061090284fd11fb3fe35be1a6e3126ea520b2ebc74ac72301f32af303084662d"},
+    {file = "opendataframework-0.3.0-py3-none-any.whl", hash = "sha256:3583a77c1a041c0a09034abee4f526104d81217d210bbade940f46043d8b5851"},
+    {file = "opendataframework-0.3.0.tar.gz", hash = "sha256:49a159f9ad2b4bbe11fa182802d8ac4098f0af1a00c4973ce5929fe8a3be62e9"},
 ]
+
+[package.source]
+type = "legacy"
+url = "http://localhost:8080/simple"
+reference = "local-pypi"
 
 [[package]]
 name = "packaging"
@@ -4322,4 +4327,4 @@ ui = ["fastapi", "uvicorn"]
 [metadata]
 lock-version = "2.1"
 python-versions = ">=3.14"
-content-hash = "2c8c319b30374f9b1eada53e27d805cf55de569251b8420a1f49a556b691eb61"
+content-hash = "035b453f8fb8226a6dad631075aad2a237fde3082d384ab3c89254c41138bf25"

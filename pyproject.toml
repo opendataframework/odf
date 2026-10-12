@@ -10,7 +10,7 @@ requires-python = ">=3.14"
 dependencies = [
     "typer (>=0.27.0,<0.28.0)",
     "rich (>=15.0.0,<16.0.0)",
-    "opendataframework (>=0.2.0,<0.3.0)"
+    "opendataframework (>=0.3.0,<0.4.0)"
 ]
 
 [project.optional-dependencies]
@@ -34,6 +34,16 @@ examples = [
 
 [project.scripts]
 odf = "odf.cli:app"
+
+# TEMPORARY: resolve opendataframework 0.3.0 from the local index until it is
+# on PyPI. Remove both tables below and regenerate poetry.lock before release.
+[[tool.poetry.source]]
+name = "local-pypi"
+url = "http://localhost:8080/simple/"
+priority = "explicit"
+
+[tool.poetry.dependencies]
+opendataframework = { source = "local-pypi" }
 
 [build-system]
 requires = ["poetry-core>=2.0.0,<3.0.0"]
