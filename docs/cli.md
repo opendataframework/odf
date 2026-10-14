@@ -114,5 +114,18 @@ UI running at http://127.0.0.1:4747
 Press Ctrl+C to stop
 ```
 
+When `opendataframework` or `odf` rejects the project at start-up, `odf run`
+prints the reason on one line and exits with status 1, without a traceback.
+When the error comes from a decorator, the line ends with the file and line of
+the decorated class:
+
+```text
+$ odf run
+Error: Repository expects a class registered with @Entity, got 'Item'. Decorate it with @Entity — or, if Item is the repository itself, pass its entity: @Repository(SomeEntity) (app/repositories.py:8)
+```
+
+An exception raised by the project's own code, such as a constructor or a
+`setup()`, is shown with its full traceback.
+
 The UI (`--ui`, on by default) requires the `odf[ui]` extra
 (`fastapi`/`uvicorn`); pass `--no-ui` to run without it.

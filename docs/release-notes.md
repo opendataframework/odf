@@ -123,6 +123,14 @@
   full-width rows instead of buttons of different widths. The component's own actions,
   such as View, Start or Execute, come first, followed by Show Logs and Customize. Its
   type, layer and file are shown as labelled rows under the description.
+- **CLI**: `odf run` prints a project set-up error as one line instead of a traceback:
+  a check in `opendataframework` or `odf` that rejects the project, such as
+  `@Repository` on a class with no `@Entity`, an `async def` lifecycle method, a
+  dependency declared twice, an `McpTool` without a typed handler or an unknown theme.
+  When the error comes from a decorator, the line ends with the file and line of the
+  decorated class. An error raised by the project's own code keeps its traceback, and a
+  project that fails to start is stopped before `odf run` exits. Set-up errors that
+  were reported as `Invalid value` now read `Error`. See [CLI](cli.md#odf-run).
 
 ## 0.2.0
 

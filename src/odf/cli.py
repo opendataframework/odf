@@ -5,6 +5,7 @@ import sys
 from enum import StrEnum
 from importlib.metadata import PackageNotFoundError, version
 from pathlib import Path
+from types import TracebackType
 
 import typer
 from rich import box
@@ -147,6 +148,58 @@ def _logo() -> str:
     return "\n".join(lines)
 
 
+_FRAMEWORK_PACKAGES = {"opendataframework", "odf"}
+
+
+def _package(frame: TracebackType) -> str:
+    """Return the top-level package of the module a traceback entry ran in."""
+    return frame.tb_frame.f_globals.get("__name__", "").partition(".")[0]
+
+
+def _startup_error(exc: BaseException) -> str | None:
+    """Return a one-line report for a project set-up error, or ``None`` for anything else.
+
+    A set-up error is a ``TypeError``/``ValueError`` raised by a check in
+    ``opendataframework`` or ``odf`` itself (an ``@Repository`` on a class
+    with no ``@Entity``, an ``async def`` lifecycle method, a dependency
+    declared twice, an unknown UI theme, ...): its message already says what
+    is wrong, so a traceback adds nothing but noise. The same exception raised
+    from the project's own code is a bug there, and keeps its traceback.
+
+    The report ends with the innermost frame of the project's own code, if
+    any, so a decoration error still points at the class it rejected.
+    """
+    if not isinstance(exc, (TypeError, ValueError)) or exc.__traceback__ is None:
+        return None
+    frames: list[TracebackType] = []
+    tb = exc.__traceback__
+    while tb is not None:
+        frames.append(tb)
+        tb = tb.tb_next
+    if _package(frames[-1]) not in _FRAMEWORK_PACKAGES:
+        return None
+    message = str(exc)
+    for frame in reversed(frames):
+        filename = frame.tb_frame.f_code.co_filename
+        if _package(frame) in _FRAMEWORK_PACKAGES or filename.startswith("<"):
+            continue
+        path = Path(filename)
+        if path.is_relative_to(Path.cwd()):
+            path = path.relative_to(Path.cwd())
+        message += f" ({path}:{frame.tb_lineno})"
+        break
+    return message
+
+
+def _exit_on_startup_error(console: Console, exc: BaseException) -> None:
+    """Print a set-up error (see ``_startup_error``) and exit, or return for anything else."""
+    message = _startup_error(exc)
+    if message is None:
+        return
+    console.print(f"[bold red]Error:[/bold red] {message}", soft_wrap=True, highlight=False)
+    raise typer.Exit(1)
+
+
 def _banner() -> Panel:
     """Build the rich ``Panel`` shown on CLI startup, wrapping ``_logo()``."""
     body = f"{_logo()}[dim]Lightweight dependency-injection framework for data applications.[/dim]"
@@ -199,6 +252,7 @@ def run(
     and the ``app`` package), the same layout as ``demo/``.
     """
     console = Console()
+    errors = Console(stderr=True)
     console.print(_banner())
 
     cwd = str(Path.cwd())
@@ -212,8 +266,15 @@ def run(
             f"Could not import {app_module!r} from {cwd} — pass --app to point at the "
             "package that registers your components."
         ) from exc
+    except Exception as exc:
+        _exit_on_startup_error(errors, exc)
+        raise
 
-    server = Server.from_config(config)
+    try:
+        server = Server.from_config(config)
+    except Exception as exc:
+        _exit_on_startup_error(errors, exc)
+        raise
     try:
         server.start(
             ui=ui,
@@ -226,8 +287,10 @@ def run(
             theme=theme,
             app_module=None,
         )
-    except ValueError as exc:
-        raise typer.BadParameter(str(exc)) from exc
+    except Exception as exc:
+        server.stop()
+        _exit_on_startup_error(errors, exc)
+        raise
 
     lines = []
     if server.ui_url:
