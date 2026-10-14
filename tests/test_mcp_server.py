@@ -424,3 +424,86 @@ def test_duplicate_full_tool_name_within_one_component_raises_at_construction():
     with Context(namespaces={NS}) as ctx:
         with pytest.raises(ValueError, match="Duplicate MCP tool name: 'thing.status'"):
             McpServer(ctx, "proj")
+
+
+# --- agents ------------------------------------------------------------------------
+
+
+def _librarian(NS):
+    from opendataframework.agent import Agent
+
+    @NS
+    @Agent
+    class Librarian:
+        """Answers questions about the catalogue.
+
+        Searches by keyword.
+        """
+
+        def invoke(self, question: str, limit: int = 3) -> dict:
+            return {"question": question, "limit": limit}
+
+    return Librarian
+
+
+def test_agent_is_registered_as_its_own_invoke_tool_with_a_typed_schema():
+    NS = make_ns()
+    _librarian(NS)
+
+    with Context(namespaces={NS}) as ctx:
+        tools = asyncio.run(McpServer(ctx, "proj")._mcp.list_tools())
+
+    tool = next(t for t in tools if t.name == "librarian.invoke")
+    assert tool.description == "Answers questions about the catalogue."
+    assert tool.inputSchema["properties"] == {
+        "question": {"title": "Question", "type": "string"},
+        "limit": {"default": 3, "title": "Limit", "type": "integer"},
+    }
+    assert tool.inputSchema["required"] == ["question"]
+
+
+def test_agent_invoke_tool_calls_the_agent_through_the_context(tmp_path):
+    NS = make_ns()
+    _librarian(NS)
+
+    with Context(namespaces={NS}, log_dir=tmp_path) as ctx:
+        mcp = McpServer(ctx, "proj")._mcp
+        result = call(mcp, "librarian.invoke", {"question": "Dune?", "limit": 2})
+        logs = ctx.tail_logs("Librarian")
+
+    assert json.loads(text(result)) == {"question": "Dune?", "limit": 2}
+    assert any("invoke() completed" in entry["message"] for entry in logs)
+
+
+def test_agent_invoke_tool_is_listed_as_an_agent_component():
+    NS = make_ns()
+    _librarian(NS)
+
+    with Context(namespaces={NS}) as ctx:
+        nodes = structured(call(McpServer(ctx, "proj")._mcp, "list_components"))
+
+    node = next(n for n in nodes if n["label"] == "Librarian")
+    assert node["type"] == "agent"
+    assert node["decorator"] == "@Agent"
+
+
+def test_agent_invoke_tool_clashing_with_its_own_mcp_tool_raises():
+    NS = make_ns()
+
+    from opendataframework.agent import Agent
+
+    @NS
+    @Agent
+    class Librarian:
+        def invoke(self) -> str:
+            return "agent"
+
+        def other(self) -> str:
+            return "tool"
+
+        def mcp_tools(self) -> list[McpTool]:
+            return [McpTool(name="invoke", description="Clash.", handler=self.other)]
+
+    with Context(namespaces={NS}) as ctx:
+        with pytest.raises(ValueError, match="Duplicate MCP tool name: 'librarian.invoke'"):
+            McpServer(ctx, "proj")

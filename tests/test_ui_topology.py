@@ -1,4 +1,5 @@
 import pytest
+from opendataframework.agent import Agent
 from opendataframework.component import Component
 from opendataframework.context import Context
 from opendataframework.entity import Entity
@@ -60,6 +61,11 @@ def test_classifies_node_types_and_config():
     class TopoPipeline:
         def execute(self) -> None: ...
 
+    @NS
+    @Agent
+    class TopoAgent:
+        def invoke(self, question: str) -> str: ...
+
     with Context(namespaces={NS}, config={"k": "v"}) as ctx:
         data = build_topology(ctx, "test-project")
 
@@ -69,7 +75,10 @@ def test_classifies_node_types_and_config():
     assert types["TopoService"] == "service"
     assert types["TopoTask"] == "task"
     assert types["TopoPipeline"] == "pipeline"
+    assert types["TopoAgent"] == "agent"
     assert types["Config"] == "config"
+    decorators = {n["label"]: n["decorator"] for n in data["nodes"]}
+    assert decorators["TopoAgent"] == "@Agent"
 
 
 # --- service running state --------------------------------------------------
@@ -360,6 +369,29 @@ def test_list_shows_only_listed_components_of_that_kind():
     with Context(namespaces={NS}) as ctx:
         assert ids(build_topology(ctx, "p", view)) >= {"view-kept"}
         assert "view-dropped" not in ids(build_topology(ctx, "p", view))
+
+
+def test_agents_list_filters_agents():
+    NS = make_ns()
+
+    @NS
+    @Agent
+    class ViewAsker:
+        def invoke(self) -> None: ...
+
+    @NS
+    @Agent
+    class ViewHidden:
+        def invoke(self) -> None: ...
+
+    view = TopologyView.from_config({"agents": ["view-asker", "view-missing"]})
+    with Context(namespaces={NS}) as ctx:
+        data = build_topology(ctx, "p", view)
+        unmatched = view.unmatched(ctx)
+
+    assert "view-asker" in ids(data)
+    assert "view-hidden" not in ids(data)
+    assert unmatched == [("agents", "view-missing")]
 
 
 def test_kind_without_a_list_shows_every_component_of_that_kind():

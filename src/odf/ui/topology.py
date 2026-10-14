@@ -3,7 +3,7 @@
 Pure introspection: reads ``Context.instances`` (populated after
 ``Context.open()`` / ``Project.start()``) and the class-level registration
 metadata already tracked by ``Namespace`` subclasses (``Component``,
-``Repository``, ``Service``, ``Task``, ``Pipeline``, ``Layer``). Nothing here
+``Repository``, ``Service``, ``Task``, ``Pipeline``, ``Agent``, ``Layer``). Nothing here
 touches the DI container or drives lifecycle — it only describes what has
 already been resolved.
 """
@@ -13,6 +13,7 @@ from collections.abc import Mapping
 from dataclasses import dataclass, field
 from pathlib import Path
 
+from opendataframework.agent import Agent
 from opendataframework.component import ChartProtocol, Component, DetailsProtocol
 from opendataframework.config import Config
 from opendataframework.context import Context, Resolver
@@ -31,6 +32,7 @@ _EXEC_NAMESPACES: list[tuple[str, type[Namespace]]] = [
     ("service", Service),
     ("task", Task),
     ("pipeline", Pipeline),
+    ("agent", Agent),
     ("component", Component),
 ]
 
@@ -41,6 +43,7 @@ _KIND_KEYS = {
     "services": "service",
     "tasks": "task",
     "pipelines": "pipeline",
+    "agents": "agent",
     "components": "component",
 }
 
@@ -72,7 +75,7 @@ class TopologyView:
         Args:
             cfg: The parsed table: ``connections`` and ``config`` booleans plus
                 any of ``repositories``/``services``/``tasks``/``pipelines``/
-                ``components`` as lists of class names or kebab ids.
+                ``agents``/``components`` as lists of class names or kebab ids.
 
         Raises:
             ValueError: On an unknown key or a value of the wrong type.

@@ -14,7 +14,9 @@ from typing import TYPE_CHECKING
 try:
     import uvicorn
     from fastapi import FastAPI, HTTPException, Request
+    from fastapi.encoders import jsonable_encoder
     from fastapi.responses import FileResponse, HTMLResponse, Response, StreamingResponse
+    from pydantic import ValidationError
 except ImportError as exc:
     raise ImportError(
         "server.start(ui=True) requires the 'ui' extra. Install with: pip install odf[ui]"
@@ -36,7 +38,7 @@ from opendataframework.view import (
     VideoView,
 )
 
-from odf.ui import annotations, data, layout, media, themes
+from odf.ui import agents, annotations, data, layout, media, themes
 from odf.ui.topology import TopologyView, build_topology
 
 if TYPE_CHECKING:
@@ -481,6 +483,33 @@ class UiServer:
             except Exception as exc:
                 raise HTTPException(status_code=500, detail=str(exc)) from exc
 
+        @app.get("/api/components/{component_id}/parameters")
+        def agent_parameters(component_id: str) -> dict:
+            """Return the JSON schema of an agent's ``invoke()`` arguments."""
+            cls = self._get_agent(component_id)
+            return agents.invoke_model(self._context, cls).model_json_schema()
+
+        @app.post("/api/components/{component_id}/invoke")
+        def invoke_agent(component_id: str, body: dict) -> dict:
+            """Invoke an agent through the context, with the request body as arguments."""
+            cls = self._get_agent(component_id)
+            model = agents.invoke_model(self._context, cls)
+            try:
+                validated = model.model_validate(body)
+            except ValidationError as exc:
+                raise HTTPException(
+                    status_code=422, detail=jsonable_encoder(exc.errors(include_url=False))
+                ) from exc
+            kwargs = {name: getattr(validated, name) for name in type(validated).model_fields}
+            try:
+                result = self._context.call(cls.__name__, **kwargs)
+            except Exception as exc:
+                raise HTTPException(status_code=500, detail=str(exc)) from exc
+            try:
+                return {"result": jsonable_encoder(result)}
+            except Exception:
+                return {"result": str(result)}
+
         @app.get("/api/chat/config")
         def chat_config() -> dict:
             """Report whether chat is enabled and which model it uses."""
@@ -554,6 +583,14 @@ class UiServer:
             if kebab(cls.__name__) == component_id:
                 return cls
         raise HTTPException(status_code=404, detail="Component not found")
+
+    def _get_agent(self, component_id: str) -> type:
+        """Resolve a component id to its agent class, or raise 400 if not an agent."""
+        self._find_class_or_404(component_id)
+        cls = agents.find_agent(self._context, component_id)
+        if cls is None:
+            raise HTTPException(status_code=400, detail="Component is not an agent")
+        return cls
 
     def _get_details(self, component_id: str) -> DetailsProtocol:
         """Resolve a component id to its instance, or raise 403 if not detailed."""

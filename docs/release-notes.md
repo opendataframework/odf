@@ -112,6 +112,15 @@
   [`11-image-view`](https://github.com/opendataframework/odf/tree/main/examples/11-image-view)
   example describes the format. `[ui] annotations = false` in `config.toml` turns
   it off.
+- **Agents**: `@Agent` classes (new in `opendataframework` 0.3.0) appear in the topology
+  as `agent` nodes, with their own default icon and color, an `Agents` count in the
+  header, and an `agents` list in `[ui.topology]`. A node's **Invoke** action opens a
+  form built from the agent's `invoke()` arguments and shows the result. Over MCP each
+  agent is its own tool, `<agent-id>.invoke`, with `invoke()`'s signature as its input
+  schema, and `@agent-id` in the chat keeps that tool available for the message. Every
+  call goes through `context.call()`, so it is logged to the agent's log. See the
+  [`19-agent`](https://github.com/opendataframework/odf/tree/main/examples/19-agent)
+  example.
 
 ### Changed
 

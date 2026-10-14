@@ -6,7 +6,7 @@ const TW2 = TW / 2, TH2 = TH / 2;
 // Populated from CSS custom properties by readTheme() — see Theme section.
 const ACCENT = {
   config: '', component: '', repository: '',
-  service: '', task: '', pipeline: '', alert: '',
+  service: '', task: '', pipeline: '', agent: '', alert: '',
 };
 
 // Colors for the six built-in @Layer names, also populated from CSS custom
@@ -18,7 +18,7 @@ const LAYER_DEFAULT_COLORS = {
 
 const TYPE_LABEL = {
   config:'Config', component:'@Component', repository:'@Repository',
-  service:'@Service', task:'@Task', pipeline:'@Pipeline',
+  service:'@Service', task:'@Task', pipeline:'@Pipeline', agent:'@Agent',
 };
 
 // The map-panel mode each DataView kind opens into (see setMapMode below) —
@@ -621,8 +621,57 @@ function drawConveyorPad(sx, sy, accent, lit) {
   ctx.restore();
 }
 
+// @Agent → observatory (domed roof + beam sweeping around it)
+function drawObservatory(sx, sy, accent, lit) {
+  const bh = 24;
+  drawBox(sx, sy, bh, accent, lit, 0.75);
+  const cy = sy - bh, r = 13;
+
+  ctx.save();
+  ctx.beginPath();
+  ctx.ellipse(sx, cy, r, r * (TH2 / TW2), 0, 0, Math.PI);
+  ctx.arc(sx, cy, r, 0, Math.PI, true);
+  ctx.closePath();
+  ctx.fillStyle = rgba(accent, lit ? 0.2 : 0.12);
+  ctx.strokeStyle = rgba(accent, lit ? 0.9 : 0.55);
+  ctx.lineWidth = 1;
+  if (lit) { ctx.shadowColor = accent; ctx.shadowBlur = 5; }
+  ctx.fill();
+  ctx.stroke();
+  ctx.restore();
+
+  // A slit in the dome, and the beam leaving it, both turning with time.
+  const angle = animT * 0.8 + sx;
+  const dx = Math.cos(angle), dy = Math.sin(angle) * (TH2 / TW2);
+  const front = Math.sin(angle) > 0;
+  ctx.save();
+  ctx.strokeStyle = rgba(accent, front ? (lit ? 0.85 : 0.6) : 0.2);
+  ctx.lineWidth = 1.4;
+  ctx.beginPath();
+  ctx.moveTo(sx + dx * r * 0.35, cy - r * 0.95);
+  ctx.lineTo(sx + dx * r * 0.85, cy - r * 0.45 + dy * r * 0.4);
+  ctx.stroke();
+  const pulse = (Math.sin(animT * 3) + 1) / 2;
+  ctx.strokeStyle = rgba(accent, 0.15 + 0.25 * pulse);
+  ctx.lineWidth = 1;
+  ctx.beginPath();
+  ctx.moveTo(sx, cy - r * 0.9);
+  ctx.lineTo(sx + dx * TW2 * 0.9, cy - r * 0.9 - 10 + dy * TW2 * 0.4);
+  ctx.stroke();
+  ctx.restore();
+
+  ctx.save();
+  ctx.beginPath();
+  ctx.arc(sx, cy - r - 2, 1.8, 0, Math.PI * 2);
+  ctx.fillStyle = accent;
+  ctx.shadowColor = accent;
+  ctx.shadowBlur = 3 + 4 * pulse;
+  ctx.fill();
+  ctx.restore();
+}
+
 // ── Icon registry ──────────────────────────────────────────────────────────
-// One entry per selectable icon shape. The six below are the exec-type
+// One entry per selectable icon shape. The seven below are the exec-type
 // defaults (drawn when a node has no `icon` override — see iconKey() below).
 // Every other built-in icon is purely user-selectable, assignable to any node
 // regardless of exec type, and lives in its group's file under icons/,
@@ -641,6 +690,7 @@ const ICONS = {
   service:    { draw: drawAntennaTower,   bh: 56, scale: 0.5,  extraTop: 34, label: '@Service antenna',        group: 'Defaults' },
   task:       { draw: drawFactoryCube,    bh: 30, scale: 0.8,  extraTop: 20, label: '@Task factory cube',      group: 'Defaults' },
   pipeline:   { draw: drawConveyorPad,    bh: 10, scale: 1,    extraTop: 0,  label: '@Pipeline conveyor',      group: 'Defaults' },
+  agent:      { draw: drawObservatory,    bh: 24, scale: 0.75, extraTop: 18, label: '@Agent observatory',      group: 'Defaults' },
 };
 // Derives the label placement/hit-testing extents for one ICONS entry —
 // shared by the built-in postprocessing pass below and by ODF.registerIcon
@@ -662,7 +712,7 @@ function iconKey(node) {
   return ICONS[key] ? key : node.type;
 }
 
-// Curated swatch palette for the color picker — distinct from the 6 exec-type
+// Curated swatch palette for the color picker — distinct from the 7 exec-type
 // accent hues so a custom color reads as deliberately "custom," and chosen to
 // stay legible against both the dark and light tile/wire backgrounds. Each
 // entry is {hex, label} — built-ins have no meaningful name so their label
@@ -1125,6 +1175,9 @@ function selectNode(id) {
   if (node.type === 'task' || node.type === 'pipeline') {
     actions.push({ id: 'execute-btn', label: 'Execute', kind: '', run: () => executeNode(id) });
   }
+  if (node.type === 'agent') {
+    actions.push({ id: 'invoke-btn', label: 'Invoke', kind: '', run: () => openInvokeForm(id) });
+  }
   if (node.chart) {
     actions.push({ id: 'show-chart-btn', label: 'View Chart', kind: '', run: () => showChartView(id) });
   }
@@ -1465,6 +1518,130 @@ async function executeNode(id) {
     addLog(`${node.label} execute failed — ${err.message}`, ACCENT.alert);
   }
   if (btn) btn.disabled = false;
+}
+
+// ── Agent invoke ─────────────────────────────────────────────────────────
+// Backs the "Invoke" action on @Agent nodes. Unlike execute(), invoke() takes
+// arguments: GET /api/components/{id}/parameters returns their JSON schema,
+// built from the agent's invoke() signature, and the form below is drawn
+// from it inside the inspector popup. POST /api/components/{id}/invoke
+// validates the values against the same schema, converting them to the
+// annotated types, and calls the agent through Context.call().
+
+// The input a schema property is edited with: a plain input for a string,
+// number or boolean (including one that may also be null), and a JSON
+// textarea for anything else.
+function invokeFieldKind(prop) {
+  const types = prop.anyOf ? prop.anyOf.map(p => p.type).filter(t => t !== 'null') : [prop.type];
+  if (types.length !== 1) return 'json';
+  if (types[0] === 'string') return 'string';
+  if (types[0] === 'integer' || types[0] === 'number') return 'number';
+  if (types[0] === 'boolean') return 'boolean';
+  return 'json';
+}
+
+async function openInvokeForm(id) {
+  const node = nodeMap[id];
+  const body = document.getElementById('inspector-popup-body');
+  const existing = body.querySelector('.invoke-form');
+  if (existing) { existing.querySelector('input,textarea,button')?.focus(); return; }
+  let schema;
+  try {
+    const res = await fetch(`/api/components/${id}/parameters`);
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    schema = await res.json();
+  } catch (err) {
+    addLog(`${node.label} parameters failed — ${err.message}`, ACCENT.alert);
+    return;
+  }
+  if (selectId !== id) return;
+
+  const props = schema.properties || {};
+  const required = new Set(schema.required || []);
+  const fields = Object.entries(props).map(([name, prop]) => {
+    const kind = invokeFieldKind(prop);
+    const value = prop.default === undefined ? '' : prop.default;
+    const label = `<span>${escapeHtml(name)}${required.has(name) ? ' <span class="invoke-required">*</span>' : ''}</span>`;
+    let input;
+    if (kind === 'boolean') {
+      input = `<input type="checkbox" name="${escapeHtml(name)}"${value === true ? ' checked' : ''}>`;
+    } else if (kind === 'json') {
+      const text = value === '' ? '' : JSON.stringify(value);
+      input = `<textarea name="${escapeHtml(name)}" rows="2" placeholder="JSON">${escapeHtml(text)}</textarea>`;
+    } else {
+      input = `<input type="${kind === 'number' ? 'number' : 'text'}"${kind === 'number' ? ' step="any"' : ''} name="${escapeHtml(name)}" value="${escapeHtml(value === null ? '' : String(value))}">`;
+    }
+    return `<label class="invoke-field invoke-${kind}">${label}${input}</label>`;
+  });
+
+  const form = document.createElement('form');
+  form.className = 'invoke-form';
+  form.innerHTML =
+    fields.join('') +
+    `<button type="submit" class="invoke-run">Run</button>` +
+    `<pre class="invoke-result" hidden></pre>`;
+  form.addEventListener('submit', e => {
+    e.preventDefault();
+    invokeAgent(id, form, props, required);
+  });
+  body.appendChild(form);
+  showInspectorPopup(node);
+  form.querySelector('input,textarea,button').focus();
+}
+
+// Reads the form back into invoke() arguments. An empty optional field is
+// left out, so the agent's own default applies.
+function readInvokeForm(form, props, required) {
+  const args = {};
+  for (const [name, prop] of Object.entries(props)) {
+    const el = form.elements[name];
+    const kind = invokeFieldKind(prop);
+    if (kind === 'boolean') { args[name] = el.checked; continue; }
+    const text = el.value;
+    if (text.trim() === '' && !(kind === 'string' && required.has(name))) continue;
+    if (kind === 'json') {
+      try { args[name] = JSON.parse(text); }
+      catch { throw new Error(`${name}: not valid JSON`); }
+    } else {
+      args[name] = text;
+    }
+  }
+  return args;
+}
+
+function invokeErrorMessage(detail, status) {
+  if (Array.isArray(detail)) {
+    return detail.map(d => `${(d.loc || []).join('.') || 'arguments'}: ${d.msg}`).join('; ');
+  }
+  return detail || `HTTP ${status}`;
+}
+
+async function invokeAgent(id, form, props, required) {
+  const node = nodeMap[id];
+  const btn = form.querySelector('.invoke-run');
+  const out = form.querySelector('.invoke-result');
+  btn.disabled = true;
+  out.classList.remove('error');
+  try {
+    const args = readInvokeForm(form, props, required);
+    const res = await fetch(`/api/components/${id}/invoke`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(args),
+    });
+    const body = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error(invokeErrorMessage(body.detail, res.status));
+    const result = body.result;
+    out.textContent = typeof result === 'string' ? result : JSON.stringify(result, null, 2);
+    addLog(`${node.label} invoked`, nodeAccent(node));
+  } catch (err) {
+    out.textContent = err.message;
+    out.classList.add('error');
+    addLog(`${node.label} invoke failed — ${err.message}`, ACCENT.alert);
+  }
+  out.hidden = false;
+  btn.disabled = false;
+  if (selectId === id) showInspectorPopup(node);
 }
 
 // ── Sidebar tabs ───────────────────────────────────────────────────────────
@@ -1875,6 +2052,7 @@ function renderStats(data) {
   document.getElementById('stat-services').textContent  = String(types.service || 0);
   document.getElementById('stat-tasks').textContent     = String(types.task || 0);
   document.getElementById('stat-pipelines').textContent = String(types.pipeline || 0);
+  document.getElementById('stat-agents').textContent    = String(types.agent || 0);
   document.getElementById('hdr-subtitle').textContent   = `Topology · ${data.project}`;
   document.getElementById('node-count').textContent     = String(data.stats.objects).padStart(2, '0');
   document.title = `${BRAND} — ${data.project}`;

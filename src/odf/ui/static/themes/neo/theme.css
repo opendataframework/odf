@@ -20,6 +20,7 @@
   --accent-service: #00e0d0;
   --accent-task: #a6ff00;
   --accent-pipeline: #ffe600;
+  --accent-agent: #b388ff;
   --accent-alert: #ff3b30;
 
   --layer-api: #7c4dff;
@@ -61,6 +62,7 @@
   --accent-service: #007a75;
   --accent-task: #5c8a00;
   --accent-pipeline: #a67c00;
+  --accent-agent: #6a3fd1;
   --accent-alert: #c8102e;
 
   --layer-api: #5b2bd6;
@@ -227,6 +229,20 @@ canvas{display:block;cursor:grab}
 .detail-action:hover{background:var(--hover-bg);color:var(--text)}
 .detail-action.danger{color:var(--accent-alert)}
 .detail-action:disabled{opacity:.4;cursor:default;pointer-events:none}
+.invoke-form{margin:14px -16px 0;padding:10px 16px 0;border-top:2px solid var(--border);display:flex;flex-direction:column;gap:8px}
+.invoke-field{display:flex;flex-direction:column;gap:4px;font-family:'Archivo Black','Arial Black',Inter,'Segoe UI',Roboto,-apple-system,BlinkMacSystemFont,Helvetica,Arial,sans-serif;font-size:10px;font-weight:600;letter-spacing:.03em;color:var(--text-dim)}
+.invoke-field.invoke-boolean{flex-direction:row-reverse;justify-content:flex-end;align-items:center;gap:8px}
+.invoke-required{color:var(--accent-alert)}
+.invoke-field input:not([type=checkbox]),.invoke-field textarea{width:100%;background:var(--panel);border:3px solid var(--border-strong);color:var(--text);font-family:inherit;font-size:11.5px;font-weight:400;letter-spacing:0;padding:5px 8px;border-radius:0}
+.invoke-field textarea{font-family:'SF Mono','IBM Plex Mono','JetBrains Mono',Consolas,'Courier New',monospace;resize:vertical}
+.invoke-field input:focus,.invoke-field textarea:focus{outline:none;border-color:var(--title-accent)}
+.invoke-field input[type=checkbox]{accent-color:var(--accent-agent)}
+.invoke-run{align-self:flex-start;background:transparent;border:3px solid var(--accent-agent);color:var(--accent-agent);font-family:'Archivo Black','Arial Black',Inter,'Segoe UI',Roboto,-apple-system,BlinkMacSystemFont,Helvetica,Arial,sans-serif;font-size:11px;font-weight:600;letter-spacing:.03em;padding:5px 14px;border-radius:0;cursor:pointer;transition:background .12s}
+.invoke-run:hover{background:color-mix(in srgb, var(--accent-agent) 12%, transparent)}
+.invoke-run:disabled{opacity:.4;cursor:default;pointer-events:none}
+.invoke-result{max-height:200px;overflow:auto;margin:0;padding:8px;background:var(--hover-bg);border:1px solid var(--border);border-radius:0;font-family:'SF Mono','IBM Plex Mono','JetBrains Mono',Consolas,'Courier New',monospace;font-size:11px;color:var(--text);white-space:pre-wrap;word-break:break-word}
+.invoke-result[hidden]{display:none}
+.invoke-result.error{color:var(--accent-alert)}
 .detail-action-arrow{flex:none;opacity:.6}
 
 /* Inspector popup — anchored to the clicked building's screen position at

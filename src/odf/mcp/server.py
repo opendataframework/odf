@@ -4,10 +4,11 @@ Not a DI-managed ``Service`` — like ``UiServer``, it introspects the container
 from the outside, so it is constructed and driven directly by
 ``Server.start(mcp=True)`` / ``Server.stop()``, after the ``Context`` has
 already resolved. Lets any MCP-speaking client (an LLM agent, Claude Desktop,
-...) start/stop components, execute tasks/pipelines, and query repository
-data that was previously only reachable by clicking through the UI.
+...) start/stop components, execute tasks/pipelines, invoke agents, and query
+repository data that was previously only reachable by clicking through the UI.
 """
 
+import inspect
 import threading
 from typing import Any
 
@@ -24,6 +25,7 @@ from opendataframework.context import Context
 from opendataframework.repository import ReadableProtocol
 from opendataframework.utils import kebab
 
+from odf.ui import agents
 from odf.ui.data import find_repository, list_records, parse_filters
 from odf.ui.topology import build_topology
 
@@ -68,11 +70,13 @@ class McpServer:
 
         @mcp.tool()
         def list_components() -> list[dict]:
-            """List every resolved component, repository, service, task, and
-            pipeline: its type, layer, and — for services — whether it is
-            currently running. Use each entry's "label" (its class name) as
-            the "name" argument to the other tools. Use a "repository"-typed
-            entry's "id" as the "repo_id" argument to query_repository."""
+            """List every resolved component, repository, service, task,
+            pipeline, and agent: its type, layer, and — for services —
+            whether it is currently running. Use each entry's "label" (its
+            class name) as the "name" argument to the other tools. Use a
+            "repository"-typed entry's "id" as the "repo_id" argument to
+            query_repository. An "agent"-typed entry is invoked through its
+            own "<id>.invoke" tool."""
             topology = build_topology(self._context, project)
             return [
                 {k: v for k, v in node.items() if k not in ("col", "row")}
@@ -158,12 +162,22 @@ class McpServer:
                 raise ValueError(f"No resolved component named {name!r}")
             return self._context.tail_logs(name, lines)
 
-        # Component-exposed tools: every resolved instance implementing
-        # McpToolsProtocol contributes its own tools in addition to the six
-        # fixed tools above, namespaced by its kebab-case class name so they
+        # Component-exposed tools: every resolved agent gets an "invoke"
+        # tool, and every resolved instance implementing McpToolsProtocol
+        # contributes its own tools, in addition to the six fixed tools
+        # above. Both are namespaced by the kebab-case class name so they
         # can't collide with the fixed tools or with another component's
         # tools of the same local name.
         registered_names: set[str] = set()
+        for cls in agents.agents(self._context):
+            full_name = f"{kebab(cls.__name__)}.invoke"
+            registered_names.add(full_name)
+            mcp.add_tool(
+                self._invoke_handler(cls),
+                name=full_name,
+                description=agents.describe(cls),
+                structured_output=False,
+            )
         for cls, instance in self._context.instances.items():
             if not isinstance(instance, McpToolsProtocol):
                 continue
@@ -181,6 +195,20 @@ class McpServer:
 
         self._mcp = mcp
         self._app = mcp.streamable_http_app()
+
+    def _invoke_handler(self, cls: type):
+        """Return a tool handler that invokes ``cls`` through ``Context.call()``.
+
+        Its signature is the agent's ``invoke()`` parameters, so FastMCP
+        builds the tool's input schema from the agent's own annotations.
+        """
+
+        def invoke(**arguments):
+            """Call the agent's ``invoke()`` through the context, with ``arguments``."""
+            return self._context.call(cls.__name__, **arguments)
+
+        invoke.__signature__ = inspect.Signature(agents.invoke_parameters(self._context, cls))
+        return invoke
 
     @property
     def mcp(self) -> FastMCP:

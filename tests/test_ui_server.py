@@ -436,6 +436,134 @@ def test_execute_endpoint_surfaces_task_exceptions_as_500():
     assert r.status_code == 500
 
 
+def _librarian(NS, calls):
+    from opendataframework.agent import Agent
+
+    @NS
+    @Agent
+    class Librarian:
+        def invoke(self, question: str, limit: int = 3, *, exact: bool = False) -> dict:
+            calls.append((question, limit, exact))
+            return {"question": question, "limit": limit, "exact": exact}
+
+    return Librarian
+
+
+def test_parameters_endpoint_returns_the_invoke_schema():
+    NS = make_ns()
+    _librarian(NS, [])
+
+    with Context(namespaces={NS}) as ctx:
+        client = TestClient(UiServer(ctx, "proj")._app)
+        r = client.get("/api/components/librarian/parameters")
+
+    assert r.status_code == 200
+    schema = r.json()
+    assert list(schema["properties"]) == ["question", "limit", "exact"]
+    assert schema["properties"]["limit"] == {"default": 3, "title": "Limit", "type": "integer"}
+    assert schema["required"] == ["question"]
+
+
+def test_invoke_endpoint_calls_the_agent_with_coerced_arguments():
+    NS = make_ns()
+    calls = []
+    _librarian(NS, calls)
+
+    with Context(namespaces={NS}) as ctx:
+        client = TestClient(UiServer(ctx, "proj")._app)
+        r = client.post(
+            "/api/components/librarian/invoke", json={"question": "Dune?", "limit": "2"}
+        )
+
+    assert r.status_code == 200
+    assert r.json() == {"result": {"question": "Dune?", "limit": 2, "exact": False}}
+    assert calls == [("Dune?", 2, False)]
+
+
+def test_invoke_endpoint_logs_the_call(tmp_path):
+    NS = make_ns()
+    _librarian(NS, [])
+
+    with Context(namespaces={NS}, log_dir=tmp_path) as ctx:
+        client = TestClient(UiServer(ctx, "proj")._app)
+        client.post("/api/components/librarian/invoke", json={"question": "Dune?"})
+        logs = client.get("/api/components/librarian/logs").json()
+
+    assert any("invoke() completed" in entry["message"] for entry in logs)
+
+
+def test_invoke_endpoint_rejects_a_missing_argument_with_422():
+    NS = make_ns()
+    calls = []
+    _librarian(NS, calls)
+
+    with Context(namespaces={NS}) as ctx:
+        client = TestClient(UiServer(ctx, "proj")._app)
+        r = client.post("/api/components/librarian/invoke", json={})
+
+    assert r.status_code == 422
+    assert r.json()["detail"][0]["loc"] == ["question"]
+    assert calls == []
+
+
+def test_invoke_endpoints_reject_a_component_that_is_not_an_agent():
+    NS = make_ns()
+
+    @NS
+    @Component
+    class Thing: ...
+
+    with Context(namespaces={NS}) as ctx:
+        client = TestClient(UiServer(ctx, "proj")._app)
+
+        assert client.get("/api/components/thing/parameters").status_code == 400
+        assert client.post("/api/components/thing/invoke", json={}).status_code == 400
+        assert client.get("/api/components/nonexistent/parameters").status_code == 404
+
+
+def test_invoke_endpoint_surfaces_agent_exceptions_as_500():
+    NS = make_ns()
+
+    from opendataframework.agent import Agent
+
+    @NS
+    @Agent
+    class Grumpy:
+        def invoke(self) -> None:
+            raise RuntimeError("not today")
+
+    with Context(namespaces={NS}) as ctx:
+        client = TestClient(UiServer(ctx, "proj")._app)
+        r = client.post("/api/components/grumpy/invoke", json={})
+
+    assert r.status_code == 500
+    assert r.json()["detail"] == "not today"
+
+
+def test_invoke_endpoint_falls_back_to_str_for_an_unencodable_result():
+    NS = make_ns()
+
+    from opendataframework.agent import Agent
+
+    class Opaque:
+        __slots__ = ()
+
+        def __str__(self) -> str:
+            return "opaque"
+
+    @NS
+    @Agent
+    class Odd:
+        def invoke(self) -> Opaque:
+            return Opaque()
+
+    with Context(namespaces={NS}) as ctx:
+        client = TestClient(UiServer(ctx, "proj")._app)
+        r = client.post("/api/components/odd/invoke", json={})
+
+    assert r.json() == {"result": "opaque"}
+
+
 def test_lifecycle_endpoints_unknown_component_returns_404():
     with Context(namespaces=set()) as ctx:
         client = TestClient(UiServer(ctx, "proj")._app)
@@ -1649,7 +1777,7 @@ def test_serves_the_shared_script():
 
 
 ICON_SCRIPTS = sorted(p.name for p in (themes.STATIC_DIR / "icons").glob("*.js"))
-DEFAULT_ICONS = {"config", "component", "repository", "service", "task", "pipeline"}
+DEFAULT_ICONS = {"config", "component", "repository", "service", "task", "pipeline", "agent"}
 
 
 @pytest.mark.parametrize("name", ICON_SCRIPTS)

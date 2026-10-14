@@ -51,7 +51,7 @@ needs a third-party dependency:
 | `server.py` | `Server` — composes an `opendataframework.Project` and adds `start(ui=, mcp=, chat=)` orchestration on top | (imports the rest of this table lazily) |
 | `cli.py`, `scaffold.py`, `templates/` | `odf init`/`odf run` CLI | `typer`, `rich` |
 | `mcp/server.py` | MCP server exposing component lifecycle + task/pipeline execution + repository data queries as tools | `mcp`, `uvicorn` |
-| `ui/server.py`, `ui/topology.py`, `ui/data.py`, `ui/layout.py`, `ui/extensions.py`, `ui/themes.py` | UI dev server | `fastapi`, `uvicorn` |
+| `ui/server.py`, `ui/topology.py`, `ui/data.py`, `ui/agents.py`, `ui/layout.py`, `ui/extensions.py`, `ui/themes.py` | UI dev server | `fastapi`, `uvicorn` |
 | `ui/static/` | The UI itself: `index.html` + `app.js` shared by every theme, `icons/` holding the built-in topology icons (one file per picker group, plus `shared.js`), and `themes/<name>/` holding each theme's `theme.css`, `favicon.svg` and optional `theme.js` | (Leaflet from a CDN; no build step) |
 | `chat/engine.py` | Chat window backing a `Server`'s UI | `ollama` |
 
@@ -63,7 +63,7 @@ drawing CSS can't express goes in its `theme.js` through
 stay a classic script, since custom icon scripts use its top-level names as
 globals.
 
-`app.js` holds only the six exec-type default icons. Every other built-in
+`app.js` holds only the seven exec-type default icons. Every other built-in
 icon goes in its group's file under `ui/static/icons/` (a new group is a new
 file plus a `<script>` tag in `index.html`, after `icons/shared.js`), where
 it registers through `ODF.registerIcon` with that file's `group` and draws
@@ -135,7 +135,7 @@ not per commit; format mirrors `opendataframework`'s release notes).
 
 ## Examples
 
-`examples/` has 16 examples. `01-table-view/` (a repository with no
+`examples/` has 19 examples. `01-table-view/` (a repository with no
 `data_view()` at all, so the UI falls back to the implicit default table)
 and `06-location-view/` (`data_view() -> LocationView` overriding that
 default with a map) are the two ends of the `data_view()` concept.
@@ -145,7 +145,8 @@ each mirror one `odf init --template <name>` scaffold layout, so they
 belong with the CLI that describes them, not the core package).
 `07-streaming-video-view/` through `16-mcp-chat/` are the UI-only surface
 (streaming/video/audio/image/document/timeseries views, chart, chart via
-Plotly, MCP + chat) ported from the original monorepo's `demo/` project —
-treat new examples here as small and focused, one concept each, matching
+Plotly, MCP + chat) ported from the original monorepo's `demo/` project.
+`17-custom-icon/`, `18-custom-mcp-tool/` and `19-agent/` (an `@Agent`
+invoked from the UI, over MCP and from chat) were added here since. Treat new examples here as small and focused, one concept each, matching
 `opendataframework/examples/`'s style rather than `demo/`'s
 everything-at-once approach.

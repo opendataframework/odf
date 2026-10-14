@@ -266,6 +266,39 @@ def test_addressing_forces_lifecycle_tool_name_to_addressed_label(monkeypatch):
     assert forced_call == ("start_component", {"name": "Widget"})
 
 
+def test_addressing_agent_keeps_its_invoke_tool_and_passes_arguments_through(monkeypatch):
+    tools = [
+        *_SCOPED_TOOLS,
+        SimpleNamespace(
+            name="librarian.invoke",
+            description="Answers questions about the catalogue.",
+            inputSchema={"type": "object", "properties": {"question": {"type": "string"}}},
+        ),
+    ]
+    components = [*_DEFAULT_COMPONENTS, {"id": "librarian", "label": "Librarian", "type": "agent"}]
+    tool_call = make_tool_call("librarian.invoke", {"question": "Anything by Herbert?"})
+    client = FakeAsyncClient(
+        [
+            [make_chunk("", tool_calls=[tool_call])],
+            [make_chunk("Dune.")],
+        ]
+    )
+    fake_mcp = FakeMcp(tools=tools, components=components, tool_result={"result": "Dune"})
+    chat_engine = build_engine(monkeypatch, client, mcp=fake_mcp)
+
+    collect(chat_engine, [{"role": "user", "content": "@librarian anything by Herbert?"}])
+
+    tool_names = {t["function"]["name"] for t in client.calls[0]["tools"]}
+    assert tool_names == {
+        "librarian.invoke",
+        "start_component",
+        "stop_component",
+        "execute_task",
+        "component_logs",
+    }
+    assert ("librarian.invoke", {"question": "Anything by Herbert?"}) in fake_mcp.calls
+
+
 def test_addressing_rejects_tool_outside_scope(monkeypatch):
     tool_call = make_tool_call("other.thing", {})
     client = FakeAsyncClient(

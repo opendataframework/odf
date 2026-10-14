@@ -146,7 +146,11 @@ class ChatEngine:
 
     @staticmethod
     def _tool_allowed(name: str, addressed: dict) -> bool:
-        """Whether ``name`` may be offered/called while a turn addresses ``addressed``."""
+        """Whether ``name`` may be offered/called while a turn addresses ``addressed``.
+
+        The addressed component's own ``<id>.``-prefixed tools stay available:
+        its ``mcp_tools()``, and for an agent its ``<id>.invoke``.
+        """
         if name.startswith(f"{addressed['id']}."):
             return True
         if name == "query_repository":

@@ -77,6 +77,14 @@ server.start(ui=True)
 print(server.ui_url)  # http://127.0.0.1:4747
 ```
 
+An `@Agent`'s node has an **Invoke** action. It opens a form with one field
+per `invoke()` argument, prefilled with the defaults, and shows the result
+under it. A `str`, number or `bool` argument gets an input of that kind, and
+any other type a JSON field. Values are converted to the annotated types
+before `context.call()` invokes the agent, and a value that doesn't fit is
+reported under the form without invoking it. See
+[`examples/19-agent`](https://github.com/opendataframework/odf/tree/main/examples/19-agent).
+
 A node's icon and color can be changed from its "Customize" popover, which
 lists the built-in isometric icons by group (devices, buildings, charts,
 research, ML, shop). Icons and colors can be extended beyond the built-in
@@ -97,10 +105,11 @@ connections = false                  # default true: draw links between componen
 config = false                       # default true: show the Config node
 repositories = ["readings"]          # only these repositories
 tasks = ["seed-readings"]            # only these tasks
+agents = []                          # no agents
 components = []                      # no plain components (e.g. a Storage component)
 ```
 
-`repositories`, `services`, `tasks`, `pipelines` and `components` each take
+`repositories`, `services`, `tasks`, `pipelines`, `agents` and `components` each take
 class names or kebab-case ids. A kind without a list shows all of its
 components; a kind with a list shows only the listed ones, and an empty list
 hides the kind. A component added later to a kind that has a list stays hidden
@@ -132,8 +141,8 @@ See
 ## MCP Server
 
 Exposes the same actions available in the UI — component
-start/stop, task/pipeline execution, log inspection — as MCP tools for
-any MCP-speaking client. Any resolved component can contribute its own
+start/stop, task/pipeline execution, agent invocation, log inspection — as
+MCP tools for any MCP-speaking client. Any resolved component can contribute its own
 tools alongside these by implementing
 `opendataframework.component.McpToolsProtocol`'s `mcp_tools()`.
 
@@ -151,6 +160,16 @@ description and input schema, which is all a model sees of the tool.
 `opendataframework` raises when a tool doesn't meet this, and `odf run`
 reports it as a start-up error. See
 [`examples/18-custom-mcp-tool`](https://github.com/opendataframework/odf/tree/main/examples/18-custom-mcp-tool).
+
+Each resolved `@Agent` becomes its own tool, `<agent-id>.invoke`, namespaced
+like a component's own tools. Its input schema is `invoke()`'s signature and
+its description is the first paragraph of the class docstring, so a client
+is told what the agent takes rather than guessing at a generic `arguments`
+object. The tool calls the agent through `context.call()`, which logs the call
+to the agent's log. `list_components` lists agents with the type `agent`. An
+argument that can't be passed by keyword (positional-only, `*args`,
+`**kwargs`) is left out of the schema. See
+[`examples/19-agent`](https://github.com/opendataframework/odf/tree/main/examples/19-agent).
 
 New components can be added to an existing project from within an AI
 chat: the MCP service knows the available component library and the
