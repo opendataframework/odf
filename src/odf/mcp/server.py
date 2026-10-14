@@ -23,9 +23,8 @@ except ImportError as exc:
 from opendataframework.component import McpToolsProtocol
 from opendataframework.context import Context
 from opendataframework.repository import ReadableProtocol
-from opendataframework.utils import kebab
 
-from odf.ui import agents
+from odf.ui import agents, keys
 from odf.ui.data import find_repository, list_records, parse_filters
 from odf.ui.topology import build_topology
 
@@ -72,11 +71,10 @@ class McpServer:
         def list_components() -> list[dict]:
             """List every resolved component, repository, service, task,
             pipeline, and agent: its type, layer, and — for services —
-            whether it is currently running. Use each entry's "label" (its
-            class name) as the "name" argument to the other tools. Use a
-            "repository"-typed entry's "id" as the "repo_id" argument to
-            query_repository. An "agent"-typed entry is invoked through its
-            own "<id>.invoke" tool."""
+            whether it is currently running. Each entry's "id" is its key,
+            "<namespace>.<name>" (e.g. "service.postgres"): pass it as the
+            "key" argument to the other tools. An "agent"-typed entry is
+            invoked through its own "<id>.invoke" tool."""
             topology = build_topology(self._context, project)
             return [
                 {k: v for k, v in node.items() if k not in ("col", "row")}
@@ -85,7 +83,7 @@ class McpServer:
 
         @mcp.tool()
         def query_repository(
-            repo_id: str,
+            key: str,
             limit: int = 50,
             offset: int = 0,
             filters: dict[str, str] | None = None,
@@ -95,19 +93,20 @@ class McpServer:
             paged/filtered access pattern the dev UI's data table uses, so
             you can answer a question about a repository's data without
             pulling the whole dataset into context. Use list_components()'s
-            "id" for a "repository"-typed entry as "repo_id" here. "filters"
+            "id" for a "repository"-typed entry as "key" here. "filters"
             is a field-name -> substring mapping; only keys matching the
             repository's entity fields are applied (others are ignored), and
             a record matches only if every given field's stringified value
             contains its filter value, case-insensitively. "limit" is capped
             at 500. Returns {"records": [...], "total": <total matching
             count>}."""
-            found = find_repository(self._context, repo_id)
-            if found is None:
-                raise ValueError(f"No resolved repository named {repo_id!r}")
+            cls = self._lookup(key)
+            found = find_repository(self._context, keys.name_of(self._context.key(cls)))
+            if found is None or found[0] is not cls:
+                raise ValueError(f"{key!r} is not a repository")
             _, instance, entity_cls = found
             if not isinstance(instance, ReadableProtocol):
-                raise ValueError(f"Repository {repo_id!r} is not readable")
+                raise ValueError(f"Repository {key!r} is not readable")
             parsed_filters = parse_filters(entity_cls, (filters or {}).items())
             records, total = list_records(
                 instance,
@@ -119,58 +118,56 @@ class McpServer:
             return {"records": records, "total": total}
 
         @mcp.tool()
-        def start_component(name: str) -> str:
-            """Start a resolved Service by class name (e.g. "Postgres"). No-op
-            if it is already running."""
+        def start_component(key: str) -> str:
+            """Start a resolved Service by key (e.g. "service.postgres").
+            No-op if it is already running."""
             try:
-                self._context.start(name)
+                self._context.start(key)
             except KeyError:
-                raise ValueError(f"No resolved component named {name!r}") from None
+                raise ValueError(f"No resolved component with key {key!r}") from None
             except TypeError as exc:
                 raise ValueError(str(exc)) from exc
-            return f"{name} started"
+            return f"{key} started"
 
         @mcp.tool()
-        def stop_component(name: str) -> str:
-            """Stop a running Service by class name (e.g. "Postgres"). No-op
-            if it is not running."""
+        def stop_component(key: str) -> str:
+            """Stop a running Service by key (e.g. "service.postgres").
+            No-op if it is not running."""
             try:
-                self._context.stop(name)
+                self._context.stop(key)
             except KeyError:
-                raise ValueError(f"No resolved component named {name!r}") from None
+                raise ValueError(f"No resolved component with key {key!r}") from None
             except TypeError as exc:
                 raise ValueError(str(exc)) from exc
-            return f"{name} stopped"
+            return f"{key} stopped"
 
         @mcp.tool(structured_output=False)
-        def execute_task(name: str):
-            """Execute a Task or Pipeline by class name (e.g. "SeedUsers"),
+        def execute_task(key: str):
+            """Execute a Task or Pipeline by key (e.g. "task.seed-users"),
             returning whatever execute() returns. Use component_logs to see
             what it printed."""
             try:
-                return self._context.execute(name)
+                return self._context.execute(key)
             except KeyError:
-                raise ValueError(f"No resolved component named {name!r}") from None
+                raise ValueError(f"No resolved component with key {key!r}") from None
             except TypeError as exc:
                 raise ValueError(str(exc)) from exc
 
         @mcp.tool()
-        def component_logs(name: str, lines: int = 50) -> list[dict]:
+        def component_logs(key: str, lines: int = 50) -> list[dict]:
             """Return the last log entries for any resolved component, by
-            class name (e.g. "Postgres")."""
-            if not any(cls.__name__ == name for cls in self._context.instances):
-                raise ValueError(f"No resolved component named {name!r}")
-            return self._context.tail_logs(name, lines)
+            key (e.g. "service.postgres")."""
+            return self._context.tail_logs(self._context.key(self._lookup(key)), lines)
 
         # Component-exposed tools: every resolved agent gets an "invoke"
         # tool, and every resolved instance implementing McpToolsProtocol
         # contributes its own tools, in addition to the six fixed tools
-        # above. Both are namespaced by the kebab-case class name so they
-        # can't collide with the fixed tools or with another component's
-        # tools of the same local name.
+        # above. Both are prefixed by the component's key so they can't
+        # collide with the fixed tools or with another component's tools of
+        # the same local name.
         registered_names: set[str] = set()
         for cls in agents.agents(self._context):
-            full_name = f"{kebab(cls.__name__)}.invoke"
+            full_name = f"{self._context.key(cls)}.invoke"
             registered_names.add(full_name)
             mcp.add_tool(
                 self._invoke_handler(cls),
@@ -182,7 +179,7 @@ class McpServer:
             if not isinstance(instance, McpToolsProtocol):
                 continue
             for tool in instance.mcp_tools():
-                full_name = f"{kebab(cls.__name__)}.{tool.name}"
+                full_name = f"{self._context.key(cls)}.{tool.name}"
                 if full_name in registered_names:
                     raise ValueError(f"Duplicate MCP tool name: {full_name!r}")
                 registered_names.add(full_name)
@@ -196,6 +193,18 @@ class McpServer:
         self._mcp = mcp
         self._app = mcp.streamable_http_app()
 
+    def _lookup(self, key: str) -> type:
+        """Return the resolved class addressed by ``key``.
+
+        Raises:
+            ValueError: If ``key`` is not ``<namespace>.<name>``, or names no
+                resolved class.
+        """
+        cls = keys.lookup(self._context, key)
+        if cls is None:
+            raise ValueError(f"No resolved component with key {key!r}")
+        return cls
+
     def _invoke_handler(self, cls: type):
         """Return a tool handler that invokes ``cls`` through ``Context.call()``.
 
@@ -205,7 +214,7 @@ class McpServer:
 
         def invoke(**arguments):
             """Call the agent's ``invoke()`` through the context, with ``arguments``."""
-            return self._context.call(cls.__name__, **arguments)
+            return self._context.call(self._context.key(cls), **arguments)
 
         invoke.__signature__ = inspect.Signature(agents.invoke_parameters(self._context, cls))
         return invoke

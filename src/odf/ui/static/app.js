@@ -43,11 +43,18 @@ let nodeMap = {};
 let repoSchemas = {};
 let layoutOverrides = {}; // node id -> {col, row}, persisted via /api/layout
 
+// A node's or repository's API base path, e.g. /api/tasks/loader. Ids are
+// keys (`task.loader`); the server owns the key -> route mapping and sends it
+// as each node's and repository schema's `href`.
+function apiPath(id) {
+  return (nodeMap[id] || repoSchemas[id] || {}).href;
+}
+
 // User-added empty cells extending the grid past the auto-fit bounds derived
 // from node positions — one count per edge of the isometric diamond (see the
 // NE/SE/SW/NW corner math above computeGridBounds). Persisted under the
-// reserved '_grid' key in layoutOverrides (node ids are kebab-case class
-// names and can never collide with it).
+// reserved '_grid' key in layoutOverrides (node ids are `<namespace>.<name>`
+// keys, or `config`, and can never collide with it).
 let gridExpand = { nw: 0, ne: 0, se: 0, sw: 0 };
 
 // ── Canvas ────────────────────────────────────────────────────────────────
@@ -172,7 +179,7 @@ function initTheme() {
 // ── Layer colors ─────────────────────────────────────────────────────────
 // A layer's badge color is resolved user override (persisted alongside the
 // rest of the layout under the reserved '_layers' key, node ids being
-// kebab-case class names that can never collide with it) → curated default
+// `<namespace>.<name>` keys that can never collide with it) → curated default
 // for one of the six built-in layers → a deterministic hash-based hue, so a
 // custom user-defined @Layer still gets a stable color across reloads
 // without needing a predefined entry.
@@ -1483,7 +1490,8 @@ function selectFromSidebar(id) {
 
 // ── Lifecycle actions ────────────────────────────────────────────────────
 // Backs the "Start"/"Stop" action on @Service nodes and the "Execute" action
-// on @Task/@Pipeline nodes. POST /api/components/{id}/{start,stop,execute}
+// on @Task/@Pipeline nodes. POST /api/services/{name}/{start,stop} and
+// /api/{tasks,pipelines}/{name}/execute
 // drives odf.context.Context.start()/stop()/execute() directly — the same
 // calls Project.start()/stop() make, just scoped to one resolved instance.
 
@@ -1493,7 +1501,7 @@ async function toggleService(id) {
   const btn = document.getElementById('lifecycle-btn');
   if (btn) btn.disabled = true;
   try {
-    const res = await fetch(`/api/components/${id}/${action}`, { method: 'POST' });
+    const res = await fetch(`${apiPath(id)}/${action}`, { method: 'POST' });
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
     node.running = !node.running;
     addLog(`${node.label} ${node.running ? 'started' : 'stopped'}`, ACCENT.service);
@@ -1508,7 +1516,7 @@ async function executeNode(id) {
   const btn = document.getElementById('execute-btn');
   if (btn) btn.disabled = true;
   try {
-    const res = await fetch(`/api/components/${id}/execute`, { method: 'POST' });
+    const res = await fetch(`${apiPath(id)}/execute`, { method: 'POST' });
     if (!res.ok) {
       const body = await res.json().catch(() => ({}));
       throw new Error(body.detail || `HTTP ${res.status}`);
@@ -1522,9 +1530,9 @@ async function executeNode(id) {
 
 // ── Agent invoke ─────────────────────────────────────────────────────────
 // Backs the "Invoke" action on @Agent nodes. Unlike execute(), invoke() takes
-// arguments: GET /api/components/{id}/parameters returns their JSON schema,
+// arguments: GET /api/agents/{name}/parameters returns their JSON schema,
 // built from the agent's invoke() signature, and the form below is drawn
-// from it inside the inspector popup. POST /api/components/{id}/invoke
+// from it inside the inspector popup. POST /api/agents/{name}/invoke
 // validates the values against the same schema, converting them to the
 // annotated types, and calls the agent through Context.call().
 
@@ -1547,7 +1555,7 @@ async function openInvokeForm(id) {
   if (existing) { existing.querySelector('input,textarea,button')?.focus(); return; }
   let schema;
   try {
-    const res = await fetch(`/api/components/${id}/parameters`);
+    const res = await fetch(`${apiPath(id)}/parameters`);
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
     schema = await res.json();
   } catch (err) {
@@ -1624,7 +1632,7 @@ async function invokeAgent(id, form, props, required) {
   out.classList.remove('error');
   try {
     const args = readInvokeForm(form, props, required);
-    const res = await fetch(`/api/components/${id}/invoke`, {
+    const res = await fetch(`${apiPath(id)}/invoke`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(args),
@@ -1927,8 +1935,9 @@ async function sendChatMessage() {
 }
 
 // ── Chat @mention autocomplete ──────────────────────────────────────────
-// Suggests component ids from the topology (`nodes`/`nodeMap`, already
-// fetched for the graph view) while typing an `@handle` in chat-input.
+// Suggests component keys from the topology (`nodes`/`nodeMap`, already
+// fetched for the graph view) while typing an `@<namespace>.<name>` mention in
+// chat-input. Typing just the name or the class name finds the key too.
 
 let mentionMatches = [];
 let mentionActive = -1;
@@ -1936,7 +1945,7 @@ let mentionStart = -1;
 
 function currentMentionQuery(input) {
   const upToCaret = input.value.slice(0, input.selectionStart);
-  const match = upToCaret.match(/(?:^|\s)@([A-Za-z0-9-]*)$/);
+  const match = upToCaret.match(/(?:^|\s)@([A-Za-z0-9.-]*)$/);
   if (!match) return null;
   return { query: match[1].toLowerCase(), start: input.selectionStart - match[1].length - 1 };
 }
@@ -1949,7 +1958,7 @@ function updateMentionActive() {
 function renderMentionMenu(query) {
   const menu = document.getElementById('chat-mention-menu');
   mentionMatches = nodes
-    .filter(n => n.id.startsWith(query) || n.label.toLowerCase().startsWith(query))
+    .filter(n => n.name && (n.id.startsWith(query) || n.name.startsWith(query) || n.label.toLowerCase().startsWith(query)))
     .slice(0, 8);
   if (!mentionMatches.length) {
     menu.hidden = true;
@@ -2251,7 +2260,7 @@ async function refreshDataTable() {
   const body = document.getElementById('map-panel-body');
   let records;
   try {
-    const res = await fetch(`/api/repositories/${activeRepoId}/records?${recordsQuery()}`);
+    const res = await fetch(`${apiPath(activeRepoId)}/records?${recordsQuery()}`);
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
     records = await res.json();
     tableTotal = Number(res.headers.get('X-Total-Count') ?? records.length);
@@ -2492,7 +2501,7 @@ async function enterReplayMode(schema) {
   if (!field) return;
   let all;
   try {
-    const res = await fetch(`/api/repositories/${schema.id}/records`);
+    const res = await fetch(`${apiPath(schema.id)}/records`);
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
     all = await res.json();
   } catch (err) {
@@ -2552,7 +2561,7 @@ async function saveEditRow(tr, schema, key) {
     body[f.name] = tr.querySelector(`td[data-field="${f.name}"] input`).value;
   }
   try {
-    const res = await fetch(`/api/repositories/${activeRepoId}/records/${encodeURIComponent(key)}`, {
+    const res = await fetch(`${apiPath(activeRepoId)}/records/${encodeURIComponent(key)}`, {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(body),
@@ -2591,7 +2600,7 @@ function startAddRow(schema) {
       body[f.name] = inputs[i++].value;
     }
     try {
-      const res = await fetch(`/api/repositories/${activeRepoId}/records`, {
+      const res = await fetch(`${apiPath(activeRepoId)}/records`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(body),
@@ -2610,7 +2619,7 @@ async function deleteRow(tr, schema) {
   const key = tr.dataset.key;
   if (!confirm(`Delete ${schema.entity} ${key}?`)) return;
   try {
-    const res = await fetch(`/api/repositories/${activeRepoId}/records/${encodeURIComponent(key)}`, { method: 'DELETE' });
+    const res = await fetch(`${apiPath(activeRepoId)}/records/${encodeURIComponent(key)}`, { method: 'DELETE' });
     if (!res.ok && res.status !== 204) throw new Error(`HTTP ${res.status}`);
     addLog(`Deleted ${schema.entity} ${key}`, ACCENT.repository);
   } catch (err) {
@@ -2680,7 +2689,7 @@ async function startStreaming(id) {
   const btn = document.getElementById('stream-toggle-btn');
   if (btn) btn.disabled = true;
   try {
-    const res = await fetch(`/api/repositories/${id}/start-stream`, { method: 'POST' });
+    const res = await fetch(`${apiPath(id)}/start-stream`, { method: 'POST' });
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
     node.streaming = true;
     addLog(`${repoSchemas[id].label} streaming started`, ACCENT.repository);
@@ -2696,7 +2705,7 @@ async function stopStreaming(id) {
   const btn = document.getElementById('stream-toggle-btn');
   if (btn) btn.disabled = true;
   try {
-    const res = await fetch(`/api/repositories/${id}/stop-stream`, { method: 'POST' });
+    const res = await fetch(`${apiPath(id)}/stop-stream`, { method: 'POST' });
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
     node.streaming = false;
     addLog(`${repoSchemas[id].label} streaming stopped`, ACCENT.repository);
@@ -2737,7 +2746,7 @@ function showStreamView(repoId) {
          <audio id="stream-audio"></audio>
          <button id="stream-audio-toggle" class="data-btn" type="button">Pause</button>
        </div>`
-    : `<img id="stream-img" src="/api/repositories/${repoId}/stream" alt="${schema.label} stream">`;
+    : `<img id="stream-img" src="${apiPath(repoId)}/stream" alt="${schema.label} stream">`;
   if (isAudio) {
     playAudioStream(repoId);
     document.getElementById('stream-audio-toggle').addEventListener('click', (e) => {
@@ -2781,7 +2790,7 @@ function showStreamView(repoId) {
 async function playAudioStream(repoId) {
   audioStreamActive = true;
   const audio = document.getElementById('stream-audio');
-  const fetchChunk = () => fetch(`/api/repositories/${repoId}/stream`).then((res) => {
+  const fetchChunk = () => fetch(`${apiPath(repoId)}/stream`).then((res) => {
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
     return res.blob();
   });
@@ -2865,7 +2874,7 @@ async function refreshGeoMap() {
   }
   let records;
   try {
-    const res = await fetch(`/api/repositories/${activeRepoId}/records?${recordsQuery()}`);
+    const res = await fetch(`${apiPath(activeRepoId)}/records?${recordsQuery()}`);
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
     records = await res.json();
     tableTotal = Number(res.headers.get('X-Total-Count') ?? records.length);
@@ -3159,7 +3168,7 @@ const LIGHTBOX_PLAYERS = {
 };
 
 function mediaUrl(repoId, key) {
-  return `/api/repositories/${repoId}/records/${encodeURIComponent(key)}/media`;
+  return `${apiPath(repoId)}/records/${encodeURIComponent(key)}/media`;
 }
 
 // The type the server detected for a record's media, to name a format this
@@ -3202,7 +3211,7 @@ async function renderMediaGrid(previewHtml) {
   lightboxRecords = [];
   let records;
   try {
-    const res = await fetch(`/api/repositories/${activeRepoId}/records`);
+    const res = await fetch(`${apiPath(activeRepoId)}/records`);
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
     records = await res.json();
   } catch (err) {
@@ -3517,7 +3526,7 @@ async function loadImageAnnotations() {
   if (!annotationsEnabled) return;
   const repoId = activeRepoId;
   try {
-    const res = await fetch(`/api/repositories/${repoId}/annotations`);
+    const res = await fetch(`${apiPath(repoId)}/annotations`);
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
     const block = await res.json();
     if (repoId === activeRepoId) imageAnnotations = block;
@@ -3716,7 +3725,7 @@ function deleteImageBox(index) {
 // showing the change at once and reloading from the server if it could not be saved.
 function saveImageBoxes(boxes) {
   const repoId = activeRepoId;
-  let url = `/api/repositories/${repoId}/annotations`;
+  let url = `${apiPath(repoId)}/annotations`;
   let body, saved, name = '';
   if (annotatesRepository()) {
     // A chart's in time order, as the server keeps them.
@@ -3725,7 +3734,7 @@ function saveImageBoxes(boxes) {
   } else {
     const img = document.getElementById('media-lightbox-img');
     const key = imageRecordKey();
-    url = `/api/repositories/${repoId}/records/${encodeURIComponent(key)}/annotations`;
+    url = `${apiPath(repoId)}/records/${encodeURIComponent(key)}/annotations`;
     name = ` for ${key}`;
     // A clip's in time order, as the server keeps them.
     if (mapMode === 'media') boxes = [...boxes].sort((a, b) => tsMarkStart(a) - tsMarkStart(b));
@@ -3898,7 +3907,7 @@ async function loadRecordClasses() {
   if (!annotationsEnabled) return;
   const repoId = activeRepoId;
   try {
-    const res = await fetch(`/api/repositories/${repoId}/classes`);
+    const res = await fetch(`${apiPath(repoId)}/classes`);
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
     const block = await res.json();
     if (repoId === activeRepoId) recordClasses = block;
@@ -3964,7 +3973,7 @@ function setRecordClass(key, value) {
   renderRecordClasses();
   boxSaves = boxSaves.then(async () => {
     try {
-      const res = await fetch(`/api/repositories/${repoId}/records/${encodeURIComponent(key)}/class`, {
+      const res = await fetch(`${apiPath(repoId)}/records/${encodeURIComponent(key)}/class`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ class: value }),
@@ -4853,7 +4862,7 @@ async function refreshTimeseriesView() {
   }
   let records;
   try {
-    const res = await fetch(`/api/repositories/${activeRepoId}/records?${recordsQuery()}`);
+    const res = await fetch(`${apiPath(activeRepoId)}/records?${recordsQuery()}`);
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
     records = await res.json();
     tableTotal = Number(res.headers.get('X-Total-Count') ?? records.length);
@@ -5152,7 +5161,7 @@ loadTsTool();
 
 // ── Logs view ─────────────────────────────────────────────────────────────
 // Backs the "Show Logs" action, present on every node. Reads
-// GET /api/components/{id}/logs, which tails that component's own log file
+// GET /api/{collection}/{name}/logs, which tails that component's own log file
 // (see odf.logger.LogManager — every component gets one automatically).
 // Polls while active so a running Service's logs update live.
 
@@ -5178,7 +5187,7 @@ async function refreshLogs() {
   const body = document.getElementById('map-panel-body');
   let entries;
   try {
-    const res = await fetch(`/api/components/${activeLogComponentId}/logs`);
+    const res = await fetch(`${apiPath(activeLogComponentId)}/logs`);
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
     entries = await res.json();
   } catch (err) {
@@ -5211,7 +5220,7 @@ function renderLogs(entries) {
 // ── Details view ─────────────────────────────────────────────────────────
 // Backs the "Details" action, present on nodes whose node.details flag came
 // back true from GET /api/topology (i.e. isinstance(instance,
-// DetailsProtocol) server-side). Reads GET /api/components/{id}/details —
+// DetailsProtocol) server-side). Reads GET /api/{collection}/{name}/details —
 // a plain key/value dict the component itself returns from details(). A
 // value that looks like a URL is rendered as a clickable link; the
 // framework itself makes no such distinction, this is UI-only sugar.
@@ -5230,7 +5239,7 @@ async function refreshDetails() {
   const body = document.getElementById('map-panel-body');
   let entries;
   try {
-    const res = await fetch(`/api/components/${activeDetailsComponentId}/details`);
+    const res = await fetch(`${apiPath(activeDetailsComponentId)}/details`);
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
     entries = await res.json();
   } catch (err) {
@@ -5263,7 +5272,7 @@ function renderDetails(entries) {
 // Backs the "View Chart" action, present on nodes whose node.chart flag came
 // back true from GET /api/topology (i.e. isinstance(instance, ChartProtocol)
 // server-side). Points an iframe straight at GET
-// /api/components/{id}/chart — the component builds its own self-contained
+// /api/{collection}/{name}/chart — the component builds its own self-contained
 // HTML there (inline image/JS, no external refs) using whatever Python
 // charting library it likes, so the framework itself never needs a JS
 // charting dependency.
@@ -5273,7 +5282,7 @@ function showChartView(id) {
   setMapMode('chart');
   document.getElementById('map-panel-title').textContent = `${node.label} · chart`;
   document.getElementById('map-panel-body').innerHTML =
-    `<iframe id="chart-frame" src="/api/components/${id}/chart"></iframe>`;
+    `<iframe id="chart-frame" src="${apiPath(id)}/chart"></iframe>`;
 }
 
 // ── Init ──────────────────────────────────────────────────────────────────

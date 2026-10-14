@@ -77,6 +77,22 @@ server.start(ui=True)
 print(server.ui_url)  # http://127.0.0.1:4747
 ```
 
+Each node is identified by its `opendataframework` key, `<namespace>.<name>`
+(`task.load-job`, `agent.librarian`), so two classes with the same name in
+different namespaces stay apart. The UI's HTTP API serves each execution type
+as its own collection, by registered name:
+
+| Route | For |
+|---|---|
+| `GET /api/{collection}/{name}/logs` | any component (`components`, `repositories`, `services`, `tasks`, `pipelines`, `agents`) |
+| `GET /api/{collection}/{name}/details`, `.../chart` | a component implementing `details()` / `chart()` |
+| `POST /api/services/{name}/start`, `.../stop` | a `@Service` |
+| `POST /api/tasks/{name}/execute`, `/api/pipelines/{name}/execute` | a `@Task` / `@Pipeline` |
+| `GET /api/agents/{name}/parameters`, `POST .../invoke` | an `@Agent` |
+| `/api/repositories/{name}/records`, `.../stream`, ... | a `@Repository`'s data |
+
+An action that doesn't apply to a kind has no route, so it answers `404`.
+
 An `@Agent`'s node has an **Invoke** action. It opens a form with one field
 per `invoke()` argument, prefilled with the defaults, and shows the result
 under it. A `str`, number or `bool` argument gets an input of that kind, and
@@ -110,7 +126,8 @@ components = []                      # no plain components (e.g. a Storage compo
 ```
 
 `repositories`, `services`, `tasks`, `pipelines`, `agents` and `components` each take
-class names or kebab-case ids. A kind without a list shows all of its
+registered names, the name part of each key (`seed-readings` for
+`task.seed-readings`), in any casing. A kind without a list shows all of its
 components; a kind with a list shows only the listed ones, and an empty list
 hides the kind. A component added later to a kind that has a list stays hidden
 until it is added to that list. A `Storage` component counts as a plain
@@ -142,9 +159,13 @@ See
 
 Exposes the same actions available in the UI — component
 start/stop, task/pipeline execution, agent invocation, log inspection — as
-MCP tools for any MCP-speaking client. Any resolved component can contribute its own
-tools alongside these by implementing
-`opendataframework.component.McpToolsProtocol`'s `mcp_tools()`.
+MCP tools for any MCP-speaking client. Each tool takes a component's key,
+`<namespace>.<name>`, as its `key` argument (`start_component(key="service.postgres")`),
+and `list_components` returns it as each entry's `id`. Any resolved component can
+contribute its own tools alongside these by implementing
+`opendataframework.component.McpToolsProtocol`'s `mcp_tools()`; they are prefixed
+by the component's key, so a `@Component class StockRoom`'s `low_stock` tool is
+`component.stock-room.low_stock`.
 
 ```python
 server.start(mcp=True)
@@ -161,7 +182,7 @@ description and input schema, which is all a model sees of the tool.
 reports it as a start-up error. See
 [`examples/18-custom-mcp-tool`](https://github.com/opendataframework/odf/tree/main/examples/18-custom-mcp-tool).
 
-Each resolved `@Agent` becomes its own tool, `<agent-id>.invoke`, namespaced
+Each resolved `@Agent` becomes its own tool, `<key>.invoke` (`agent.librarian.invoke`), prefixed
 like a component's own tools. Its input schema is `invoke()`'s signature and
 its description is the first paragraph of the class docstring, so a client
 is told what the agent takes rather than guessing at a generic `arguments`

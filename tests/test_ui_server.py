@@ -10,6 +10,7 @@ from opendataframework.context import Context
 from opendataframework.entity import Entity
 from opendataframework.namespace import Namespace
 from opendataframework.repository import Repository
+from opendataframework.service import Service
 from opendataframework.view import (
     AudioView,
     DocumentView,
@@ -85,7 +86,7 @@ def test_topology_endpoint_applies_the_configured_view():
         client = TestClient(UiServer(ctx, "proj", topology=view)._app)
         body = client.get("/api/topology").json()
 
-    assert [n["id"] for n in body["nodes"]] == ["front"]
+    assert [n["id"] for n in body["nodes"]] == ["n-s.front"]
     assert body["edges"] == []
 
 
@@ -101,12 +102,12 @@ def test_topology_endpoint_moves_nodes_off_saved_cells(tmp_path):
     class Bbb: ...
 
     layout_file = tmp_path / "layout.json"
-    layout_file.write_text(json.dumps({"bbb": {"col": 0, "row": 0}, "_grid": {"nw": 1}}))
+    layout_file.write_text(json.dumps({"n-s.bbb": {"col": 0, "row": 0}, "_grid": {"nw": 1}}))
     with Context(namespaces={NS}) as ctx:
         client = TestClient(UiServer(ctx, "proj", layout_file=layout_file)._app)
         nodes = client.get("/api/topology").json()["nodes"]
 
-    assert {n["id"]: (n["col"], n["row"]) for n in nodes} == {"bbb": (0, 0), "aaa": (0, 1)}
+    assert {n["id"]: (n["col"], n["row"]) for n in nodes} == {"n-s.bbb": (0, 0), "n-s.aaa": (0, 1)}
 
 
 def test_url_reflects_host_and_port():
@@ -146,7 +147,8 @@ def test_records_round_trip_create_update_delete():
 
         r = client.get("/api/repositories")
         assert r.status_code == 200
-        assert r.json()[0]["id"] == "items"
+        assert r.json()[0]["id"] == "n-s.items"
+        assert r.json()[0]["href"] == "/api/repositories/items"
 
         assert client.get("/api/repositories/items/records").json() == []
 
@@ -355,6 +357,7 @@ def test_start_stop_endpoints_toggle_a_service():
     NS = make_ns()
 
     @NS
+    @Service
     class Svc:
         def setup(self) -> None: ...
         def run(self) -> None: ...
@@ -363,14 +366,14 @@ def test_start_stop_endpoints_toggle_a_service():
     with Context(namespaces={NS}) as ctx:
         client = TestClient(UiServer(ctx, "proj")._app)
 
-        assert client.post("/api/components/svc/stop").status_code == 204
-        assert ctx.is_running("Svc") is False
+        assert client.post("/api/services/svc/stop").status_code == 204
+        assert ctx.is_running(ctx.key(Svc)) is False
 
-        assert client.post("/api/components/svc/start").status_code == 204
-        assert ctx.is_running("Svc") is True
+        assert client.post("/api/services/svc/start").status_code == 204
+        assert ctx.is_running(ctx.key(Svc)) is True
 
 
-def test_start_endpoint_rejects_non_service():
+def test_start_endpoint_only_exists_for_services():
     NS = make_ns()
 
     @NS
@@ -379,9 +382,9 @@ def test_start_endpoint_rejects_non_service():
 
     with Context(namespaces={NS}) as ctx:
         client = TestClient(UiServer(ctx, "proj")._app)
-        r = client.post("/api/components/thing/start")
 
-    assert r.status_code == 400
+        assert client.post("/api/components/thing/start").status_code == 404
+        assert client.post("/api/services/thing/start").status_code == 404
 
 
 def test_execute_endpoint_runs_a_task():
@@ -398,13 +401,13 @@ def test_execute_endpoint_runs_a_task():
 
     with Context(namespaces={NS}) as ctx:
         client = TestClient(UiServer(ctx, "proj")._app)
-        r = client.post("/api/components/do-thing/execute")
+        r = client.post("/api/tasks/do-thing/execute")
 
     assert r.status_code == 204
     assert calls == ["ran"]
 
 
-def test_execute_endpoint_rejects_non_executable():
+def test_execute_endpoint_only_exists_for_tasks_and_pipelines():
     NS = make_ns()
 
     @NS
@@ -413,9 +416,8 @@ def test_execute_endpoint_rejects_non_executable():
 
     with Context(namespaces={NS}) as ctx:
         client = TestClient(UiServer(ctx, "proj")._app)
-        r = client.post("/api/components/thing/execute")
-
-    assert r.status_code == 400
+        assert client.post("/api/components/thing/execute").status_code == 404
+        assert client.post("/api/tasks/thing/execute").status_code == 404
 
 
 def test_execute_endpoint_surfaces_task_exceptions_as_500():
@@ -431,7 +433,7 @@ def test_execute_endpoint_surfaces_task_exceptions_as_500():
 
     with Context(namespaces={NS}) as ctx:
         client = TestClient(UiServer(ctx, "proj")._app)
-        r = client.post("/api/components/boom/execute")
+        r = client.post("/api/tasks/boom/execute")
 
     assert r.status_code == 500
 
@@ -455,7 +457,7 @@ def test_parameters_endpoint_returns_the_invoke_schema():
 
     with Context(namespaces={NS}) as ctx:
         client = TestClient(UiServer(ctx, "proj")._app)
-        r = client.get("/api/components/librarian/parameters")
+        r = client.get("/api/agents/librarian/parameters")
 
     assert r.status_code == 200
     schema = r.json()
@@ -471,9 +473,7 @@ def test_invoke_endpoint_calls_the_agent_with_coerced_arguments():
 
     with Context(namespaces={NS}) as ctx:
         client = TestClient(UiServer(ctx, "proj")._app)
-        r = client.post(
-            "/api/components/librarian/invoke", json={"question": "Dune?", "limit": "2"}
-        )
+        r = client.post("/api/agents/librarian/invoke", json={"question": "Dune?", "limit": "2"})
 
     assert r.status_code == 200
     assert r.json() == {"result": {"question": "Dune?", "limit": 2, "exact": False}}
@@ -486,8 +486,8 @@ def test_invoke_endpoint_logs_the_call(tmp_path):
 
     with Context(namespaces={NS}, log_dir=tmp_path) as ctx:
         client = TestClient(UiServer(ctx, "proj")._app)
-        client.post("/api/components/librarian/invoke", json={"question": "Dune?"})
-        logs = client.get("/api/components/librarian/logs").json()
+        client.post("/api/agents/librarian/invoke", json={"question": "Dune?"})
+        logs = client.get("/api/agents/librarian/logs").json()
 
     assert any("invoke() completed" in entry["message"] for entry in logs)
 
@@ -499,7 +499,7 @@ def test_invoke_endpoint_rejects_a_missing_argument_with_422():
 
     with Context(namespaces={NS}) as ctx:
         client = TestClient(UiServer(ctx, "proj")._app)
-        r = client.post("/api/components/librarian/invoke", json={})
+        r = client.post("/api/agents/librarian/invoke", json={})
 
     assert r.status_code == 422
     assert r.json()["detail"][0]["loc"] == ["question"]
@@ -516,9 +516,10 @@ def test_invoke_endpoints_reject_a_component_that_is_not_an_agent():
     with Context(namespaces={NS}) as ctx:
         client = TestClient(UiServer(ctx, "proj")._app)
 
-        assert client.get("/api/components/thing/parameters").status_code == 400
-        assert client.post("/api/components/thing/invoke", json={}).status_code == 400
-        assert client.get("/api/components/nonexistent/parameters").status_code == 404
+        assert client.get("/api/components/thing/parameters").status_code == 404
+        assert client.post("/api/components/thing/invoke", json={}).status_code == 404
+        assert client.get("/api/agents/thing/parameters").status_code == 404
+        assert client.post("/api/agents/thing/invoke", json={}).status_code == 404
 
 
 def test_invoke_endpoint_surfaces_agent_exceptions_as_500():
@@ -534,7 +535,7 @@ def test_invoke_endpoint_surfaces_agent_exceptions_as_500():
 
     with Context(namespaces={NS}) as ctx:
         client = TestClient(UiServer(ctx, "proj")._app)
-        r = client.post("/api/components/grumpy/invoke", json={})
+        r = client.post("/api/agents/grumpy/invoke", json={})
 
     assert r.status_code == 500
     assert r.json()["detail"] == "not today"
@@ -559,7 +560,7 @@ def test_invoke_endpoint_falls_back_to_str_for_an_unencodable_result():
 
     with Context(namespaces={NS}) as ctx:
         client = TestClient(UiServer(ctx, "proj")._app)
-        r = client.post("/api/components/odd/invoke", json={})
+        r = client.post("/api/agents/odd/invoke", json={})
 
     assert r.json() == {"result": "opaque"}
 
@@ -568,9 +569,10 @@ def test_lifecycle_endpoints_unknown_component_returns_404():
     with Context(namespaces=set()) as ctx:
         client = TestClient(UiServer(ctx, "proj")._app)
 
-        assert client.post("/api/components/nonexistent/start").status_code == 404
-        assert client.post("/api/components/nonexistent/stop").status_code == 404
-        assert client.post("/api/components/nonexistent/execute").status_code == 404
+        assert client.post("/api/services/nonexistent/start").status_code == 404
+        assert client.post("/api/services/nonexistent/stop").status_code == 404
+        assert client.post("/api/tasks/nonexistent/execute").status_code == 404
+        assert client.get("/api/bogus/nonexistent/logs").status_code == 404
 
 
 # --- streaming endpoints -------------------------------------------------------
@@ -600,10 +602,10 @@ def test_start_stop_stream_endpoints_toggle_a_repository():
         client = TestClient(UiServer(ctx, "proj")._app)
 
         assert client.post("/api/repositories/cam/start-stream").status_code == 204
-        assert ctx.is_streaming("Cam") is True
+        assert ctx.is_streaming(ctx.key(Cam)) is True
 
         assert client.post("/api/repositories/cam/stop-stream").status_code == 204
-        assert ctx.is_streaming("Cam") is False
+        assert ctx.is_streaming(ctx.key(Cam)) is False
 
 
 def test_start_stop_stream_endpoints_unknown_repository_returns_404():

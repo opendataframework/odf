@@ -25,4 +25,4 @@ check that the split works for external consumers.
 | 16 | [`16-mcp-chat/`](16-mcp-chat/) | `odf.server.Server.start(ui=True, mcp=True, chat=True)` — the same resolved `Context` exposed as MCP tools and driven by a local Ollama chat window. |
 | 17 | [`17-custom-icon/`](17-custom-icon/) | A `config.toml`-registered `.js` file (`[ui] icon-scripts`) adding a custom "Lighthouse" swatch to the topology UI's icon picker, assignable to any node. |
 | 18 | [`18-custom-mcp-tool/`](18-custom-mcp-tool/) | A `StockRoom` component whose `mcp_tools()` adds a typed `stock-room.low_stock` tool next to the fixed MCP tools. |
-| 19 | [`19-agent/`](19-agent/) | A `Librarian` `@Agent` whose `invoke(question, limit=3)` takes arguments: called through `context.call()`, invoked from a form in the UI, and exposed as its own typed `librarian.invoke` MCP tool. |
+| 19 | [`19-agent/`](19-agent/) | A `Librarian` `@Agent` whose `invoke(question, limit=3)` takes arguments: called through `context.call()`, invoked from a form in the UI, and exposed as its own typed `agent.librarian.invoke` MCP tool. |

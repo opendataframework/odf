@@ -2610,8 +2610,8 @@ optional = false
 python-versions = ">=3.14"
 groups = ["main"]
 files = [
-    {file = "opendataframework-0.3.0-py3-none-any.whl", hash = "sha256:3583a77c1a041c0a09034abee4f526104d81217d210bbade940f46043d8b5851"},
-    {file = "opendataframework-0.3.0.tar.gz", hash = "sha256:49a159f9ad2b4bbe11fa182802d8ac4098f0af1a00c4973ce5929fe8a3be62e9"},
+    {file = "opendataframework-0.3.0-py3-none-any.whl", hash = "sha256:40c3b19a3de6f175b8cd784ecb430753c9bfd76557e537acf52ebdb34231ee3f"},
+    {file = "opendataframework-0.3.0.tar.gz", hash = "sha256:6690e0738bc5d4e23810ac08a016aecf15eafd3b529ce8e6b67bf19c014d3754"},
 ]
 
 [package.source]

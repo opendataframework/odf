@@ -56,8 +56,8 @@ shared in-process, not duplicated. On each turn, the model is offered the
 current tool list — the six fixed tools (`list_components`,
 `query_repository`, `start_component`, `stop_component`, `execute_task`,
 `component_logs`) plus, for every resolved component that exposes its own
-MCP tools (namespaced `<component>.<tool>`), that component's own tools, and
-for every resolved `@Agent` its `<agent>.invoke` tool;
+MCP tools (prefixed by its key, `<namespace>.<name>.<tool>`), that
+component's own tools, and for every resolved `@Agent` its `<key>.invoke` tool;
 these are dynamic per project, so they aren't enumerated here by name. If
 the model requests a tool call, it's always executed and its result fed
 back to the model for a follow-up reply; the chat window additionally
@@ -66,27 +66,30 @@ shows what was called and its result inline only when `[project.chat]`'s
 
 ## Addressing a component with `@`
 
-Mentioning `@component-id` anywhere in a message scopes that turn's tool
-access to just that component — its own exposed tools (for an `@Agent`,
-its `<agent>.invoke`), its own repository data (if it's a `Repository`), and
+Mentioning a component's key, `@<namespace>.<name>`, anywhere in a message
+scopes that turn's tool access to just that component — its own exposed
+tools (for an `@Agent`, its `<key>.invoke`), its own repository data (if it's a `Repository`), and
 its own lifecycle actions
 (`start_component`/`stop_component`/`execute_task`/`component_logs`,
 forced to that component regardless of what the model passes) — instead
 of offering every tool in the project. This is useful once a project has
 several repositories/services: instead of the model guessing which
-`repo_id` a data question is about, `@postgres how many rows are in the
-users table` scopes `query_repository` to just `postgres`'s data, and
-`@librarian anything by Herbert?` hands the question to the `Librarian`
-agent's `librarian.invoke`, with the arguments the model fills in from the
-agent's schema.
+repository a data question is about, `@repository.users how many rows are
+there?` scopes `query_repository` to just that repository's data, and
+`@agent.librarian anything by Herbert?` hands the question to the `Librarian`
+agent's `agent.librarian.invoke`, with the arguments the model fills in from
+the agent's schema.
 
-The id is the same kebab-case id used by the topology graph and by
-component-exposed tool namespacing (e.g. a `MetricsFetcher` component is
-addressed as `@metrics-fetcher`); the chat input autocompletes it as you
-type `@`. An `@handle` that doesn't match any resolved component's id is
-just left as plain text — the turn falls back to the full, unscoped tool
+The key is the node id the topology graph uses, and the prefix of the
+component's own tools (e.g. a `@Task class MetricsFetcher` is addressed as
+`@task.metrics-fetcher`). Always writing the namespace keeps a mention
+unambiguous as a project grows: a `@Task class Loader` and an
+`@Agent class Loader` are `@task.loader` and `@agent.loader`. The chat input
+autocompletes the key as you type `@`, matching the name or class name too. A
+mention that doesn't match any resolved component's key, such as a bare
+`@loader`, is just left as plain text — the turn falls back to the full, unscoped tool
 set. A message can only address one component at a time — mentioning
-more than one distinct component's id in the same message rejects the
+more than one distinct component's key in the same message rejects the
 turn with an inline error instead of guessing which one you meant.
 
 ## Prerequisites

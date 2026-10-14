@@ -1,11 +1,16 @@
 """Builds a JSON-serializable topology graph from a resolved ``Context``.
 
 Pure introspection: reads ``Context.instances`` (populated after
-``Context.open()`` / ``Project.start()``) and the class-level registration
+``Context.open()`` / ``Project.start()``), each object's
+``<namespace>.<name>`` key (``Context.key``), and the class-level registration
 metadata already tracked by ``Namespace`` subclasses (``Component``,
-``Repository``, ``Service``, ``Task``, ``Pipeline``, ``Agent``, ``Layer``). Nothing here
-touches the DI container or drives lifecycle — it only describes what has
-already been resolved.
+``Repository``, ``Service``, ``Task``, ``Pipeline``, ``Agent``, ``Layer``).
+Nothing here touches the DI container or drives lifecycle — it only describes
+what has already been resolved.
+
+A node's id is its key (``task.loader``) and its type its execution type
+(``task``; see ``odf.ui.keys``). ``Config`` is pre-seeded rather than
+registered, so it has no key and keeps the id ``config``.
 """
 
 import inspect
@@ -13,31 +18,16 @@ from collections.abc import Mapping
 from dataclasses import dataclass, field
 from pathlib import Path
 
-from opendataframework.agent import Agent
-from opendataframework.component import ChartProtocol, Component, DetailsProtocol
+from opendataframework.component import ChartProtocol, DetailsProtocol
 from opendataframework.config import Config
 from opendataframework.context import Context, Resolver
 from opendataframework.layer import Layer
-from opendataframework.namespace import Namespace
-from opendataframework.pipeline import Pipeline
 from opendataframework.repository import Repository
-from opendataframework.service import Service
-from opendataframework.task import Task
 from opendataframework.utils import kebab, normalize
 
-# Order matters only in that a class is expected to be registered under
-# exactly one of these — first match wins if that assumption is ever broken.
-_EXEC_NAMESPACES: list[tuple[str, type[Namespace]]] = [
-    ("repository", Repository),
-    ("service", Service),
-    ("task", Task),
-    ("pipeline", Pipeline),
-    ("agent", Agent),
-    ("component", Component),
-]
+from odf.ui import keys
 
-
-# ``[ui.topology]`` list key -> the ``_exec_type`` label it filters.
+# ``[ui.topology]`` list key -> the execution type (a node's type) it filters.
 _KIND_KEYS = {
     "repositories": "repository",
     "services": "service",
@@ -57,8 +47,8 @@ class TopologyView:
 
     Attributes:
         connections: Whether edges between components are drawn.
-        show: Per kind (an ``_exec_type`` label such as ``"task"``), the
-            normalized names to show. A kind that is absent from the mapping
+        show: Per kind (an execution type such as ``"task"``), the normalized
+            registered names to show. A kind that is absent from the mapping
             shows every component of that kind; a kind mapped to an empty set
             shows none.
         config: Whether the ``Config`` node is shown.
@@ -75,7 +65,8 @@ class TopologyView:
         Args:
             cfg: The parsed table: ``connections`` and ``config`` booleans plus
                 any of ``repositories``/``services``/``tasks``/``pipelines``/
-                ``agents``/``components`` as lists of class names or kebab ids.
+                ``agents``/``components`` as lists of registered names, in any
+                casing (``"LoadJob"`` or ``"load-job"``).
 
         Raises:
             ValueError: On an unknown key or a value of the wrong type.
@@ -99,21 +90,23 @@ class TopologyView:
             show[kind] = frozenset(normalize(n) for n in names)
         return cls(connections=flags["connections"], show=show, config=flags["config"])
 
-    def is_visible(self, cls: type, instance: object) -> bool:
-        """Return whether ``cls`` (resolved to ``instance``) is shown."""
+    def is_visible(self, cls: type, node_id: str, instance: object) -> bool:
+        """Return whether ``cls`` (node ``node_id``, resolved to ``instance``) is shown."""
         if isinstance(instance, Config):
             return self.config
-        names = self.show.get(_exec_type(cls))
-        return names is None or _id(cls) in names
+        names = self.show.get(keys.exec_type(cls))
+        return names is None or keys.name_of(node_id) in names
 
     def unmatched(self, context: Context) -> list[tuple[str, str]]:
         """Return ``(list key, name)`` pairs naming no component of that kind."""
         found: dict[str, set[str]] = {}
         for cls in context.instances:
-            found.setdefault(_exec_type(cls) or "", set()).add(_id(cls))
-        keys = {kind: key for key, kind in _KIND_KEYS.items()}
+            key = keys.key_of(context, cls)
+            if key is not None:
+                found.setdefault(keys.exec_type(cls) or "", set()).add(keys.name_of(key))
+        list_keys = {kind: list_key for list_key, kind in _KIND_KEYS.items()}
         return [
-            (keys[kind], name)
+            (list_keys[kind], name)
             for kind, names in sorted(self.show.items())
             for name in sorted(names - found.get(kind, set()))
         ]
@@ -146,8 +139,9 @@ def build_topology(
     """
     view = view or TopologyView()
     instances = context.instances
+    ids = {cls: _id(context, cls) for cls in instances}
     all_set = set(instances)
-    node_set = {cls for cls in all_set if view.is_visible(cls, instances[cls])}
+    node_set = {cls for cls in all_set if view.is_visible(cls, ids[cls], instances[cls])}
 
     deps = {cls: _visible_dependencies(cls, node_set, all_set) for cls in node_set}
     depths = _compute_depths(deps)
@@ -157,23 +151,23 @@ def build_topology(
 
     auto: dict[type, tuple[int, int]] = {}
     for depth in sorted(by_depth):
-        for row, cls in enumerate(sorted(by_depth[depth], key=lambda c: c.__name__)):
+        for row, cls in enumerate(sorted(by_depth[depth], key=lambda c: (c.__name__, ids[c]))):
             auto[cls] = (depth, row)
-    cells = _resolve_cells(auto, _pinned_cells(layout))
+    cells = _resolve_cells(auto, _pinned_cells(layout), ids)
 
     nodes = []
-    for cls in sorted(node_set, key=lambda c: (cells[c], c.__name__)):
+    for cls in sorted(node_set, key=lambda c: (cells[c], c.__name__, ids[c])):
         col, row = cells[cls]
-        node = _describe_node(cls, instances[cls], col=col, row=row)
+        node = _describe_node(context, cls, instances[cls], ids[cls], col=col, row=row)
         if node["type"] == "service":
-            node["running"] = context.is_running(cls.__name__)
+            node["running"] = context.is_running(ids[cls])
         nodes.append(node)
 
     edges = (
         [
-            {"from": _id(dep), "to": _id(cls)}
-            for cls in sorted(node_set, key=lambda c: c.__name__)
-            for dep in sorted(deps[cls], key=lambda c: c.__name__)
+            {"from": ids[dep], "to": ids[cls]}
+            for cls in sorted(node_set, key=lambda c: ids[c])
+            for dep in sorted(deps[cls], key=lambda c: ids[c])
         ]
         if view.connections
         else []
@@ -236,7 +230,9 @@ def _pinned_cells(layout: Mapping[str, object] | None) -> dict[str, tuple[int, i
 
 
 def _resolve_cells(
-    auto: Mapping[type, tuple[int, int]], pins: Mapping[str, tuple[int, int]]
+    auto: Mapping[type, tuple[int, int]],
+    pins: Mapping[str, tuple[int, int]],
+    ids: Mapping[type, str],
 ) -> dict[type, tuple[int, int]]:
     """Assign every class a unique ``(col, row)`` cell.
 
@@ -246,13 +242,13 @@ def _resolve_cells(
     """
     cells: dict[type, tuple[int, int]] = {}
     taken: set[tuple[int, int]] = set()
-    by_id = {_id(cls): cls for cls in auto}
+    by_id = {ids[cls]: cls for cls in auto}
     for node_id in sorted(pins):
         if node_id in by_id and pins[node_id] not in taken:
             cells[by_id[node_id]] = pins[node_id]
             taken.add(pins[node_id])
     displaced = []
-    for cls in sorted(auto, key=lambda c: (auto[c], c.__name__)):
+    for cls in sorted(auto, key=lambda c: (auto[c], c.__name__, ids[c])):
         if cls in cells:
             continue
         if auto[cls] in taken:
@@ -280,15 +276,9 @@ def _resolve_cells(
     return cells
 
 
-def _id(cls: type) -> str:
-    return kebab(cls.__name__)
-
-
-def _exec_type(cls: type) -> str | None:
-    for label, namespace in _EXEC_NAMESPACES:
-        if cls in dict(namespace.items()).values():
-            return label
-    return None
+def _id(context: Context, cls: type) -> str:
+    """Return a node's id: its key, or the kebab-case class name if it has none."""
+    return keys.key_of(context, cls) or kebab(cls.__name__)
 
 
 def _layer_name(cls: type) -> str | None:
@@ -333,13 +323,18 @@ def _describe(cls: type, decorator: str | None) -> str:
     return f"{cls.__name__}, pre-seeded into the Context."
 
 
-def _describe_node(cls: type, instance: object, col: int, row: int) -> dict:
-    exec_type = _exec_type(cls)
+def _describe_node(
+    context: Context, cls: type, instance: object, node_id: str, col: int, row: int
+) -> dict:
+    exec_type = keys.exec_type(cls)
     node_type = "config" if isinstance(instance, Config) else exec_type
     layer = _layer_name(cls)
     decorator = _decorator_label(cls, exec_type)
+    key = keys.key_of(context, cls)
     return {
-        "id": _id(cls),
+        "id": node_id,
+        "name": keys.name_of(key) if key else None,
+        "href": keys.href(context, cls),
         "label": cls.__name__,
         "type": node_type,
         "layer": layer,

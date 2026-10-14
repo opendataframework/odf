@@ -116,8 +116,9 @@
   as `agent` nodes, with their own default icon and color, an `Agents` count in the
   header, and an `agents` list in `[ui.topology]`. A node's **Invoke** action opens a
   form built from the agent's `invoke()` arguments and shows the result. Over MCP each
-  agent is its own tool, `<agent-id>.invoke`, with `invoke()`'s signature as its input
-  schema, and `@agent-id` in the chat keeps that tool available for the message. Every
+  agent is its own tool, `<key>.invoke` (`agent.librarian.invoke`), with `invoke()`'s
+  signature as its input schema, and `@agent.librarian` in the chat keeps that tool
+  available for the message. Every
   call goes through `context.call()`, so it is logged to the agent's log. See the
   [`19-agent`](https://github.com/opendataframework/odf/tree/main/examples/19-agent)
   example.
@@ -140,6 +141,20 @@
   decorated class. An error raised by the project's own code keeps its traceback, and a
   project that fails to start is stopped before `odf run` exits. Set-up errors that
   were reported as `Invalid value` now read `Error`. See [CLI](cli.md#odf-run).
+- **Keys** (breaking): components are addressed by their `opendataframework` key,
+  `<namespace>.<name>` (`task.load-job`, `service.postgres`), everywhere `odf` names
+  one, so same-named classes in different namespaces no longer collide. A topology
+  node's `id` is its key, with `name` and `href` alongside. The UI's HTTP API serves
+  each execution type as its own collection by registered name, such as
+  `POST /api/tasks/load-job/execute` and `GET /api/agents/librarian/parameters`,
+  instead of everything under `/api/components/{id}`, and an action that doesn't
+  apply to a kind answers `404`. The MCP tools `start_component`, `stop_component`,
+  `execute_task`, `component_logs` and `query_repository` take a `key` argument
+  instead of `name` or `repo_id`, and a component's own tools are prefixed by its key
+  (`component.stock-room.low_stock`). Chat addresses a component as
+  `@<namespace>.<name>`. Saved positions, icons and colors in `layout.json` were keyed
+  by the old ids, so the topology resets them once after upgrading. See
+  [UI](index.md#ui), [MCP Server](index.md#mcp-server) and [Chat](chat.md).
 
 ## 0.2.0
 

@@ -20,7 +20,7 @@ class Librarian:
     ``invoke()`` takes the question as an argument, which is what makes this
     an agent rather than a task: the UI asks for it in a form, and the MCP
     server publishes it as the ``question`` parameter of
-    ``librarian.invoke``. ``Books`` is injected through the constructor, so
+    ``agent.librarian.invoke``. ``Books`` is injected through the constructor, so
     the topology shows what the agent can read.
     """
 

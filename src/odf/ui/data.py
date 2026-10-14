@@ -25,7 +25,6 @@ from opendataframework.repository import (
     StreamableProtocol,
     WritableProtocol,
 )
-from opendataframework.utils import kebab
 from opendataframework.view import (
     AudioView,
     DataView,
@@ -40,6 +39,8 @@ from opendataframework.view import (
     TimeseriesView,
     VideoView,
 )
+
+from odf.ui import keys
 
 
 def build_repositories(context: Context) -> list[dict]:
@@ -63,26 +64,24 @@ def build_repositories(context: Context) -> list[dict]:
     return schemas
 
 
-def find_repository(context: Context, repo_id: str) -> tuple[type, object, type] | None:
-    """Look up a repository by its topology id (kebab-case class name).
+def find_repository(context: Context, name: str) -> tuple[type, object, type] | None:
+    """Look up a repository by its registered name (its key's name part).
 
     Args:
         context: A ``Context`` that has already been opened.
-        repo_id: The kebab-case id, as used by ``ui/topology.py`` node ids.
+        name: The registered name, as in ``/api/repositories/{name}``.
 
     Returns:
         ``(repo_cls, instance, entity_cls)``, or ``None`` if no resolved,
         dataclass-entity-backed repository matches.
     """
-    repo_classes = set(dict(Repository.items()).values())
-    for cls, instance in context.instances.items():
-        if cls not in repo_classes or kebab(cls.__name__) != repo_id:
-            continue
-        entity = Repository.entity(cls)
-        if entity is None or not dataclasses.is_dataclass(entity):
-            continue
-        return cls, instance, entity
-    return None
+    cls = keys.resolve(context, "repository", name)
+    if cls is None:
+        return None
+    entity = Repository.entity(cls)
+    if entity is None or not dataclasses.is_dataclass(entity):
+        return None
+    return cls, context.instances[cls], entity
 
 
 def parse_filters(entity_cls: type, query_params: Iterable[tuple[str, str]]) -> dict[str, str]:
@@ -246,8 +245,11 @@ def _describe_repository(context: Context, cls: type, entity: type, instance: ob
     readable = isinstance(instance, ReadableProtocol)
     streamable = isinstance(instance, StreamableProtocol)
     view = resolve_view(instance, readable=readable)
+    key = context.key(cls)
     return {
-        "id": kebab(cls.__name__),
+        "id": key,
+        "name": keys.name_of(key),
+        "href": keys.href(context, cls),
         "label": cls.__name__,
         "entity": entity.__name__,
         "key": key_field_name(entity),
@@ -255,7 +257,7 @@ def _describe_repository(context: Context, cls: type, entity: type, instance: ob
         "readable": readable,
         "writable": isinstance(instance, WritableProtocol),
         "streamable": streamable,
-        "streaming": streamable and context.is_streaming(cls.__name__),
+        "streaming": streamable and context.is_streaming(key),
         "view": _view_dict(view) if view is not None else None,
         "replay_field": resolve_replay_field(instance, view),
     }

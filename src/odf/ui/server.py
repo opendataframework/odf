@@ -25,7 +25,6 @@ except ImportError as exc:
 from opendataframework.component import ChartProtocol, DetailsProtocol
 from opendataframework.context import Context
 from opendataframework.repository import ReadableProtocol, StreamableProtocol, WritableProtocol
-from opendataframework.utils import kebab
 from opendataframework.view import (
     AudioView,
     DataView,
@@ -38,7 +37,7 @@ from opendataframework.view import (
     VideoView,
 )
 
-from odf.ui import agents, annotations, data, layout, media, themes
+from odf.ui import agents, annotations, data, keys, layout, media, themes
 from odf.ui.topology import TopologyView, build_topology
 
 if TYPE_CHECKING:
@@ -250,13 +249,13 @@ class UiServer:
         def start_stream(repo_id: str) -> None:
             """Start a streamable repository's shared background stream."""
             repo_cls, _, _ = self._get_streamable(repo_id)
-            self._context.start_stream(repo_cls.__name__)
+            self._context.start_stream(self._context.key(repo_cls))
 
         @app.post("/api/repositories/{repo_id}/stop-stream", status_code=204)
         def stop_stream(repo_id: str) -> None:
             """Stop a streamable repository's shared background stream."""
             repo_cls, _, _ = self._get_streamable(repo_id)
-            self._context.stop_stream(repo_cls.__name__)
+            self._context.stop_stream(self._context.key(repo_cls))
 
         @app.get("/api/repositories/{repo_id}/stream")
         def stream_records(repo_id: str) -> Response:
@@ -264,7 +263,7 @@ class UiServer:
             repo_cls, _, _ = self._get_streamable(repo_id)
             view = self._get_streaming_view(repo_id)
             try:
-                entities = self._context.iter_stream(repo_cls.__name__)
+                entities = self._context.iter_stream(self._context.key(repo_cls))
             except KeyError as exc:
                 raise HTTPException(
                     status_code=409,
@@ -438,61 +437,66 @@ class UiServer:
                 annotations.save(self._annotations_path, saved)
             return {"classes": block["classes"]}
 
-        @app.get("/api/components/{component_id}/logs")
-        def component_logs(component_id: str) -> list[dict]:
+        # Every resolved class is served under its execution type's
+        # collection, by registered name: a @Task registered as "loader" is
+        # /api/tasks/loader (see odf.ui.keys). Actions that only apply to one
+        # kind have routes for that kind only.
+
+        @app.get("/api/{collection}/{name}/logs")
+        def component_logs(collection: str, name: str) -> list[dict]:
             """Return a component's tailed log records."""
-            cls = self._find_class_or_404(component_id)
-            return self._context.tail_logs(cls.__name__)
+            cls = self._find_or_404(collection, name)
+            return self._context.tail_logs(self._context.key(cls))
 
-        @app.get("/api/components/{component_id}/details")
-        def component_details(component_id: str) -> dict[str, str]:
+        @app.get("/api/{collection}/{name}/details")
+        def component_details(collection: str, name: str) -> dict[str, str]:
             """Return a component's ``DetailsProtocol`` key/value details."""
-            return self._get_details(component_id).details()
+            return self._get_details(collection, name).details()
 
-        @app.get("/api/components/{component_id}/chart", response_class=HTMLResponse)
-        def component_chart(component_id: str) -> str:
+        @app.get("/api/{collection}/{name}/chart", response_class=HTMLResponse)
+        def component_chart(collection: str, name: str) -> str:
             """Return a component's ``ChartProtocol`` HTML chart."""
-            return self._get_chart(component_id).chart()
+            return self._get_chart(collection, name).chart()
 
-        @app.post("/api/components/{component_id}/start", status_code=204)
-        def start_component(component_id: str) -> None:
-            """Start a component through the context."""
-            cls = self._find_class_or_404(component_id)
+        @app.post("/api/services/{name}/start", status_code=204)
+        def start_service(name: str) -> None:
+            """Start a service through the context."""
+            cls = self._find_or_404("services", name)
             try:
-                self._context.start(cls.__name__)
+                self._context.start(self._context.key(cls))
             except TypeError as exc:
                 raise HTTPException(status_code=400, detail=str(exc)) from exc
 
-        @app.post("/api/components/{component_id}/stop", status_code=204)
-        def stop_component(component_id: str) -> None:
-            """Stop a component through the context."""
-            cls = self._find_class_or_404(component_id)
+        @app.post("/api/services/{name}/stop", status_code=204)
+        def stop_service(name: str) -> None:
+            """Stop a service through the context."""
+            cls = self._find_or_404("services", name)
             try:
-                self._context.stop(cls.__name__)
+                self._context.stop(self._context.key(cls))
             except TypeError as exc:
                 raise HTTPException(status_code=400, detail=str(exc)) from exc
 
-        @app.post("/api/components/{component_id}/execute", status_code=204)
-        def execute_component(component_id: str) -> None:
-            """Execute a component's task/pipeline through the context."""
-            cls = self._find_class_or_404(component_id)
+        @app.post("/api/{collection}/{name}/execute", status_code=204)
+        def execute(collection: str, name: str) -> None:
+            """Execute a task or pipeline through the context."""
+            if collection not in ("tasks", "pipelines"):
+                raise HTTPException(status_code=404, detail="Not found")
+            cls = self._find_or_404(collection, name)
             try:
-                self._context.execute(cls.__name__)
-            except TypeError as exc:
-                raise HTTPException(status_code=400, detail=str(exc)) from exc
+                self._context.execute(self._context.key(cls))
             except Exception as exc:
                 raise HTTPException(status_code=500, detail=str(exc)) from exc
 
-        @app.get("/api/components/{component_id}/parameters")
-        def agent_parameters(component_id: str) -> dict:
+        @app.get("/api/agents/{name}/parameters")
+        def agent_parameters(name: str) -> dict:
             """Return the JSON schema of an agent's ``invoke()`` arguments."""
-            cls = self._get_agent(component_id)
+            cls = self._find_or_404("agents", name)
             return agents.invoke_model(self._context, cls).model_json_schema()
 
-        @app.post("/api/components/{component_id}/invoke")
-        def invoke_agent(component_id: str, body: dict) -> dict:
+        @app.post("/api/agents/{name}/invoke")
+        def invoke_agent(name: str, body: dict) -> dict:
             """Invoke an agent through the context, with the request body as arguments."""
-            cls = self._get_agent(component_id)
+            cls = self._find_or_404("agents", name)
             model = agents.invoke_model(self._context, cls)
             try:
                 validated = model.model_validate(body)
@@ -500,9 +504,9 @@ class UiServer:
                 raise HTTPException(
                     status_code=422, detail=jsonable_encoder(exc.errors(include_url=False))
                 ) from exc
-            kwargs = {name: getattr(validated, name) for name in type(validated).model_fields}
+            kwargs = {field: getattr(validated, field) for field in type(validated).model_fields}
             try:
-                result = self._context.call(cls.__name__, **kwargs)
+                result = self._context.call(self._context.key(cls), **kwargs)
             except Exception as exc:
                 raise HTTPException(status_code=500, detail=str(exc)) from exc
             try:
@@ -577,33 +581,23 @@ class UiServer:
 
         self._app = app
 
-    def _find_class_or_404(self, component_id: str) -> type:
-        """Resolve a kebab-case component id to its class, or raise 404."""
-        for cls in self._context.instances:
-            if kebab(cls.__name__) == component_id:
-                return cls
-        raise HTTPException(status_code=404, detail="Component not found")
-
-    def _get_agent(self, component_id: str) -> type:
-        """Resolve a component id to its agent class, or raise 400 if not an agent."""
-        self._find_class_or_404(component_id)
-        cls = agents.find_agent(self._context, component_id)
+    def _find_or_404(self, collection: str, name: str) -> type:
+        """Resolve ``/api/{collection}/{name}`` to its class, or raise 404."""
+        cls = keys.resolve_collection(self._context, collection, name)
         if cls is None:
-            raise HTTPException(status_code=400, detail="Component is not an agent")
+            raise HTTPException(status_code=404, detail="Component not found")
         return cls
 
-    def _get_details(self, component_id: str) -> DetailsProtocol:
-        """Resolve a component id to its instance, or raise 403 if not detailed."""
-        cls = self._find_class_or_404(component_id)
-        instance = self._context.instances[cls]
+    def _get_details(self, collection: str, name: str) -> DetailsProtocol:
+        """Resolve a component to its instance, or raise 403 if not detailed."""
+        instance = self._context.instances[self._find_or_404(collection, name)]
         if not isinstance(instance, DetailsProtocol):
             raise HTTPException(status_code=403, detail="Component has no details")
         return instance
 
-    def _get_chart(self, component_id: str) -> ChartProtocol:
-        """Resolve a component id to its instance, or raise 403 if not chartable."""
-        cls = self._find_class_or_404(component_id)
-        instance = self._context.instances[cls]
+    def _get_chart(self, collection: str, name: str) -> ChartProtocol:
+        """Resolve a component to its instance, or raise 403 if not chartable."""
+        instance = self._context.instances[self._find_or_404(collection, name)]
         if not isinstance(instance, ChartProtocol):
             raise HTTPException(status_code=403, detail="Component has no chart")
         return instance

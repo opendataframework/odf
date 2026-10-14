@@ -3,8 +3,8 @@
 A `Librarian` registered with `@Agent`: a class whose `invoke()` takes the
 arguments of each call, here a `question: str` and an optional `limit: int`.
 A `@Task`'s `execute()` takes none. The `Context` creates the agent and
-injects its `Books` dependency like any other class, and calls it by name
-through `context.call("librarian", question=...)`, which logs the call.
+injects its `Books` dependency like any other class, and calls it by key
+through `context.call("agent.librarian", question=...)`, which logs the call.
 
 `odf` exposes the agent in three places, each built from `invoke()`'s
 signature:
@@ -13,11 +13,11 @@ signature:
   field per argument, prefilled with the defaults, and shows the result under
   it. Values are converted to the annotated types before the call, so `limit`
   arrives as an `int`.
-- **MCP**: the agent becomes its own tool, `librarian.invoke`, namespaced like
+- **MCP**: the agent becomes its own tool, `agent.librarian.invoke`, namespaced like
   a component's `mcp_tools()`. The tool's input schema comes from the
   annotations and its description from the first paragraph of the class
   docstring, so a client is told exactly what to pass.
-- **Chat**: `@librarian` addresses the agent, keeping `librarian.invoke`
+- **Chat**: `@agent.librarian` addresses the agent, keeping `agent.librarian.invoke`
   available for that message.
 
 `invoke()` matches the words in the question against each book's title and
@@ -58,14 +58,14 @@ Expected output:
 Topology UI running at http://127.0.0.1:4747
 MCP server running at http://127.0.0.1:4748/mcp
 
-context.call("librarian", question="Anything by Le Guin?") -> [{'title': 'A Wizard of Earthsea', 'author': 'Ursula K. Le Guin', 'year': 1968}, {'title': 'The Left Hand of Darkness', 'author': 'Ursula K. Le Guin', 'year': 1969}]
+context.call("agent.librarian", question="Anything by Le Guin?") -> [{'title': 'A Wizard of Earthsea', 'author': 'Ursula K. Le Guin', 'year': 1968}, {'title': 'The Left Hand of Darkness', 'author': 'Ursula K. Le Guin', 'year': 1969}]
 
 Driving the project over MCP, the same way an MCP client would:
-Tools exposed over MCP: ['list_components', 'query_repository', 'start_component', 'stop_component', 'execute_task', 'component_logs', 'librarian.invoke']
+Tools exposed over MCP: ['list_components', 'query_repository', 'start_component', 'stop_component', 'execute_task', 'component_logs', 'agent.librarian.invoke']
 
-librarian.invoke input schema: {'question': {'title': 'Question', 'type': 'string'}, 'limit': {'default': 3, 'title': 'Limit', 'type': 'integer'}}
+agent.librarian.invoke input schema: {'question': {'title': 'Question', 'type': 'string'}, 'limit': {'default': 3, 'title': 'Limit', 'type': 'integer'}}
 
-librarian.invoke(question=..., limit=1) -> {
+agent.librarian.invoke(question=..., limit=1) -> {
   "title": "Dune",
   "author": "Frank Herbert",
   "year": 1965

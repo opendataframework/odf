@@ -28,7 +28,8 @@ def load(path: Path) -> dict[str, dict[str, int | str]]:
         Mapping of node id to ``{"col": int, "row": int, "icon": str, "color": str}``,
         where ``"icon"`` and ``"color"`` are optional (a node with no such
         override omits the corresponding key). The reserved key ``"_grid"``
-        (never a valid node id — those are always kebab-case class names) maps
+        (never a valid node id — those are ``<namespace>.<name>`` keys, or
+        ``config``) maps
         instead to ``{"nw": int, "ne": int, "se": int, "sw": int}``, the number
         of user-added empty cells extending each edge of the isometric diamond
         past the auto-fit bounds derived from node positions.

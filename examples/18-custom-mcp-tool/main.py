@@ -6,9 +6,9 @@ resolved Context over MCP: the six fixed tools (``list_components``,
 ``query_repository``, ``start_component``, ``stop_component``,
 ``execute_task``, ``component_logs``), plus, for every resolved component
 implementing ``opendataframework.component.McpToolsProtocol``, that
-component's own ``mcp_tools()`` entries — namespaced
-``<kebab(ClassName)>.<tool name>``. Here, ``StockRoom.low_stock`` shows up
-as ``stock-room.low_stock``.
+component's own ``mcp_tools()`` entries — prefixed by
+the component's key, ``<namespace>.<name>.<tool name>``. Here, ``StockRoom.low_stock`` shows up
+as ``component.stock-room.low_stock``.
 
 ``execute_task()`` takes no arguments and ``query_repository()``'s filters
 are substring-only — neither can express "items at or below an explicit
@@ -47,11 +47,11 @@ async def drive_via_mcp() -> None:
             tools = await session.list_tools()
             print(f"Tools exposed over MCP: {[t.name for t in tools.tools]}\n")
 
-            result = await session.call_tool("stock-room.low_stock", {})
-            print(f"stock-room.low_stock()            -> {result.content[0].text}")
+            result = await session.call_tool("component.stock-room.low_stock", {})
+            print(f"component.stock-room.low_stock()            -> {result.content[0].text}")
 
-            result = await session.call_tool("stock-room.low_stock", {"threshold": 5})
-            print(f"stock-room.low_stock(threshold=5) -> {result.content[0].text}")
+            result = await session.call_tool("component.stock-room.low_stock", {"threshold": 5})
+            print(f"component.stock-room.low_stock(threshold=5) -> {result.content[0].text}")
 
 
 print("Driving the project over MCP, the same way an MCP client would:")

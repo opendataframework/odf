@@ -12,8 +12,9 @@ from typing import Any
 
 from opendataframework.agent import Agent
 from opendataframework.context import Context
-from opendataframework.utils import kebab
 from pydantic import BaseModel, create_model
+
+from odf.ui import keys
 
 # ``Context.call()`` passes arguments by keyword only, so these can't be given.
 _UNSUPPORTED_KINDS = (
@@ -23,21 +24,17 @@ _UNSUPPORTED_KINDS = (
 )
 
 
-def find_agent(context: Context, agent_id: str) -> type | None:
-    """Look up a resolved agent by its topology id (kebab-case class name).
+def find_agent(context: Context, name: str) -> type | None:
+    """Look up a resolved agent by its registered name (its key's name part).
 
     Args:
         context: A ``Context`` that has already been opened.
-        agent_id: The kebab-case id, as used by ``ui/topology.py`` node ids.
+        name: The registered name, as in ``/api/agents/{name}``.
 
     Returns:
         The agent class, or ``None`` if no resolved agent matches.
     """
-    agents = set(dict(Agent.items()).values())
-    for cls in context.instances:
-        if cls in agents and kebab(cls.__name__) == agent_id:
-            return cls
-    return None
+    return keys.resolve(context, "agent", name)
 
 
 def agents(context: Context) -> list[type]:

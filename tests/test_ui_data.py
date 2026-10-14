@@ -57,7 +57,9 @@ def test_build_repositories_includes_dataclass_entity_repo():
 
     assert len(schemas) == 1
     schema = schemas[0]
-    assert schema["id"] == "widgets"
+    assert schema["id"] == "n-s.widgets"
+    assert schema["name"] == "widgets"
+    assert schema["href"] == "/api/repositories/widgets"
     assert schema["entity"] == "Widget"
     assert schema["key"] == "id"
     assert schema["readable"] is True
@@ -114,11 +116,11 @@ def test_build_repositories_reports_streaming_state():
         assert schema["streamable"] is True
         assert schema["streaming"] is False
 
-        ctx.start_stream("Feed")
+        ctx.start_stream(ctx.key(Feed))
         schema = build_repositories(ctx)[0]
         assert schema["streaming"] is True
 
-        ctx.stop_stream("Feed")
+        ctx.stop_stream(ctx.key(Feed))
 
 
 # --- find_repository --------------------------------------------------------

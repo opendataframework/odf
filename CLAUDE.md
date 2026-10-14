@@ -35,7 +35,7 @@ poetry run odf run
 ```
 
 Requires Python >=3.14, managed with Poetry. `pyproject.toml` depends on
-`opendataframework (>=0.2.0,<0.3.0)` by version, resolved from PyPI. When
+`opendataframework (>=0.3.0,<0.4.0)` by version, resolved from PyPI. When
 developing both repos side by side against unreleased `opendataframework`
 changes, temporarily override the dependency to a local path/git source —
 and revert that override (and regenerate `poetry.lock`) before releasing a
@@ -51,9 +51,18 @@ needs a third-party dependency:
 | `server.py` | `Server` — composes an `opendataframework.Project` and adds `start(ui=, mcp=, chat=)` orchestration on top | (imports the rest of this table lazily) |
 | `cli.py`, `scaffold.py`, `templates/` | `odf init`/`odf run` CLI | `typer`, `rich` |
 | `mcp/server.py` | MCP server exposing component lifecycle + task/pipeline execution + repository data queries as tools | `mcp`, `uvicorn` |
-| `ui/server.py`, `ui/topology.py`, `ui/data.py`, `ui/agents.py`, `ui/layout.py`, `ui/extensions.py`, `ui/themes.py` | UI dev server | `fastapi`, `uvicorn` |
+| `ui/server.py`, `ui/topology.py`, `ui/keys.py`, `ui/data.py`, `ui/agents.py`, `ui/layout.py`, `ui/extensions.py`, `ui/themes.py` | UI dev server | `fastapi`, `uvicorn` |
 | `ui/static/` | The UI itself: `index.html` + `app.js` shared by every theme, `icons/` holding the built-in topology icons (one file per picker group, plus `shared.js`), and `themes/<name>/` holding each theme's `theme.css`, `favicon.svg` and optional `theme.js` | (Leaflet from a CDN; no build step) |
 | `chat/engine.py` | Chat window backing a `Server`'s UI | `ollama` |
+
+Every component is addressed by its upstream key, `<namespace>.<name>`
+(`context.key(cls)`): it is the topology node id, the argument to every
+`Context` call and MCP tool, the prefix of a component's MCP tools, and what
+chat's `@` mentions. Never address one by `cls.__name__` or
+`kebab(cls.__name__)`. The key's namespace is the one the object was gathered
+from, so a node's type and its HTTP route collection come from its execution
+type instead (`ui/keys.py`): a `@Task` registered as `loader` is
+`/api/tasks/loader`, whatever its key.
 
 UI markup and behavior changes go in the shared `ui/static/index.html` and
 `ui/static/app.js`, never in a theme. A theme only restyles: all of its CSS

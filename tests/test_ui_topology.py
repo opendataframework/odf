@@ -81,6 +81,45 @@ def test_classifies_node_types_and_config():
     assert decorators["TopoAgent"] == "@Agent"
 
 
+# --- ids and routes ------------------------------------------------------------
+
+
+def test_node_id_is_the_key_and_href_follows_the_execution_type():
+    NS = make_ns()
+
+    @NS("loader")
+    @Task
+    class TopoLoadJob:
+        def execute(self) -> None: ...
+
+    with Context(namespaces={NS}, config={"k": "v"}) as ctx:
+        data = build_topology(ctx, "proj")
+
+    by_label = {n["label"]: n for n in data["nodes"]}
+    assert by_label["TopoLoadJob"]["id"] == "n-s.loader"
+    assert by_label["TopoLoadJob"]["name"] == "loader"
+    assert by_label["TopoLoadJob"]["href"] == "/api/tasks/loader"
+    assert by_label["Config"]["id"] == "config"
+    assert by_label["Config"]["href"] is None
+
+
+def test_same_class_name_in_two_namespaces_gets_two_nodes():
+    class TaskNS(Namespace): ...
+
+    class ComponentNS(Namespace): ...
+
+    task = TaskNS(Task(type("Loader", (), {"execute": lambda self: None})))
+    component = ComponentNS(Component(type("Loader", (), {})))
+
+    with Context(namespaces={TaskNS, ComponentNS}) as ctx:
+        data = build_topology(ctx, "proj")
+        keys = {ctx.key(task), ctx.key(component)}
+
+    assert len(keys) == 2
+    assert ids(data) == keys
+    assert {n["href"] for n in data["nodes"]} == {"/api/tasks/loader", "/api/components/loader"}
+
+
 # --- service running state --------------------------------------------------
 
 
@@ -99,7 +138,7 @@ def test_service_node_reports_running_state():
         node = next(n for n in data["nodes"] if n["label"] == "TopoRunningService")
         assert node["running"] is True
 
-        ctx.stop("TopoRunningService")
+        ctx.stop(ctx.key(TopoRunningService))
         data = build_topology(ctx, "proj")
         node = next(n for n in data["nodes"] if n["label"] == "TopoRunningService")
         assert node["running"] is False
@@ -188,7 +227,7 @@ def test_edges_reflect_constructor_dependencies():
     with Context(namespaces={NS}) as ctx:
         data = build_topology(ctx, "proj")
 
-    assert {"from": "topo-base", "to": "topo-derived"} in data["edges"]
+    assert {"from": "n-s.topo-base", "to": "n-s.topo-derived"} in data["edges"]
 
 
 def test_edges_exclude_dependencies_outside_the_resolved_set():
@@ -367,8 +406,8 @@ def test_list_shows_only_listed_components_of_that_kind():
 
     view = TopologyView.from_config({"tasks": ["ViewKept"]})
     with Context(namespaces={NS}) as ctx:
-        assert ids(build_topology(ctx, "p", view)) >= {"view-kept"}
-        assert "view-dropped" not in ids(build_topology(ctx, "p", view))
+        assert ids(build_topology(ctx, "p", view)) >= {"n-s.view-kept"}
+        assert "n-s.view-dropped" not in ids(build_topology(ctx, "p", view))
 
 
 def test_agents_list_filters_agents():
@@ -389,8 +428,8 @@ def test_agents_list_filters_agents():
         data = build_topology(ctx, "p", view)
         unmatched = view.unmatched(ctx)
 
-    assert "view-asker" in ids(data)
-    assert "view-hidden" not in ids(data)
+    assert "n-s.view-asker" in ids(data)
+    assert "n-s.view-hidden" not in ids(data)
     assert unmatched == [("agents", "view-missing")]
 
 
@@ -401,8 +440,8 @@ def test_kind_without_a_list_shows_every_component_of_that_kind():
     with Context(namespaces={NS}) as ctx:
         data = build_topology(ctx, "p", view)
 
-    assert "view-job" not in ids(data)
-    assert {"view-store", "view-mid"} <= ids(data)
+    assert "n-s.view-job" not in ids(data)
+    assert {"n-s.view-store", "n-s.view-mid"} <= ids(data)
 
 
 def test_names_match_class_name_kebab_id_and_snake_case():
@@ -412,8 +451,8 @@ def test_names_match_class_name_kebab_id_and_snake_case():
         view = TopologyView.from_config({"components": [name]})
         with Context(namespaces={NS}) as ctx:
             data = build_topology(ctx, "p", view)
-        assert "view-store" in ids(data)
-        assert "view-mid" not in ids(data)
+        assert "n-s.view-store" in ids(data)
+        assert "n-s.view-mid" not in ids(data)
 
 
 def test_config_false_hides_the_config_node():
@@ -434,10 +473,10 @@ def test_hidden_component_is_bridged_and_layout_has_no_gap():
     with Context(namespaces={NS}) as ctx:
         data = build_topology(ctx, "p", view)
 
-    assert ids(data) == {"view-store", "view-job"}
-    assert edge_pairs(data) == {("view-store", "view-job")}
+    assert ids(data) == {"n-s.view-store", "n-s.view-job"}
+    assert edge_pairs(data) == {("n-s.view-store", "n-s.view-job")}
     cells = {n["id"]: (n["col"], n["row"]) for n in data["nodes"]}
-    assert cells == {"view-store": (0, 0), "view-job": (1, 0)}
+    assert cells == {"n-s.view-store": (0, 0), "n-s.view-job": (1, 0)}
 
 
 def test_bridged_edges_are_not_duplicated():
@@ -468,7 +507,7 @@ def test_bridged_edges_are_not_duplicated():
     with Context(namespaces={NS}) as ctx:
         data = build_topology(ctx, "p", view)
 
-    assert data["edges"] == [{"from": "view-leaf", "to": "view-top"}]
+    assert data["edges"] == [{"from": "n-s.view-leaf", "to": "n-s.view-top"}]
 
 
 def test_stats_describe_the_visible_graph():
@@ -511,9 +550,9 @@ def test_saved_cell_is_kept():
     NS, *_ = make_chain()
 
     with Context(namespaces={NS}) as ctx:
-        data = build_topology(ctx, "p", layout={"view-job": {"col": 5, "row": 3}})
+        data = build_topology(ctx, "p", layout={"n-s.view-job": {"col": 5, "row": 3}})
 
-    assert cells_of(data)["view-job"] == (5, 3)
+    assert cells_of(data)["n-s.view-job"] == (5, 3)
 
 
 def test_auto_node_on_a_saved_cell_moves_to_the_nearest_free_row_in_its_column():
@@ -529,11 +568,11 @@ def test_auto_node_on_a_saved_cell_moves_to_the_nearest_free_row_in_its_column()
 
     with Context(namespaces={NS}) as ctx:
         auto = cells_of(build_topology(ctx, "p"))
-        assert auto == {"view-a": (0, 0), "view-b": (0, 1)}
+        assert auto == {"n-s.view-a": (0, 0), "n-s.view-b": (0, 1)}
         # Pin B onto A's automatic cell: A must yield, staying in column 0.
-        data = build_topology(ctx, "p", layout={"view-b": {"col": 0, "row": 0}})
+        data = build_topology(ctx, "p", layout={"n-s.view-b": {"col": 0, "row": 0}})
 
-    assert cells_of(data) == {"view-b": (0, 0), "view-a": (0, 1)}
+    assert cells_of(data) == {"n-s.view-b": (0, 0), "n-s.view-a": (0, 1)}
 
 
 def test_two_saved_cells_on_the_same_slot_keep_the_first_id():
@@ -547,13 +586,13 @@ def test_two_saved_cells_on_the_same_slot_keep_the_first_id():
     @Component
     class ViewB: ...
 
-    layout = {"view-a": {"col": 4, "row": 4}, "view-b": {"col": 4, "row": 4}}
+    layout = {"n-s.view-a": {"col": 4, "row": 4}, "n-s.view-b": {"col": 4, "row": 4}}
     with Context(namespaces={NS}) as ctx:
         data = build_topology(ctx, "p", layout=layout)
 
     cells = cells_of(data)
-    assert cells["view-a"] == (4, 4)
-    assert cells["view-b"] != (4, 4)
+    assert cells["n-s.view-a"] == (4, 4)
+    assert cells["n-s.view-b"] != (4, 4)
     assert len(set(cells.values())) == 2
 
 
@@ -568,15 +607,15 @@ def test_saved_cell_of_a_hidden_node_reserves_nothing_and_returns_when_shown():
     @Component
     class ViewB: ...
 
-    layout = {"view-a": {"col": 0, "row": 0}}
+    layout = {"n-s.view-a": {"col": 0, "row": 0}}
     with Context(namespaces={NS}) as ctx:
         hidden = build_topology(
             ctx, "p", TopologyView.from_config({"components": ["ViewB"]}), layout
         )
         shown = build_topology(ctx, "p", layout=layout)
 
-    assert cells_of(hidden) == {"view-b": (0, 0)}
-    assert cells_of(shown) == {"view-a": (0, 0), "view-b": (0, 1)}
+    assert cells_of(hidden) == {"n-s.view-b": (0, 0)}
+    assert cells_of(shown) == {"n-s.view-a": (0, 0), "n-s.view-b": (0, 1)}
 
 
 def test_non_node_and_malformed_layout_entries_are_ignored():
@@ -585,9 +624,9 @@ def test_non_node_and_malformed_layout_entries_are_ignored():
     layout = {
         "_grid": {"nw": 1, "ne": 0, "se": 0, "sw": 0},
         "_layers": {"x": "#fff"},
-        "view-job": {"col": True, "row": 1},
-        "view-mid": {"col": "2", "row": 1},
-        "view-store": "nope",
+        "n-s.view-job": {"col": True, "row": 1},
+        "n-s.view-mid": {"col": "2", "row": 1},
+        "n-s.view-store": "nope",
     }
     with Context(namespaces={NS}) as ctx:
         assert build_topology(ctx, "p", layout=layout) == build_topology(ctx, "p")
@@ -599,7 +638,7 @@ def test_resolved_cells_are_unique():
     for name in "ABCDE":
         NS(Component(type(f"View{name}", (), {})))
 
-    layout = {"view-c": {"col": 0, "row": 0}, "view-e": {"col": 0, "row": 1}}
+    layout = {"n-s.view-c": {"col": 0, "row": 0}, "n-s.view-e": {"col": 0, "row": 1}}
     with Context(namespaces={NS}) as ctx:
         data = build_topology(ctx, "p", layout=layout)
 

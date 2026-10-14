@@ -2,7 +2,7 @@
 
 A single `SalesByStore` component implementing `chart() -> str` — a
 self-contained HTML document (an inline base64 PNG here) that the dev UI
-serves verbatim from `GET /api/components/{id}/chart` and renders inside a
+serves verbatim from `GET /api/components/{name}/chart` and renders inside a
 same-origin `<iframe>` behind a **View Chart** button.
 
 This isolates the concept covered in [`docs/component.md`](../../docs/component.md)'s

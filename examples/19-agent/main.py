@@ -1,9 +1,9 @@
-"""Agents: an ``@Agent`` class whose ``invoke()`` takes arguments, called by name.
+"""Agents: an ``@Agent`` class whose ``invoke()`` takes arguments, called by key.
 
 ``Librarian`` is resolved like any other class, with ``Books`` injected
 through its constructor, and called through ``Context.call()``. On top of
 that, ``server.start(mcp=True)`` registers it as its own MCP tool,
-``librarian.invoke``, whose input schema is ``invoke()``'s signature, so a
+``agent.librarian.invoke``, whose input schema is ``invoke()``'s signature, so a
 client is told it takes a ``question: str`` and an optional ``limit: int``.
 
 Also starts the UI (``ui=True``), where ``Librarian``'s **Invoke** action asks
@@ -24,8 +24,8 @@ server.start(ui=True, mcp=True)
 print(f"Topology UI running at {server.ui_url}")
 print(f"MCP server running at {server.mcp_url}\n")
 
-answer = server.context.call("librarian", question="Anything by Le Guin?")
-print(f'context.call("librarian", question="Anything by Le Guin?") -> {answer}\n')
+answer = server.context.call("agent.librarian", question="Anything by Le Guin?")
+print(f'context.call("agent.librarian", question="Anything by Le Guin?") -> {answer}\n')
 
 
 async def drive_via_mcp() -> None:
@@ -39,13 +39,13 @@ async def drive_via_mcp() -> None:
             tools = await session.list_tools()
             print(f"Tools exposed over MCP: {[t.name for t in tools.tools]}\n")
 
-            schema = next(t for t in tools.tools if t.name == "librarian.invoke").inputSchema
-            print(f"librarian.invoke input schema: {schema['properties']}\n")
+            schema = next(t for t in tools.tools if t.name == "agent.librarian.invoke").inputSchema
+            print(f"agent.librarian.invoke input schema: {schema['properties']}\n")
 
             result = await session.call_tool(
-                "librarian.invoke", {"question": "Anything by Herbert?", "limit": 1}
+                "agent.librarian.invoke", {"question": "Anything by Herbert?", "limit": 1}
             )
-            print(f"librarian.invoke(question=..., limit=1) -> {result.content[0].text}")
+            print(f"agent.librarian.invoke(question=..., limit=1) -> {result.content[0].text}")
 
 
 print("Driving the project over MCP, the same way an MCP client would:")
