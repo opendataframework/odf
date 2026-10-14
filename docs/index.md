@@ -142,6 +142,16 @@ server.start(mcp=True)
 print(server.mcp_url)  # http://127.0.0.1:4748/mcp
 ```
 
+An `McpTool` needs a non-empty `description` and a fully typed handler: every
+parameter annotated, a return annotation (`-> None` counts), no
+`*args`/`**kwargs`, a method or function rather than a lambda, and no
+`from __future__ import annotations` in its module. The MCP server passes the
+description and the handler's signature to the client as the tool's
+description and input schema, which is all a model sees of the tool.
+`opendataframework` raises when a tool doesn't meet this, and `odf run`
+reports it as a start-up error. See
+[`examples/18-custom-mcp-tool`](https://github.com/opendataframework/odf/tree/main/examples/18-custom-mcp-tool).
+
 New components can be added to an existing project from within an AI
 chat: the MCP service knows the available component library and the
 project's current structure, generates the config delta and any needed

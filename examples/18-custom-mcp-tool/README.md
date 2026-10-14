@@ -24,6 +24,15 @@ a fixed one: `execute_task()` takes no arguments at all, and
 int | None = None)` can, because it's a real typed parameter on a
 purpose-built tool.
 
+That typed parameter is also what a client sees. The MCP server passes the
+tool's `description` and its handler's signature,
+`low_stock(threshold: int | None = None) -> list[dict]`, to the client as the
+tool's description and input schema. `McpTool` therefore requires both: a
+non-empty description, and a handler with every parameter and the return
+value annotated (`-> None` counts). A lambda or a module with
+`from __future__ import annotations` is rejected, so `odf run` stops with a
+start-up error.
+
 `Items` comes pre-seeded in-memory with three items, two already below
 their reorder level (see `app/repositories.py`'s `_SEED_ITEMS`), so
 `low_stock()` has something to report immediately.
