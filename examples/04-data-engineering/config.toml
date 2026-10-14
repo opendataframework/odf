@@ -1,7 +1,7 @@
 [project]
 name = "data-engineering-example"
 
-[sqlite]
+[component.sqlite]
 path = "app.db"
 
 [ui.topology]

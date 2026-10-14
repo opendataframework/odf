@@ -15,7 +15,9 @@ class SummarizeItems:
 
     def __init__(self, items: Items, config: Config, logger: Logger) -> None:
         self.items = items
-        self.report_path = config.get("summarize-items").get("report-path", "reports/summary.json")
+        self.report_path = (
+            config.get("task").get("summarize-items").get("report-path", "reports/summary.json")
+        )
         self.logger = logger
 
     def execute(self) -> dict:

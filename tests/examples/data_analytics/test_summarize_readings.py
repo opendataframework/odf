@@ -12,7 +12,7 @@ from opendataframework.logger import LogManager
 
 
 def _readings(tmp_path) -> Readings:
-    config = Config({"sqlite": {"path": str(tmp_path / "test.db")}})
+    config = Config({"component": {"sqlite": {"path": str(tmp_path / "test.db")}}})
     return Readings(SQLite(config))
 
 
@@ -23,7 +23,7 @@ def test_summarize_readings_writes_report(tmp_path):
     readings.save(Reading(id=None, sensor="garage", celsius=17.0))
 
     report_path = tmp_path / "reports" / "summary.json"
-    config = Config({"summarize-readings": {"report-path": str(report_path)}})
+    config = Config({"task": {"summarize-readings": {"report-path": str(report_path)}}})
     logger = LogManager().logger_for("SummarizeReadings")
 
     summary = SummarizeReadings(readings, config, logger).execute()
@@ -38,7 +38,7 @@ def test_summarize_readings_writes_report(tmp_path):
 def test_summarize_readings_handles_no_data(tmp_path):
     readings = _readings(tmp_path)
     report_path = tmp_path / "reports" / "summary.json"
-    config = Config({"summarize-readings": {"report-path": str(report_path)}})
+    config = Config({"task": {"summarize-readings": {"report-path": str(report_path)}}})
     logger = LogManager().logger_for("SummarizeReadings")
 
     summary = SummarizeReadings(readings, config, logger).execute()

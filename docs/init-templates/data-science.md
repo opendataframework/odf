@@ -40,7 +40,7 @@ from app.entities import Item
 from app.repositories import Items
 from app.storages import SQLite
 
-config = Config({"sqlite": {"path": "../app.db"}})
+config = Config({"component": {"sqlite": {"path": "../app.db"}}})
 sqlite = SQLite(config)
 items = Items(sqlite)
 ```

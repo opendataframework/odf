@@ -155,6 +155,13 @@
   `@<namespace>.<name>`. Saved positions, icons and colors in `layout.json` were keyed
   by the old ids, so the topology resets them once after upgrading. See
   [UI](index.md#ui), [MCP Server](index.md#mcp-server) and [Chat](chat.md).
+- **Templates**: config sections are named after each class's key, following
+  `opendataframework` 0.3.0: `odf init` writes `[component.sqlite]` instead of `[sqlite]`,
+  and the `data-analytics` task reads `[task.summarize-items]`. The scaffolded `SQLite`
+  storage is registered as `@Component(name="sqlite")`, so its key is
+  `component.sqlite` rather than `component.s-q-lite`. The examples follow the same
+  layout. A project scaffolded by an earlier version keeps working as it is. See
+  [Templates](init-templates/default.md).
 
 ## 0.2.0
 

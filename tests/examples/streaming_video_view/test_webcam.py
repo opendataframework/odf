@@ -29,7 +29,7 @@ class FakeCapture:
 
 @pytest.fixture
 def webcam():
-    instance = Webcam(Config({"webcam": {"device": 0}}))
+    instance = Webcam(Config({"repository": {"webcam": {"device": 0}}}))
     instance.capture = FakeCapture(frame_count=3)
     return instance
 

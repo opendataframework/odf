@@ -14,7 +14,7 @@ from opendataframework.config import Config
 
 @pytest.fixture
 def watchdog() -> Watchdog:
-    return Watchdog(Config({"watchdog": {"interval": 0.01}}))
+    return Watchdog(Config({"service": {"watchdog": {"interval": 0.01}}}))
 
 
 def test_watchdog_reads_interval_from_config(watchdog):

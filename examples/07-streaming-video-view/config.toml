@@ -1,5 +1,5 @@
 [project]
 name = "streaming-video-view-example"
 
-[webcam]
+[repository.webcam]
 device = 0

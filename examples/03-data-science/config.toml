@@ -1,5 +1,5 @@
 [project]
 name = "data-science-example"
 
-[sqlite]
+[component.sqlite]
 path = "app.db"

@@ -7,7 +7,7 @@ from opendataframework import Component, Config, Storage
 
 
 @Storage
-@Component
+@Component(name="sqlite")
 class SQLite:
     """Thread-safe SQLite connection, shared by every component that
     depends on it (here, ``Readings``).
@@ -20,9 +20,9 @@ class SQLite:
         """Open the connection at the configured path and create tables.
 
         Args:
-            config: Project config; reads ``sqlite.path`` (default ``"app.db"``).
+            config: Project config; reads ``component.sqlite.path`` (default ``"app.db"``).
         """
-        path = config.get("sqlite").get("path", "app.db")
+        path = config.get("component").get("sqlite").get("path", "app.db")
         self.conn = sqlite3.connect(path, check_same_thread=False)
         self.lock = threading.Lock()  # guards the shared connection across threads
         self._create_tables()

@@ -5,10 +5,10 @@ from opendataframework import Component, Config, Storage
 
 
 @Storage
-@Component
+@Component(name="sqlite")
 class SQLite:
     def __init__(self, config: Config) -> None:
-        path = config.get("sqlite").get("path", "app.db")
+        path = config.get("component").get("sqlite").get("path", "app.db")
         self.conn = sqlite3.connect(path, check_same_thread=False)
         self.lock = threading.Lock()
         self._create_tables()

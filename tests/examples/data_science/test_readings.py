@@ -13,7 +13,7 @@ from opendataframework.config import Config
 
 @pytest.fixture
 def readings(tmp_path) -> Readings:
-    config = Config({"sqlite": {"path": str(tmp_path / "test.db")}})
+    config = Config({"component": {"sqlite": {"path": str(tmp_path / "test.db")}}})
     return Readings(SQLite(config))
 
 
@@ -29,7 +29,7 @@ def test_readings_repository_save_and_all(readings):
 
 
 def test_readings_are_persisted_across_repository_instances(tmp_path):
-    config = Config({"sqlite": {"path": str(tmp_path / "test.db")}})
+    config = Config({"component": {"sqlite": {"path": str(tmp_path / "test.db")}}})
     Readings(SQLite(config)).save(Reading(id=None, sensor="kitchen", celsius=21.5))
 
     reopened = Readings(SQLite(config))

@@ -41,7 +41,7 @@ class SummarizeItems:
         return summary
 ```
 
-The report path comes from `[summarize-items] report-path` in config
+The report path comes from `[task.summarize-items] report-path` in config
 (default `"reports/summary.json"`). `@Analytics` marks it for the
 `Layer` the UI groups analytics-style tasks under; `@Task` is what makes
 it executable from the UI's Execute action or the MCP `execute_task`

@@ -26,8 +26,9 @@ my-project/
   `name`, `quantity`.
 - **`Items`** (`app/repositories.py`) — an `@Storage @Repository(Item)`
   backed by `SQLite`, exposing `all()`/`get()`/`save()`/`delete()`.
-- **`SQLite`** (`app/storages.py`) — an `@Storage @Component` that opens
-  the path from `[sqlite] path` in config (default `"app.db"`) and
+- **`SQLite`** (`app/storages.py`) — an `@Storage @Component` registered
+  as `sqlite` (key `component.sqlite`) that opens the path from
+  `[component.sqlite] path` in config (default `"app.db"`) and
   creates the `items` table if it doesn't exist yet.
 
 ```toml
@@ -35,7 +36,7 @@ my-project/
 [project]
 name = "my-project"
 
-[sqlite]
+[component.sqlite]
 path = "app.db"
 ```
 
