@@ -600,6 +600,83 @@ def test_invoke_endpoint_falls_back_to_str_for_an_unencodable_result():
     assert r.json() == {"result": "opaque"}
 
 
+def _scale(NS, calls):
+    @NS
+    @Component
+    class Units:
+        factor = 10
+
+    @NS
+    @Function
+    def scale(value: int, units: Units, *, label: str = "x") -> dict:
+        """Scale a value by the configured factor.
+
+        Longer details.
+        """
+        calls.append((value, label))
+        return {"value": value * units.factor, "label": label}
+
+    return scale
+
+
+def test_parameters_endpoint_leaves_out_a_function_s_injected_parameters():
+    NS = make_ns()
+    _scale(NS, [])
+
+    with Context(namespaces={NS}) as ctx:
+        client = TestClient(UiServer(ctx, "proj")._app)
+        r = client.get("/api/functions/scale/parameters")
+
+    assert r.status_code == 200
+    schema = r.json()
+    assert list(schema["properties"]) == ["value", "label"]
+    assert schema["required"] == ["value"]
+
+
+def test_call_endpoint_calls_the_function_with_coerced_arguments(tmp_path):
+    NS = make_ns()
+    calls = []
+    _scale(NS, calls)
+
+    with Context(namespaces={NS}, log_dir=tmp_path) as ctx:
+        client = TestClient(UiServer(ctx, "proj")._app)
+        r = client.post("/api/functions/scale/call", json={"value": "4"})
+        logs = client.get("/api/functions/scale/logs").json()
+
+    assert r.status_code == 200
+    assert r.json() == {"result": {"value": 40, "label": "x"}}
+    assert calls == [(4, "x")]
+    assert any("completed" in entry["message"] for entry in logs)
+
+
+def test_call_endpoint_rejects_a_missing_argument_with_422():
+    NS = make_ns()
+    calls = []
+    _scale(NS, calls)
+
+    with Context(namespaces={NS}) as ctx:
+        client = TestClient(UiServer(ctx, "proj")._app)
+        r = client.post("/api/functions/scale/call", json={})
+
+    assert r.status_code == 422
+    assert r.json()["detail"][0]["loc"] == ["value"]
+    assert calls == []
+
+
+def test_each_kind_is_called_only_by_its_own_verb():
+    NS = make_ns()
+    _scale(NS, [])
+    _librarian(NS, [])
+
+    with Context(namespaces={NS}) as ctx:
+        client = TestClient(UiServer(ctx, "proj")._app)
+
+        assert client.post("/api/functions/scale/invoke", json={}).status_code == 404
+        assert client.post("/api/agents/librarian/call", json={}).status_code == 404
+        assert client.get("/api/functions/librarian/parameters").status_code == 404
+        assert client.get("/api/agents/scale/parameters").status_code == 404
+
+
 def test_lifecycle_endpoints_unknown_component_returns_404():
     with Context(namespaces=set()) as ctx:
         client = TestClient(UiServer(ctx, "proj")._app)

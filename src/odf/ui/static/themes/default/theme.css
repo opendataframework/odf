@@ -240,9 +240,9 @@ canvas{display:block;cursor:grab}
 .invoke-field input:not([type=checkbox]),.invoke-field textarea{width:100%;background:var(--panel);border:1px solid var(--border-strong);color:var(--text);font-family:inherit;font-size:11.5px;font-weight:400;letter-spacing:0;padding:5px 8px;border-radius:2px}
 .invoke-field textarea{font-family:'SF Mono','IBM Plex Mono','JetBrains Mono',Consolas,'Courier New',monospace;resize:vertical}
 .invoke-field input:focus,.invoke-field textarea:focus{outline:none;border-color:var(--title-accent)}
-.invoke-field input[type=checkbox]{accent-color:var(--accent-agent)}
-.invoke-run{align-self:flex-start;background:transparent;border:1px solid var(--accent-agent);color:var(--accent-agent);font-family:'SF Mono',Consolas,monospace;font-size:11px;font-weight:600;letter-spacing:.03em;padding:5px 14px;border-radius:2px;cursor:pointer;transition:background .12s}
-.invoke-run:hover{background:color-mix(in srgb, var(--accent-agent) 12%, transparent)}
+.invoke-field input[type=checkbox]{accent-color:var(--invoke-accent)}
+.invoke-run{align-self:flex-start;background:transparent;border:1px solid var(--invoke-accent);color:var(--invoke-accent);font-family:'SF Mono',Consolas,monospace;font-size:11px;font-weight:600;letter-spacing:.03em;padding:5px 14px;border-radius:2px;cursor:pointer;transition:background .12s}
+.invoke-run:hover{background:color-mix(in srgb, var(--invoke-accent) 12%, transparent)}
 .invoke-run:disabled{opacity:.4;cursor:default;pointer-events:none}
 .invoke-result{max-height:200px;overflow:auto;margin:0;padding:8px;background:var(--hover-bg);border:1px solid var(--border);border-radius:2px;font-family:'SF Mono','IBM Plex Mono','JetBrains Mono',Consolas,'Courier New',monospace;font-size:11px;color:var(--text);white-space:pre-wrap;word-break:break-word}
 .invoke-result[hidden]{display:none}

@@ -1215,8 +1215,8 @@ function selectNode(id) {
   if (node.type === 'task' || node.type === 'pipeline') {
     actions.push({ id: 'execute-btn', label: 'Execute', kind: '', run: () => executeNode(id) });
   }
-  if (node.type === 'agent') {
-    actions.push({ id: 'invoke-btn', label: 'Invoke', kind: '', run: () => openInvokeForm(id) });
+  if (node.verb) {
+    actions.push({ id: 'invoke-btn', label: capitalize(node.verb), kind: '', run: () => openInvokeForm(id) });
   }
   if (node.chart) {
     actions.push({ id: 'show-chart-btn', label: 'View Chart', kind: '', run: () => showChartView(id) });
@@ -1561,13 +1561,24 @@ async function executeNode(id) {
   if (btn) btn.disabled = false;
 }
 
-// ── Agent invoke ─────────────────────────────────────────────────────────
-// Backs the "Invoke" action on @Agent nodes. Unlike execute(), invoke() takes
-// arguments: GET /api/agents/{name}/parameters returns their JSON schema,
-// built from the agent's invoke() signature, and the form below is drawn
-// from it inside the inspector popup. POST /api/agents/{name}/invoke
-// validates the values against the same schema, converting them to the
-// annotated types, and calls the agent through Context.call().
+// ── Arguments form ───────────────────────────────────────────────────────
+// Backs the action of every node called with arguments, named by its `verb`:
+// Invoke on an @Agent, Call on an @Function. Unlike execute(), these take
+// arguments: GET {href}/parameters returns their JSON schema, built from the
+// signature (an agent's invoke(), a function's own less what is injected),
+// and the form below is drawn from it inside the inspector popup.
+// POST {href}/{verb} validates the values against the same schema,
+// converting them to the annotated types, and makes the call through
+// Context.call().
+
+function capitalize(text) {
+  return text.charAt(0).toUpperCase() + text.slice(1);
+}
+
+// "invoke" → "invoked", "call" → "called".
+function pastTense(verb) {
+  return verb.endsWith('e') ? `${verb}d` : `${verb}ed`;
+}
 
 // The input a schema property is edited with: a plain input for a string,
 // number or boolean (including one that may also be null), and a JSON
@@ -1617,21 +1628,22 @@ async function openInvokeForm(id) {
 
   const form = document.createElement('form');
   form.className = 'invoke-form';
+  form.style.setProperty('--invoke-accent', nodeAccent(node));
   form.innerHTML =
     fields.join('') +
     `<button type="submit" class="invoke-run">Run</button>` +
     `<pre class="invoke-result" hidden></pre>`;
   form.addEventListener('submit', e => {
     e.preventDefault();
-    invokeAgent(id, form, props, required);
+    submitArguments(id, form, props, required);
   });
   body.appendChild(form);
   showInspectorPopup(node);
   form.querySelector('input,textarea,button').focus();
 }
 
-// Reads the form back into invoke() arguments. An empty optional field is
-// left out, so the agent's own default applies.
+// Reads the form back into the call's arguments. An empty optional field is
+// left out, so the parameter's own default applies.
 function readInvokeForm(form, props, required) {
   const args = {};
   for (const [name, prop] of Object.entries(props)) {
@@ -1657,7 +1669,7 @@ function invokeErrorMessage(detail, status) {
   return detail || `HTTP ${status}`;
 }
 
-async function invokeAgent(id, form, props, required) {
+async function submitArguments(id, form, props, required) {
   const node = nodeMap[id];
   const btn = form.querySelector('.invoke-run');
   const out = form.querySelector('.invoke-result');
@@ -1665,7 +1677,7 @@ async function invokeAgent(id, form, props, required) {
   out.classList.remove('error');
   try {
     const args = readInvokeForm(form, props, required);
-    const res = await fetch(`${apiPath(id)}/invoke`, {
+    const res = await fetch(`${apiPath(id)}/${node.verb}`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(args),
@@ -1674,11 +1686,11 @@ async function invokeAgent(id, form, props, required) {
     if (!res.ok) throw new Error(invokeErrorMessage(body.detail, res.status));
     const result = body.result;
     out.textContent = typeof result === 'string' ? result : JSON.stringify(result, null, 2);
-    addLog(`${node.label} invoked`, nodeAccent(node));
+    addLog(`${node.label} ${pastTense(node.verb)}`, nodeAccent(node));
   } catch (err) {
     out.textContent = err.message;
     out.classList.add('error');
-    addLog(`${node.label} invoke failed — ${err.message}`, ACCENT.alert);
+    addLog(`${node.label} ${node.verb} failed — ${err.message}`, ACCENT.alert);
   }
   out.hidden = false;
   btn.disabled = false;

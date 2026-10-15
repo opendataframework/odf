@@ -126,9 +126,11 @@
   topology as `function` nodes, with their own default icon and color and a `Functions`
   count in the header. They are linked to the components injected into them and to the
   classes and functions that ask for them through `Annotated[Callable[...], func]`. A
-  `functions` list in `[ui.topology]` filters them. MCP's `list_components` lists them,
-  and the logs of their calls are served at `/api/functions/{name}/logs` and by
-  `component_logs`.
+  `functions` list in `[ui.topology]` filters them. A node's **Call** action opens the
+  same form as an agent's **Invoke**, with one field per argument the function takes
+  beyond its injected ones, and calls it through `context.call()`. MCP's
+  `list_components` lists them, and the logs of their calls are served at
+  `/api/functions/{name}/logs` and by `component_logs`.
 
 ### Changed
 

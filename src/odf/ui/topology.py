@@ -26,7 +26,7 @@ from opendataframework.layer import Layer
 from opendataframework.repository import Repository
 from opendataframework.utils import kebab, normalize
 
-from odf.ui import keys
+from odf.ui import arguments, keys
 
 # ``[ui.topology]`` list key -> the execution type (a node's type) it filters.
 _KIND_KEYS = {
@@ -358,6 +358,7 @@ def _describe_node(
         "row": row,
         "details": isinstance(instance, DetailsProtocol),
         "chart": isinstance(instance, ChartProtocol),
+        "verb": arguments.verb(cls),
     }
 
 

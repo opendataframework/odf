@@ -89,16 +89,19 @@ as its own collection, by registered name:
 | `POST /api/services/{name}/start`, `.../stop` | a `@Service` |
 | `POST /api/tasks/{name}/execute`, `/api/pipelines/{name}/execute` | a `@Task` / `@Pipeline` |
 | `GET /api/agents/{name}/parameters`, `POST .../invoke` | an `@Agent` |
+| `GET /api/functions/{name}/parameters`, `POST .../call` | an `@Function` |
 | `/api/repositories/{name}/records`, `.../stream`, ... | a `@Repository`'s data |
 
 An action that doesn't apply to a kind has no route, so it answers `404`.
 
-An `@Agent`'s node has an **Invoke** action. It opens a form with one field
-per `invoke()` argument, prefilled with the defaults, and shows the result
-under it. A `str`, number or `bool` argument gets an input of that kind, and
+An `@Agent`'s node has an **Invoke** action, and an `@Function`'s node a
+**Call** action. Each opens a form with one field per argument, prefilled with
+the defaults, and shows the result under it. An agent's arguments are those of
+its `invoke()`. A function's are its own, less the parameters the `Context`
+injects. A `str`, number or `bool` argument gets an input of that kind, and
 any other type a JSON field. Values are converted to the annotated types
-before `context.call()` invokes the agent, and a value that doesn't fit is
-reported under the form without invoking it. See
+before `context.call()` makes the call, and a value that doesn't fit is
+reported under the form without making it. See
 [`examples/19-agent`](https://github.com/opendataframework/odf/tree/main/examples/19-agent).
 
 A node's icon and color can be changed from its "Customize" popover, which

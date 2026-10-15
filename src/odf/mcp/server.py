@@ -25,7 +25,7 @@ from opendataframework.component import McpToolsProtocol
 from opendataframework.context import Context
 from opendataframework.repository import ReadableProtocol
 
-from odf.ui import agents, keys
+from odf.ui import arguments, keys
 from odf.ui.data import find_repository, list_records, parse_filters
 from odf.ui.topology import build_topology
 
@@ -167,13 +167,13 @@ class McpServer:
         # collide with the fixed tools or with another component's tools of
         # the same local name.
         registered_names: set[str] = set()
-        for cls in agents.agents(self._context):
+        for cls in arguments.callables(self._context, "agent"):
             full_name = f"{self._context.key(cls)}.invoke"
             registered_names.add(full_name)
             mcp.add_tool(
-                self._invoke_handler(cls),
+                self._call_handler(cls),
                 name=full_name,
-                description=agents.describe(cls),
+                description=arguments.describe(cls),
                 structured_output=False,
             )
         for cls, instance in self._context.instances.items():
@@ -216,19 +216,20 @@ class McpServer:
             raise ValueError(f"No resolved component with key {key!r}")
         return cls
 
-    def _invoke_handler(self, cls: type):
-        """Return a tool handler that invokes ``cls`` through ``Context.call()``.
+    def _call_handler(self, obj: type | Callable[..., object]):
+        """Return a tool handler that calls ``obj`` through ``Context.call()``.
 
-        Its signature is the agent's ``invoke()`` parameters, so FastMCP
-        builds the tool's input schema from the agent's own annotations.
+        Its signature is the arguments ``obj`` takes (see
+        ``odf.ui.arguments``), so FastMCP builds the tool's input schema from
+        its own annotations.
         """
 
-        def invoke(**arguments):
-            """Call the agent's ``invoke()`` through the context, with ``arguments``."""
-            return self._context.call(self._context.key(cls), **arguments)
+        def call(**kwargs):
+            """Call the object through the context, with ``kwargs`` as its arguments."""
+            return self._context.call(self._context.key(obj), **kwargs)
 
-        invoke.__signature__ = inspect.Signature(agents.invoke_parameters(self._context, cls))
-        return invoke
+        call.__signature__ = inspect.Signature(arguments.parameters(self._context, obj))
+        return call
 
     @property
     def mcp(self) -> FastMCP:

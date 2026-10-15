@@ -37,7 +37,7 @@ from opendataframework.view import (
     VideoView,
 )
 
-from odf.ui import agents, annotations, data, keys, layout, media, themes
+from odf.ui import annotations, arguments, data, keys, layout, media, themes
 from odf.ui.topology import TopologyView, build_topology
 
 if TYPE_CHECKING:
@@ -487,32 +487,23 @@ class UiServer:
             except Exception as exc:
                 raise HTTPException(status_code=500, detail=str(exc)) from exc
 
-        @app.get("/api/agents/{name}/parameters")
-        def agent_parameters(name: str) -> dict:
-            """Return the JSON schema of an agent's ``invoke()`` arguments."""
-            cls = self._find_or_404("agents", name)
-            return agents.invoke_model(self._context, cls).model_json_schema()
-
-        @app.post("/api/agents/{name}/invoke")
-        def invoke_agent(name: str, body: dict) -> dict:
-            """Invoke an agent through the context, with the request body as arguments."""
-            cls = self._find_or_404("agents", name)
-            model = agents.invoke_model(self._context, cls)
-            try:
-                validated = model.model_validate(body)
-            except ValidationError as exc:
-                raise HTTPException(
-                    status_code=422, detail=jsonable_encoder(exc.errors(include_url=False))
-                ) from exc
-            kwargs = {field: getattr(validated, field) for field in type(validated).model_fields}
-            try:
-                result = self._context.call(self._context.key(cls), **kwargs)
-            except Exception as exc:
-                raise HTTPException(status_code=500, detail=str(exc)) from exc
-            try:
-                return {"result": jsonable_encoder(result)}
-            except Exception:
-                return {"result": str(result)}
+        # Whatever takes arguments (see odf.ui.arguments): an agent's
+        # /api/agents/{name}/{parameters,invoke}, a function's
+        # /api/functions/{name}/{parameters,call}.
+        for kind, entry in arguments.ENTRIES.items():
+            collection = keys.COLLECTIONS[kind]
+            app.add_api_route(
+                f"/api/{collection}/{{name}}/parameters",
+                self._parameters_route(collection),
+                methods=["GET"],
+                name=f"{kind}_parameters",
+            )
+            app.add_api_route(
+                f"/api/{collection}/{{name}}/{entry.verb}",
+                self._call_route(collection),
+                methods=["POST"],
+                name=f"{kind}_{entry.verb}",
+            )
 
         @app.get("/api/chat/config")
         def chat_config() -> dict:
@@ -580,6 +571,41 @@ class UiServer:
             return FileResponse(path, media_type="image/svg+xml")
 
         self._app = app
+
+    def _parameters_route(self, collection: str) -> Callable[[str], dict]:
+        """Return the route serving the JSON schema of a ``collection`` object's arguments."""
+
+        def parameters(name: str) -> dict:
+            """Return the JSON schema of the arguments the named object takes."""
+            obj = self._find_or_404(collection, name)
+            return arguments.model(self._context, obj).model_json_schema()
+
+        return parameters
+
+    def _call_route(self, collection: str) -> Callable[[str, dict], dict]:
+        """Return the route calling a ``collection`` object through ``Context.call()``."""
+
+        def call(name: str, body: dict) -> dict:
+            """Call the named object, with the request body as its arguments."""
+            obj = self._find_or_404(collection, name)
+            model = arguments.model(self._context, obj)
+            try:
+                validated = model.model_validate(body)
+            except ValidationError as exc:
+                raise HTTPException(
+                    status_code=422, detail=jsonable_encoder(exc.errors(include_url=False))
+                ) from exc
+            kwargs = {field: getattr(validated, field) for field in type(validated).model_fields}
+            try:
+                result = self._context.call(self._context.key(obj), **kwargs)
+            except Exception as exc:
+                raise HTTPException(status_code=500, detail=str(exc)) from exc
+            try:
+                return {"result": jsonable_encoder(result)}
+            except Exception:
+                return {"result": str(result)}
+
+        return call
 
     def _find_or_404(self, collection: str, name: str) -> type | Callable[..., object]:
         """Resolve ``/api/{collection}/{name}`` to its class or function, or raise 404."""

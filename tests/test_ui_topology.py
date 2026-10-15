@@ -178,7 +178,28 @@ def test_function_is_a_node_addressed_by_its_key():
     assert node["desc"] == "Load rows from a file into the database."
     assert node["details"] is False
     assert node["chart"] is False
+    assert node["verb"] == "call"
     assert data["stats"]["types"]["function"] == 2
+
+
+def test_verb_names_how_a_node_is_called_with_arguments():
+    NS = make_ns()
+
+    @NS
+    @Agent
+    class VerbAgent:
+        def invoke(self) -> None: ...
+
+    @NS
+    @Task
+    class VerbTask:
+        def execute(self) -> None: ...
+
+    with Context(namespaces={NS}, config={"k": "v"}) as ctx:
+        data = build_topology(ctx, "proj")
+
+    verbs = {n["label"]: n["verb"] for n in data["nodes"]}
+    assert verbs == {"VerbAgent": "invoke", "VerbTask": None, "Config": None}
 
 
 def test_function_edges_run_both_ways():

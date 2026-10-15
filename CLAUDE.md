@@ -51,7 +51,7 @@ needs a third-party dependency:
 | `server.py` | `Server` — composes an `opendataframework.Project` and adds `start(ui=, mcp=, chat=)` orchestration on top | (imports the rest of this table lazily) |
 | `cli.py`, `scaffold.py`, `templates/` | `odf init`/`odf run` CLI | `typer`, `rich` |
 | `mcp/server.py` | MCP server exposing component lifecycle + task/pipeline execution + repository data queries as tools | `mcp`, `uvicorn` |
-| `ui/server.py`, `ui/topology.py`, `ui/keys.py`, `ui/data.py`, `ui/agents.py`, `ui/layout.py`, `ui/extensions.py`, `ui/themes.py` | UI dev server | `fastapi`, `uvicorn` |
+| `ui/server.py`, `ui/topology.py`, `ui/keys.py`, `ui/data.py`, `ui/arguments.py`, `ui/layout.py`, `ui/extensions.py`, `ui/themes.py` | UI dev server | `fastapi`, `uvicorn` |
 | `ui/static/` | The UI itself: `index.html` + `app.js` shared by every theme, `icons/` holding the built-in topology icons (one file per picker group, plus `shared.js`), and `themes/<name>/` holding each theme's `theme.css`, `favicon.svg` and optional `theme.js` | (Leaflet from a CDN; no build step) |
 | `chat/engine.py` | Chat window backing a `Server`'s UI | `ollama` |
 
