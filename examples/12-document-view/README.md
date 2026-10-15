@@ -33,8 +33,10 @@ from the UI, declares nothing and is worked out from its content as before. PDFs
 [pdf.js](https://mozilla.github.io/pdf.js/), loaded from a CDN the first
 time a PDF is shown, so displaying one needs network access.
 
-Whether text is Markdown isn't taken from a file name or a declared type, so
-the UI goes by the text itself: headings, code fences, links and tables
+Text declared as Markdown, by a `text/markdown` type or a `.md` name as
+`order-105.md` is, is rendered, and text declared as anything else
+(`order-103.txt`) is shown as written. Text with no declaration, a `str`
+receipt say, is judged by the text itself: headings, code fences, links and tables
 count for more than list items and bold text, and enough of them make it
 Markdown. It is then rendered by [marked](https://marked.js.org/), with
 [DOMPurify](https://github.com/cure53/DOMPurify) removing any markup that

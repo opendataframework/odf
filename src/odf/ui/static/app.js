@@ -3223,6 +3223,17 @@ function contentName(record) {
   return (record['$content'] && record['$content'].filename) || '';
 }
 
+// Whether a record's declared content is Markdown: true for a Markdown type or
+// a .md/.markdown name, false for any other declaration, and undefined when
+// nothing is declared, leaving it to looksLikeMarkdown().
+function declaredMarkdown(record) {
+  const content = record['$content'];
+  if (!content || !(content.content_type || content.filename)) return undefined;
+  const type = (content.content_type || '').split(';')[0].trim().toLowerCase();
+  return type === 'text/markdown' || type === 'text/x-markdown' ||
+    /\.(md|markdown)$/i.test(content.filename || '');
+}
+
 // A record's content, labelled by its file name, or by its key without one.
 function contentLabel(record) {
   return contentName(record) || String(record[repoSchemas[activeRepoId].key]);
@@ -4437,10 +4448,10 @@ function loadMarkdownRenderer() {
   return markdownRenderer;
 }
 
-// Whether text reads as Markdown. A document carries no file name or type to
-// go by, so this weighs the syntax on its lines: a heading, a code fence, a
-// link or a table rule counts for more than a list item or bold text, which
-// plain text has too. The reader's source toggle is there for a wrong guess.
+// Whether text reads as Markdown, for a document whose repository declares no
+// name or type for it (see declaredMarkdown()). This weighs the syntax on its
+// lines: a heading, a code fence, a link or a table rule counts for more than
+// a list item or bold text, which plain text has too. The reader's source toggle is there for a wrong guess.
 function looksLikeMarkdown(text) {
   if (text.startsWith('#!')) return false; // a script, whose comments would pass for headings
   let score = 0;
@@ -4547,13 +4558,14 @@ function parseJsonDocument(text) {
 }
 
 // Shows a text document in the reader: as a tree if it is JSON, rendered if
-// it reads as Markdown, or as its source either way while the tool last
-// picked for text is the one that labels it. `note` is HTML to put under it.
-function showDocumentText(text, note) {
+// it is Markdown, or as its source either way while the tool last picked for
+// text is the one that labels it. `note` is HTML to put under it, and
+// `markdown` whether it is declared Markdown (see declaredMarkdown()).
+function showDocumentText(text, note, markdown) {
   const json = parseJsonDocument(text);
   const labelling = annotationsEnabled && lightboxTools.text === 'span';
   // `astral`: whether it has characters that take two UTF-16 units, see unitsToPoints().
-  openText = { text, note, json, rendered: !labelling && (json !== undefined || looksLikeMarkdown(text)), astral: /[\uD800-\uDFFF]/.test(text) };
+  openText = { text, note, json, rendered: !labelling && (json !== undefined || (markdown ?? looksLikeMarkdown(text))), astral: /[\uD800-\uDFFF]/.test(text) };
   renderDocumentText();
 }
 
@@ -4614,7 +4626,7 @@ async function openDocument(record, url) {
     // Held in the record itself, so there is no file to open or download.
     document.getElementById('media-lightbox-open').hidden = true;
     document.getElementById('media-lightbox-download').hidden = true;
-    if (typeof value === 'string') showDocumentText(value, '');
+    if (typeof value === 'string') showDocumentText(value, '', declaredMarkdown(record));
     else reader.innerHTML = `<div class="doc-tree">${renderJsonTree(value)}</div>`;
     return;
   }
@@ -4628,7 +4640,8 @@ async function openDocument(record, url) {
       if (token !== docLoadToken) return;
       const size = Number((res.headers.get('Content-Range') || '').split('/')[1]);
       showDocumentText(text.replace(/\uFFFD+$/, ''),
-        size > DOC_TEXT_MAX_BYTES ? '<div class="doc-note">Only the start of this document is shown. Open the original for the rest.</div>' : '');
+        size > DOC_TEXT_MAX_BYTES ? '<div class="doc-note">Only the start of this document is shown. Open the original for the rest.</div>' : '',
+        declaredMarkdown(record));
       return;
     }
     if (res.body) res.body.cancel();

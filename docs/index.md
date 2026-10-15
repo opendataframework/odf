@@ -80,7 +80,9 @@ instead of the type worked out from the bytes, as long as it fits the view:
 an image view only takes an image type, never SVG, and a document is still
 only ever served as a PDF, plain text or a download. A declared `filename`
 labels the record's card and its caption, is sent as `Content-Disposition`,
-and names the file the **Download** action saves. Records list it, under a
+and names the file the **Download** action saves. A text document declared
+as Markdown, by a `text/markdown` type or a `.md` name, is rendered, and one
+declared as anything else is shown as written. Records list it, under a
 `$content` key, so the UI has it without a request per record. See
 [`examples/12-document-view`](https://github.com/opendataframework/odf/tree/main/examples/12-document-view).
 

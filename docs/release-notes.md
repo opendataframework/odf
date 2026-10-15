@@ -142,7 +142,10 @@
   type detected from the bytes when it fits the view, and a document is still only ever
   a PDF, plain text or a download. A declared `filename` labels the record's card and
   its caption when open, is sent as `Content-Disposition`, and names the file saved by
-  the new **Download** action in the open record's tool rail. The records payload
+  the new **Download** action in the open record's tool rail. A text document declared
+  as Markdown (`text/markdown` or a `.md` name) is rendered, and one declared as
+  anything else is shown as written, instead of either being judged by its text. The
+  records payload
   carries both under a `$content` key. See the
   [`12-document-view`](https://github.com/opendataframework/odf/tree/main/examples/12-document-view)
   example.
