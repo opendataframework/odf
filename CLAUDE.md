@@ -144,7 +144,7 @@ not per commit; format mirrors `opendataframework`'s release notes).
 
 ## Examples
 
-`examples/` has 19 examples. `01-table-view/` (a repository with no
+`examples/` has 20 examples. `01-table-view/` (a repository with no
 `data_view()` at all, so the UI falls back to the implicit default table)
 and `06-location-view/` (`data_view() -> LocationView` overriding that
 default with a map) are the two ends of the `data_view()` concept.
@@ -155,7 +155,8 @@ belong with the CLI that describes them, not the core package).
 `07-streaming-video-view/` through `16-mcp-chat/` are the UI-only surface
 (streaming/video/audio/image/document/timeseries views, chart, chart via
 Plotly, MCP + chat) ported from the original monorepo's `demo/` project.
-`17-custom-icon/`, `18-custom-mcp-tool/` and `19-agent/` (an `@Agent`
-invoked from the UI, over MCP and from chat) were added here since. Treat new examples here as small and focused, one concept each, matching
+`17-custom-icon/`, `18-custom-mcp-tool/`, `19-agent/` (an `@Agent`
+invoked from the UI, over MCP and from chat) and `20-function/` (plain
+functions adopted with `@Function`) were added here since. Treat new examples here as small and focused, one concept each, matching
 `opendataframework/examples/`'s style rather than `demo/`'s
 everything-at-once approach.

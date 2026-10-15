@@ -133,7 +133,9 @@
   arguments as its input schema, and `@function.load-data` in the chat keeps that tool
   available for the message. `list_components` lists functions, with a `verb` on every
   entry that has such a tool. The logs of their calls are served at
-  `/api/functions/{name}/logs` and by `component_logs`.
+  `/api/functions/{name}/logs` and by `component_logs`. See the
+  [`20-function`](https://github.com/opendataframework/odf/tree/main/examples/20-function)
+  example.
 
 ### Changed
 

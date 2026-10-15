@@ -201,7 +201,8 @@ Each resolved `@Function` becomes its own tool the same way, `<key>.call`
 less the parameters the `Context` injects, and its description is the first
 paragraph of the function's docstring. `list_components` lists functions with
 the type `function`, and gives every entry a `verb`, `invoke` or `call`, when
-it has one of these tools.
+it has one of these tools. See
+[`examples/20-function`](https://github.com/opendataframework/odf/tree/main/examples/20-function).
 
 New components can be added to an existing project from within an AI
 chat: the MCP service knows the available component library and the
