@@ -20,6 +20,11 @@ New code can ask for an adopted function in the same way. `ReportTotals`, a
 `@Task`, takes `total: Annotated[Callable[..., float], store_total]` in its
 constructor, so `self.total("Berlin")` passes only the store.
 
+A task's or a pipeline's `execute()` takes no arguments: what it works on
+comes from config. Work that takes arguments on each run, a store, a date
+range or a dry-run flag, is a function, called with them from the UI, over
+MCP or from chat.
+
 `odf` shows each function in three places, all built from its signature less
 the injected parameters:
 
