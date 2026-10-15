@@ -14,6 +14,7 @@ from opendataframework.repository import Repository
 from opendataframework.service import Service
 from opendataframework.view import (
     AudioView,
+    ContentMetadata,
     DocumentView,
     ImageView,
     LocationView,
@@ -1035,6 +1036,122 @@ def test_record_media_returns_404_for_a_document_held_inline():
     assert as_json.status_code == 404
     assert as_text.status_code == 404
     assert [r["body"] for r in records] == [{"total": 1}, "hi"]
+
+
+def described_papers_namespace(papers, metadata):
+    """A ``Papers`` repository like ``papers_namespace``'s, declaring ``metadata`` per name."""
+    NS = make_ns()
+
+    @NS
+    @Repository(Paper)
+    class Papers:
+        def all(self):
+            return papers
+
+        def data_view(self):
+            return DocumentView(field="body")
+
+        def content_metadata(self, paper):
+            return metadata.get(paper.name, ContentMetadata())
+
+    return NS
+
+
+@pytest.mark.parametrize(
+    ("content", "declared", "content_type"),
+    [
+        (b"a,b\n1,2\n", "text/csv", "text/plain; charset=utf-8"),
+        (b"<script>alert(1)</script>", "text/html", "text/plain; charset=utf-8"),
+        (b"%PDF-1.7\nrest", "application/zip", "application/octet-stream"),
+        (b"%PDF-1.7\nrest", None, "application/pdf"),
+    ],
+)
+def test_record_media_takes_a_declared_document_type_within_the_document_rule(
+    content, declared, content_type
+):
+    NS = described_papers_namespace(
+        [Paper(name="a", body=content)], {"a": ContentMetadata(content_type=declared)}
+    )
+
+    with Context(namespaces={NS}) as ctx:
+        client = TestClient(UiServer(ctx, "proj")._app)
+        r = client.get("/api/repositories/papers/records/a/media")
+
+    assert r.headers["content-type"] == content_type
+    assert r.headers["x-content-type-options"] == "nosniff"
+
+
+def test_record_media_takes_a_declared_image_type_and_names_the_content():
+    NS = make_ns()
+
+    @NS
+    @Repository(Photo)
+    class Photos:
+        def all(self):
+            return [Photo(name="a", image=b"\x00\x00\x01\x00icon")]
+
+        def data_view(self):
+            return ImageView(field="image")
+
+        def content_metadata(self, photo):
+            return ContentMetadata(filename=f"scans/{photo.name}.ico", content_type="image/x-icon")
+
+    with Context(namespaces={NS}) as ctx:
+        client = TestClient(UiServer(ctx, "proj")._app)
+        whole = client.get("/api/repositories/photos/records/a/media")
+        part = client.get(
+            "/api/repositories/photos/records/a/media", headers={"Range": "bytes=0-1"}
+        )
+
+    for r in (whole, part):
+        assert r.headers["content-type"] == "image/x-icon"
+        assert r.headers["x-content-type-options"] == "nosniff"
+        assert (
+            r.headers["content-disposition"] == "inline; filename=\"a.ico\"; filename*=UTF-8''a.ico"
+        )
+    assert part.status_code == 206
+
+
+def test_record_media_sends_no_content_disposition_without_a_filename():
+    NS = described_papers_namespace(
+        [Paper(name="a", body=b"text")], {"a": ContentMetadata(content_type="text/plain")}
+    )
+
+    with Context(namespaces={NS}) as ctx:
+        client = TestClient(UiServer(ctx, "proj")._app)
+        r = client.get("/api/repositories/papers/records/a/media")
+
+    assert "content-disposition" not in r.headers
+
+
+def test_records_carry_declared_content_metadata_for_a_media_view():
+    NS = described_papers_namespace(
+        [Paper(name="a", body=b"%PDF-1.7"), Paper(name="b", body="inline")],
+        {"a": ContentMetadata(filename="a.pdf", content_type="application/pdf")},
+    )
+
+    with Context(namespaces={NS}) as ctx:
+        client = TestClient(UiServer(ctx, "proj")._app)
+        records = client.get("/api/repositories/papers/records").json()
+
+    assert records == [
+        {
+            "name": "a",
+            "body": None,
+            "$content": {"filename": "a.pdf", "content_type": "application/pdf"},
+        },
+        {"name": "b", "body": "inline"},
+    ]
+
+
+def test_records_carry_no_content_metadata_for_a_repository_without_it():
+    NS = papers_namespace([Paper(name="a", body=b"%PDF-1.7")])
+
+    with Context(namespaces={NS}) as ctx:
+        client = TestClient(UiServer(ctx, "proj")._app)
+        records = client.get("/api/repositories/papers/records").json()
+
+    assert records == [{"name": "a", "body": None}]
 
 
 def test_record_media_returns_403_for_a_repository_without_a_media_view():

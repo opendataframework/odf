@@ -3217,6 +3217,17 @@ function mediaUrl(repoId, key) {
   return `${apiPath(repoId)}/records/${encodeURIComponent(key)}/media`;
 }
 
+// The file name the repository's content_metadata() declares for a record's
+// content, sent under the records payload's reserved `$content` key, or ''.
+function contentName(record) {
+  return (record['$content'] && record['$content'].filename) || '';
+}
+
+// A record's content, labelled by its file name, or by its key without one.
+function contentLabel(record) {
+  return contentName(record) || String(record[repoSchemas[activeRepoId].key]);
+}
+
 // The type the server detected for a record's media, to name a format this
 // browser can't decode (HEIC outside Safari, say). Only the response headers
 // are needed, so the body is dropped unread.
@@ -3248,7 +3259,7 @@ async function showTileFallback(preview, url) {
 }
 
 // Fetches the active repository's records and renders them as a grid of
-// cards, each opening its record in the lightbox. `previewHtml(url, key)`
+// cards, each opening its record in the lightbox. `previewHtml(url, label)`
 // gives a card's preview, with both arguments already HTML-escaped. Returns
 // the grid element, or null when there was nothing to render.
 async function renderMediaGrid(previewHtml) {
@@ -3270,10 +3281,10 @@ async function renderMediaGrid(previewHtml) {
   }
   lightboxRecords = records;
   body.innerHTML = '<div class="media-grid">' + records.map((r, i) => {
-    const key = escapeHtml(r[schema.key]);
-    return `<button class="media-tile" data-index="${i}" title="Open ${key}">` +
-      previewHtml(escapeHtml(mediaUrl(activeRepoId, r[schema.key])), key) +
-      `<span class="media-class"></span><span class="media-duration"></span><div class="media-caption">${key}</div></button>`;
+    const label = escapeHtml(contentLabel(r));
+    return `<button class="media-tile" data-index="${i}" title="Open ${label}">` +
+      previewHtml(escapeHtml(mediaUrl(activeRepoId, r[schema.key])), label) +
+      `<span class="media-class"></span><span class="media-duration"></span><div class="media-caption">${label}</div></button>`;
   }).join('') + '</div>';
   renderTileClasses();
   const grid = body.querySelector('.media-grid');
@@ -3298,7 +3309,7 @@ async function showImageView(repoId) {
 }
 
 async function refreshImageView() {
-  await renderMediaGrid((url, key) => `<img loading="lazy" src="${url}" alt="${key}">`);
+  await renderMediaGrid((url, label) => `<img loading="lazy" src="${url}" alt="${label}">`);
 }
 
 // Empties every lightbox element. A <video>/<audio> keeps downloading and
@@ -3323,11 +3334,17 @@ function openLightbox(index) {
   unloadLightboxPlayers();
 
   const player = LIGHTBOX_PLAYERS[schema.view.kind];
+  const name = contentName(record);
+  const download = document.getElementById('media-lightbox-download');
   document.getElementById('media-lightbox-error').hidden = true;
   document.getElementById('media-lightbox-open').hidden = false;
+  download.hidden = false;
+  download.href = url;
+  download.download = name; // without one, the browser names the file itself
+  download.title = name ? `Download ${name}` : 'Download';
   if (player) {
     player.hidden = false;
-    if (player.tagName === 'IMG') player.alt = String(record[schema.key]);
+    if (player.tagName === 'IMG') player.alt = contentLabel(record);
     player.src = url;
     if (player.play) player.play().catch(() => {}); // blocked autoplay leaves the controls to start it
   } else {
@@ -3336,8 +3353,9 @@ function openLightbox(index) {
   document.getElementById('media-lightbox-open').href = url;
   document.getElementById('media-lightbox-caption').innerHTML =
     `<span>${index + 1} / ${lightboxRecords.length}</span>` +
+    (name ? `<span><b>${escapeHtml(name)}</b></span>` : '') +
     Object.entries(record)
-      .filter(([k]) => k !== schema.view.field)
+      .filter(([k]) => k !== schema.view.field && k !== '$content')
       .map(([k, v]) => `<span><b>${escapeHtml(k)}</b>: ${escapeHtml(v ?? '')}</span>`)
       .join('');
   document.getElementById('media-lightbox-prev').disabled = index === 0;
@@ -3529,7 +3547,7 @@ function renderLightboxRail() {
     button.hidden = !tools.includes(button.dataset.tool);
     button.setAttribute('aria-pressed', button.dataset.tool === tool);
   }
-  const actions = ['media-lightbox-source', 'media-lightbox-open'].some(id => !document.getElementById(id).hidden);
+  const actions = ['media-lightbox-source', 'media-lightbox-open', 'media-lightbox-download'].some(id => !document.getElementById(id).hidden);
   document.getElementById('media-lightbox-rail-sep').hidden = !tools.length || !actions;
   lightboxRail.hidden = !tools.length && !actions;
   document.getElementById('media-lightbox').dataset.tool = tool || '';
@@ -4297,10 +4315,9 @@ function renderMediaReplay(schema) {
   const body = document.getElementById('map-panel-body');
   const tag = schema.view.kind === 'video' ? 'video' : 'audio';
   const clip = activeClipFor(replayPos);
-  const key = escapeHtml(String(clip[schema.key]));
   body.innerHTML =
     '<div class="media-list"><div class="media-item">' +
-    `<div class="media-caption">${key}</div>` +
+    `<div class="media-caption">${escapeHtml(contentLabel(clip))}</div>` +
     `<${tag} controls id="replay-media-el" src="${escapeHtml(mediaUrl(activeRepoId, clip[schema.key]))}"></${tag}>` +
     '</div></div>' +
     `<div class="floating-pagination">${renderTimelineBar()}</div>`;
@@ -4594,8 +4611,9 @@ async function openDocument(record, url) {
   reader.hidden = false;
   reader.scrollTop = 0;
   if (value !== null && value !== undefined) {
-    // Held in the record itself, so there is no file to open.
+    // Held in the record itself, so there is no file to open or download.
     document.getElementById('media-lightbox-open').hidden = true;
+    document.getElementById('media-lightbox-download').hidden = true;
     if (typeof value === 'string') showDocumentText(value, '');
     else reader.innerHTML = `<div class="doc-tree">${renderJsonTree(value)}</div>`;
     return;

@@ -6,6 +6,8 @@ wires to its route.
 """
 
 import codecs
+import unicodedata
+from urllib.parse import quote
 
 # ISO-BMFF major brands (bytes 8-12, after the ``ftyp`` box marker) of the
 # still-image formats phones save by default.
@@ -26,6 +28,74 @@ SNIFF_LENGTH = 12
 # How many it looks at for a document, where telling text from binary takes
 # more than a magic number.
 DOCUMENT_SNIFF_LENGTH = 1024
+
+
+# Declared document types served as plain text, besides any ``text/...``.
+_TEXT_DOCUMENT_TYPES = frozenset({"application/json", "application/xml"})
+
+_PLAIN_TEXT = "text/plain; charset=utf-8"
+
+
+def media_type(content: bytes, default: str, declared: str | None) -> str:
+    """Decide the type a record's media is served as.
+
+    A repository's declared type (``ContentMetadata.content_type``) is taken
+    over sniffing, which can't tell CSV from plain text or name a format it
+    has no magic number for. It is only a hint, though, so it never widens
+    what is served: a document is still a PDF, plain text or an opaque
+    download, and a declared image, video or audio type is only taken when
+    it is of the view's kind and can't run script.
+
+    Args:
+        content: The encoded media's leading bytes, as ``sniff_media_type``
+            takes them.
+        default: The view's default type, as ``sniff_media_type`` takes it.
+        declared: The type the repository declared, or ``None``.
+
+    Returns:
+        The type to serve the media as.
+    """
+    declared = (declared or "").partition(";")[0].strip().lower()
+    if not declared:
+        return sniff_media_type(content, default)
+    major = default.partition("/")[0]
+    if major == "application":
+        if declared == "application/pdf":
+            return declared
+        if (
+            declared.startswith("text/")
+            or declared in _TEXT_DOCUMENT_TYPES
+            or declared.endswith(("+json", "+xml"))
+        ):
+            return _PLAIN_TEXT
+        return default
+    kinds = ("image",) if major == "image" else ("video", "audio")
+    if declared.partition("/")[0] in kinds and declared != "image/svg+xml":
+        return declared
+    return sniff_media_type(content, default)
+
+
+def content_disposition(filename: str | None) -> str | None:
+    """Build an inline ``Content-Disposition`` naming a record's content.
+
+    Args:
+        filename: The declared file name (``ContentMetadata.filename``),
+            which may come from anywhere, so any path is dropped and so are
+            control characters.
+
+    Returns:
+        The header value, or ``None`` when no usable name is left.
+    """
+    name = (filename or "").replace("\\", "/").rpartition("/")[2]
+    name = "".join(c for c in name if unicodedata.category(c)[0] != "C").strip()
+    if name in ("", ".", ".."):
+        return None
+    fallback = "".join(
+        c if c.isascii() and c not in '"\\' else "_"
+        for c in unicodedata.normalize("NFKD", name)
+        if not unicodedata.combining(c)
+    )
+    return f"inline; filename=\"{fallback}\"; filename*=UTF-8''{quote(name, safe='')}"
 
 
 def sniff_media_type(content: bytes, default: str) -> str:

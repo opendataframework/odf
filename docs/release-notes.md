@@ -136,6 +136,16 @@
   `/api/functions/{name}/logs` and by `component_logs`. See the
   [`20-function`](https://github.com/opendataframework/odf/tree/main/examples/20-function)
   example.
+- **View**: a repository implementing `content_metadata(entity)` (`ContentMetadata`, new
+  in `opendataframework` 0.3.0) names and types its records' content in the image,
+  video, audio and document views. A declared `content_type` is served instead of the
+  type detected from the bytes when it fits the view, and a document is still only ever
+  a PDF, plain text or a download. A declared `filename` labels the record's card and
+  its caption when open, is sent as `Content-Disposition`, and names the file saved by
+  the new **Download** action in the open record's tool rail. The records payload
+  carries both under a `$content` key. See the
+  [`12-document-view`](https://github.com/opendataframework/odf/tree/main/examples/12-document-view)
+  example.
 
 ### Changed
 

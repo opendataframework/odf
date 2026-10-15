@@ -4,7 +4,13 @@ from opendataframework.context import Context
 from opendataframework.entity import Entity
 from opendataframework.namespace import Namespace
 from opendataframework.repository import Repository
-from opendataframework.view import LocationView, TableView, TimeseriesView
+from opendataframework.view import (
+    ContentMetadata,
+    ImageView,
+    LocationView,
+    TableView,
+    TimeseriesView,
+)
 
 from odf.ui.data import (
     build_entity,
@@ -205,6 +211,28 @@ def test_list_records_filters_numeric_field_by_stringified_substring():
     records, total = list_records(FakeRepo(), Widget, filters={"id": "1"})
     assert total == 2
     assert {r["id"] for r in records} == {1, 12}
+
+
+class DescribedRepo:
+    def all(self):
+        return [Widget(id=1, name="a.png"), Widget(id=2, name="")]
+
+    def content_metadata(self, widget):
+        return ContentMetadata(filename=widget.name or None, content_type=None)
+
+
+def test_list_records_carries_declared_content_metadata_for_a_content_view():
+    records, _ = list_records(DescribedRepo(), Widget, view=ImageView(field="name"))
+    assert records == [
+        {"id": 1, "name": "a.png", "$content": {"filename": "a.png", "content_type": None}},
+        {"id": 2, "name": ""},
+    ]
+
+
+def test_list_records_adds_no_content_metadata_without_a_content_view():
+    without_view, _ = list_records(DescribedRepo(), Widget)
+    table, _ = list_records(DescribedRepo(), Widget, view=TableView())
+    assert without_view == table == [{"id": 1, "name": "a.png"}, {"id": 2, "name": ""}]
 
 
 def test_parse_filters_keeps_only_known_non_empty_fields():

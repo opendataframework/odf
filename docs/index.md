@@ -72,6 +72,18 @@ Repositories can declare a `data_view()` to pick how their data renders
 (table, map, timeseries, streaming video/audio, ...) instead of the
 default table.
 
+A repository whose view shows content (an image, video, audio or document
+view) can also implement
+[`content_metadata(entity)`](https://opendataframework.github.io/opendataframework/view/)
+to name and type each record's content. A declared `content_type` is served
+instead of the type worked out from the bytes, as long as it fits the view:
+an image view only takes an image type, never SVG, and a document is still
+only ever served as a PDF, plain text or a download. A declared `filename`
+labels the record's card and its caption, is sent as `Content-Disposition`,
+and names the file the **Download** action saves. Records list it, under a
+`$content` key, so the UI has it without a request per record. See
+[`examples/12-document-view`](https://github.com/opendataframework/odf/tree/main/examples/12-document-view).
+
 ```python
 server.start(ui=True)
 print(server.ui_url)  # http://127.0.0.1:4747

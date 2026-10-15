@@ -27,6 +27,8 @@ from opendataframework.repository import (
 )
 from opendataframework.view import (
     AudioView,
+    ContentMetadata,
+    ContentMetadataProtocol,
     DataView,
     DataViewProtocol,
     DocumentView,
@@ -111,6 +113,7 @@ def list_records(
     limit: int | None = None,
     offset: int = 0,
     filters: dict[str, str] | None = None,
+    view: DataView | None = None,
 ) -> tuple[list[dict], int]:
     """Return a page of entities from ``instance.all()`` as plain dicts.
 
@@ -137,6 +140,10 @@ def list_records(
             filtering rather than type-aware comparisons, so it works
             uniformly across str/int/float/bool fields without risking a
             coercion error on partial input.
+        view: The repository's resolved view. Given one that points at
+            content, each record declaring ``content_metadata()`` carries
+            it under the reserved ``"$content"`` key (see
+            ``content_metadata``). ``None`` (the default) adds nothing.
 
     Returns:
         ``(records, total)`` — the page of JSON-serializable dicts, and the
@@ -148,7 +155,32 @@ def list_records(
         all_entities = [e for e in all_entities if _matches_filters(e, filters)]
     total = len(all_entities)
     page = all_entities[offset : offset + limit] if limit is not None else all_entities
-    return [to_json_safe_dict(entity) for entity in page], total
+    records = []
+    for entity in page:
+        record = to_json_safe_dict(entity)
+        metadata = content_metadata(instance, view, entity)
+        if metadata is not None and (metadata.filename or metadata.content_type):
+            record["$content"] = dataclasses.asdict(metadata)
+        records.append(record)
+    return records, total
+
+
+def content_metadata(
+    instance: object, view: DataView | None, entity: Any
+) -> ContentMetadata | None:
+    """Return what a repository declares about one record's content, if anything.
+
+    Only a view that points at content (``ImageView``/``VideoView``/
+    ``AudioView``/``DocumentView``) has content to describe, and only a
+    repository implementing ``ContentMetadataProtocol`` describes it.
+    ``"$content"`` can't be a dataclass field name, so the key
+    ``list_records`` stores this under can't collide with one.
+    """
+    if not isinstance(view, (ImageView, VideoView, AudioView, DocumentView)):
+        return None
+    if not isinstance(instance, ContentMetadataProtocol):
+        return None
+    return instance.content_metadata(entity)
 
 
 def _matches_filters(entity: Any, filters: dict[str, str]) -> bool:

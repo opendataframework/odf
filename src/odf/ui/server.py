@@ -208,8 +208,9 @@ class UiServer:
             """List a repository's records, paginated and filtered by query params."""
             _, instance, entity_cls = self._get_readable(repo_id)
             filters = data.parse_filters(entity_cls, request.query_params.items())
+            view = data.resolve_view(instance, readable=True)
             records, total = data.list_records(
-                instance, entity_cls, limit=limit, offset=offset, filters=filters
+                instance, entity_cls, limit=limit, offset=offset, filters=filters, view=view
             )
             response.headers["X-Total-Count"] = str(total)
             return records
@@ -300,6 +301,10 @@ class UiServer:
             A document is only ever served as a PDF, as plain text or as an
             opaque download, and never left for the browser to sniff, so
             stored markup can't run on the UI's origin when it is opened.
+
+            A repository's ``content_metadata()`` names the content, sent as
+            ``Content-Disposition``, and declares its type, taken over
+            sniffing within those same rules (see ``media.media_type``).
             """
             _, instance, entity_cls = self._get_readable(repo_id)
             view = self._get_data_view(repo_id)
@@ -315,12 +320,18 @@ class UiServer:
             if not isinstance(content, (bytes, bytearray)):
                 raise HTTPException(status_code=404, detail="Record has no media")
             content = bytes(content)
+            metadata = data.content_metadata(instance, view, record)
+            declared_type = metadata.content_type if metadata is not None else None
             headers = {"Accept-Ranges": "bytes"}
             sniff_length = media.SNIFF_LENGTH
             if isinstance(view, DocumentView):
                 sniff_length = media.DOCUMENT_SNIFF_LENGTH
+            if isinstance(view, DocumentView) or declared_type:
                 headers["X-Content-Type-Options"] = "nosniff"
-            content_type = media.sniff_media_type(content[:sniff_length], default_type)
+            disposition = media.content_disposition(metadata.filename if metadata else None)
+            if disposition is not None:
+                headers["Content-Disposition"] = disposition
+            content_type = media.media_type(content[:sniff_length], default_type, declared_type)
             try:
                 byte_range = media.parse_range(request.headers.get("range"), len(content))
             except ValueError:
