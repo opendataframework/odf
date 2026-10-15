@@ -57,7 +57,8 @@ current tool list — the six fixed tools (`list_components`,
 `query_repository`, `start_component`, `stop_component`, `execute_task`,
 `component_logs`) plus, for every resolved component that exposes its own
 MCP tools (prefixed by its key, `<namespace>.<name>.<tool>`), that
-component's own tools, and for every resolved `@Agent` its `<key>.invoke` tool;
+component's own tools, for every resolved `@Agent` its `<key>.invoke` tool, and
+for every resolved `@Function` its `<key>.call` tool;
 these are dynamic per project, so they aren't enumerated here by name. If
 the model requests a tool call, it's always executed and its result fed
 back to the model for a follow-up reply; the chat window additionally
@@ -68,7 +69,8 @@ shows what was called and its result inline only when `[project.chat]`'s
 
 Mentioning a component's key, `@<namespace>.<name>`, anywhere in a message
 scopes that turn's tool access to just that component — its own exposed
-tools (for an `@Agent`, its `<key>.invoke`), its own repository data (if it's a `Repository`), and
+tools (for an `@Agent`, its `<key>.invoke`, and for an `@Function`, its
+`<key>.call`), its own repository data (if it's a `Repository`), and
 its own lifecycle actions
 (`start_component`/`stop_component`/`execute_task`/`component_logs`,
 forced to that component regardless of what the model passes) — instead
@@ -78,7 +80,8 @@ repository a data question is about, `@repository.users how many rows are
 there?` scopes `query_repository` to just that repository's data, and
 `@agent.librarian anything by Herbert?` hands the question to the `Librarian`
 agent's `agent.librarian.invoke`, with the arguments the model fills in from
-the agent's schema.
+the agent's schema. `@function.load-data load data.csv` does the same through
+`function.load-data.call`.
 
 The key is the node id the topology graph uses, and the prefix of the
 component's own tools (e.g. a `@Task class MetricsFetcher` is addressed as

@@ -196,6 +196,13 @@ argument that can't be passed by keyword (positional-only, `*args`,
 `**kwargs`) is left out of the schema. See
 [`examples/19-agent`](https://github.com/opendataframework/odf/tree/main/examples/19-agent).
 
+Each resolved `@Function` becomes its own tool the same way, `<key>.call`
+(`function.load-data.call`). Its input schema is the function's signature,
+less the parameters the `Context` injects, and its description is the first
+paragraph of the function's docstring. `list_components` lists functions with
+the type `function`, and gives every entry a `verb`, `invoke` or `call`, when
+it has one of these tools.
+
 New components can be added to an existing project from within an AI
 chat: the MCP service knows the available component library and the
 project's current structure, generates the config delta and any needed

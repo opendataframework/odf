@@ -4,7 +4,8 @@ Not a DI-managed ``Service`` — like ``UiServer``, it introspects the container
 from the outside, so it is constructed and driven directly by
 ``Server.start(mcp=True)`` / ``Server.stop()``, after the ``Context`` has
 already resolved. Lets any MCP-speaking client (an LLM agent, Claude Desktop,
-...) start/stop components, execute tasks/pipelines, invoke agents, and query
+...) start/stop components, execute tasks/pipelines, invoke agents, call
+functions, and query
 repository data that was previously only reachable by clicking through the UI.
 """
 
@@ -74,8 +75,9 @@ class McpServer:
             pipeline, agent, and function: its type, layer, and — for services —
             whether it is currently running. Each entry's "id" is its key,
             "<namespace>.<name>" (e.g. "service.postgres"): pass it as the
-            "key" argument to the other tools. An "agent"-typed entry is
-            invoked through its own "<id>.invoke" tool."""
+            "key" argument to the other tools. An entry with a "verb" takes
+            arguments, through its own "<id>.<verb>" tool: an agent's
+            "<id>.invoke", a function's "<id>.call"."""
             topology = build_topology(self._context, project)
             return [
                 {k: v for k, v in node.items() if k not in ("col", "row")}
@@ -160,22 +162,24 @@ class McpServer:
             key (e.g. "service.postgres")."""
             return self._context.tail_logs(self._context.key(self._lookup(key)), lines)
 
-        # Component-exposed tools: every resolved agent gets an "invoke"
-        # tool, and every resolved instance implementing McpToolsProtocol
-        # contributes its own tools, in addition to the six fixed tools
-        # above. Both are prefixed by the component's key so they can't
+        # Component-exposed tools: everything that takes arguments gets a
+        # tool named by its verb (an agent's "invoke", a function's "call";
+        # see odf.ui.arguments), and every resolved instance implementing
+        # McpToolsProtocol contributes its own tools, in addition to the six
+        # fixed tools above. Both are prefixed by the component's key so they can't
         # collide with the fixed tools or with another component's tools of
         # the same local name.
         registered_names: set[str] = set()
-        for cls in arguments.callables(self._context, "agent"):
-            full_name = f"{self._context.key(cls)}.invoke"
-            registered_names.add(full_name)
-            mcp.add_tool(
-                self._call_handler(cls),
-                name=full_name,
-                description=arguments.describe(cls),
-                structured_output=False,
-            )
+        for kind, entry in arguments.ENTRIES.items():
+            for obj in arguments.callables(self._context, kind):
+                full_name = f"{self._context.key(obj)}.{entry.verb}"
+                registered_names.add(full_name)
+                mcp.add_tool(
+                    self._call_handler(obj),
+                    name=full_name,
+                    description=arguments.describe(obj),
+                    structured_output=False,
+                )
         for cls, instance in self._context.instances.items():
             if not isinstance(instance, McpToolsProtocol):
                 continue

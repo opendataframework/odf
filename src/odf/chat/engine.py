@@ -150,7 +150,8 @@ class ChatEngine:
         """Whether ``name`` may be offered/called while a turn addresses ``addressed``.
 
         The addressed component's own ``<id>.``-prefixed tools stay available:
-        its ``mcp_tools()``, and for an agent its ``<id>.invoke``.
+        its ``mcp_tools()``, an agent's ``<id>.invoke`` and a function's
+        ``<id>.call``.
         """
         if name.startswith(f"{addressed['id']}."):
             return True

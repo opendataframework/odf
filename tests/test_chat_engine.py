@@ -302,6 +302,37 @@ def test_addressing_agent_keeps_its_invoke_tool_and_passes_arguments_through(mon
     assert ("agent.librarian.invoke", {"question": "Anything by Herbert?"}) in fake_mcp.calls
 
 
+def test_addressing_function_keeps_its_call_tool(monkeypatch):
+    tools = [
+        *_SCOPED_TOOLS,
+        SimpleNamespace(
+            name="function.load-data.call",
+            description="Load rows from a file.",
+            inputSchema={"type": "object", "properties": {"path": {"type": "string"}}},
+        ),
+    ]
+    components = [
+        *_DEFAULT_COMPONENTS,
+        {"id": "function.load-data", "label": "load_data", "type": "function", "verb": "call"},
+    ]
+    tool_call = make_tool_call("function.load-data.call", {"path": "data.csv"})
+    client = FakeAsyncClient(
+        [
+            [make_chunk("", tool_calls=[tool_call])],
+            [make_chunk("Loaded 42 rows.")],
+        ]
+    )
+    fake_mcp = FakeMcp(tools=tools, components=components, tool_result={"result": 42})
+    chat_engine = build_engine(monkeypatch, client, mcp=fake_mcp)
+
+    collect(chat_engine, [{"role": "user", "content": "@function.load-data load data.csv"}])
+
+    tool_names = {t["function"]["name"] for t in client.calls[0]["tools"]}
+    assert "function.load-data.call" in tool_names
+    assert "query_repository" not in tool_names
+    assert ("function.load-data.call", {"path": "data.csv"}) in fake_mcp.calls
+
+
 def test_addressing_rejects_tool_outside_scope(monkeypatch):
     tool_call = make_tool_call("other.thing", {})
     client = FakeAsyncClient(

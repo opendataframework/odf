@@ -562,6 +562,74 @@ def test_agent_invoke_tool_is_listed_as_an_agent_component():
     assert node["decorator"] == "@Agent"
 
 
+def _scale(NS):
+    @NS
+    @Component
+    class Units:
+        factor = 10
+
+    @NS
+    @Function
+    def scale(value: int, units: Units, label: str = "x") -> dict:
+        """Scale a value by the configured factor.
+
+        Longer details.
+        """
+        return {"value": value * units.factor, "label": label}
+
+    @NS
+    @Function
+    def ping() -> str:
+        return "pong"
+
+    return scale
+
+
+def test_function_is_registered_as_its_own_call_tool_without_injected_parameters():
+    NS = make_ns()
+    _scale(NS)
+
+    with Context(namespaces={NS}) as ctx:
+        tools = {t.name: t for t in asyncio.run(McpServer(ctx, "proj")._mcp.list_tools())}
+
+    tool = tools["n-s.scale.call"]
+    assert tool.description == "Scale a value by the configured factor."
+    assert tool.inputSchema["properties"] == {
+        "value": {"title": "Value", "type": "integer"},
+        "label": {"default": "x", "title": "Label", "type": "string"},
+    }
+    assert tool.inputSchema["required"] == ["value"]
+    assert tools["n-s.ping.call"].description == "Call the ping function."
+    assert "n-s.scale.invoke" not in tools
+
+
+def test_function_call_tool_calls_the_function_through_the_context(tmp_path):
+    NS = make_ns()
+    _scale(NS)
+
+    with Context(namespaces={NS}, log_dir=tmp_path) as ctx:
+        mcp = McpServer(ctx, "proj")._mcp
+        result = call(mcp, "n-s.scale.call", {"value": 4})
+        logs = ctx.tail_logs("n-s.scale")
+
+    assert json.loads(text(result)) == {"value": 40, "label": "x"}
+    assert any("completed" in entry["message"] for entry in logs)
+
+
+def test_list_components_gives_each_entry_its_verb():
+    NS = make_ns()
+    _scale(NS)
+    _librarian(NS)
+
+    with Context(namespaces={NS}) as ctx:
+        nodes = structured(call(McpServer(ctx, "proj")._mcp, "list_components"))
+
+    verbs = {n["id"]: n["verb"] for n in nodes}
+    assert verbs["n-s.scale"] == "call"
+    assert verbs["n-s.librarian"] == "invoke"
+    assert verbs["n-s.units"] is None
+
+
 def test_agent_invoke_tool_clashing_with_its_own_mcp_tool_raises():
     NS = make_ns()
 

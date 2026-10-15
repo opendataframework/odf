@@ -128,8 +128,11 @@
   classes and functions that ask for them through `Annotated[Callable[...], func]`. A
   `functions` list in `[ui.topology]` filters them. A node's **Call** action opens the
   same form as an agent's **Invoke**, with one field per argument the function takes
-  beyond its injected ones, and calls it through `context.call()`. MCP's
-  `list_components` lists them, and the logs of their calls are served at
+  beyond its injected ones, and calls it through `context.call()`. Over MCP each
+  function is its own tool, `<key>.call` (`function.load-data.call`), with the same
+  arguments as its input schema, and `@function.load-data` in the chat keeps that tool
+  available for the message. `list_components` lists functions, with a `verb` on every
+  entry that has such a tool. The logs of their calls are served at
   `/api/functions/{name}/logs` and by `component_logs`.
 
 ### Changed
