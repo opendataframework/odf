@@ -113,8 +113,8 @@
   example describes the format. `[ui] annotations = false` in `config.toml` turns
   it off.
 - **Agents**: `@Agent` classes (new in `opendataframework` 0.3.0) appear in the topology
-  as `agent` nodes, with their own default icon and color, an `Agents` count in the
-  header, and an `agents` list in `[ui.topology]`. A node's **Invoke** action opens a
+  as `agent` nodes, with their own default icon and color, an entry in the type legend
+  under the canvas, an `Agents` count in the header, and an `agents` list in `[ui.topology]`. A node's **Invoke** action opens a
   form built from the agent's `invoke()` arguments and shows the result. Over MCP each
   agent is its own tool, `<key>.invoke` (`agent.librarian.invoke`), with `invoke()`'s
   signature as its input schema, and `@agent.librarian` in the chat keeps that tool
@@ -123,8 +123,8 @@
   [`19-agent`](https://github.com/opendataframework/odf/tree/main/examples/19-agent)
   example.
 - **Functions**: `@Function` functions (new in `opendataframework` 0.3.0) appear in the
-  topology as `function` nodes, with their own default icon and color and a `Functions`
-  count in the header. They are linked to the components injected into them and to the
+  topology as `function` nodes, with their own default icon and color, an entry in the
+  type legend under the canvas, and a `Functions` count in the header. They are linked to the components injected into them and to the
   classes and functions that ask for them through `Annotated[Callable[...], func]`. A
   `functions` list in `[ui.topology]` filters them. A node's **Call** action opens the
   same form as an agent's **Invoke**, with one field per argument the function takes
