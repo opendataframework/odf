@@ -17,15 +17,23 @@ What a document opens as follows from the value of `OrderReceipt`'s
 | `bytes` of a PDF | its pages | its first page, with the page count |
 | `bytes` of UTF-8 text (plain text, JSON, Markdown, CSV, ...) | text, as for a `str` | its first lines |
 
-File bytes are told apart by their content, not by a file name, and are
-served by `GET /api/repositories/{id}/records/{key}/media`, which **Open
-original** links to. Bytes that are neither a PDF nor UTF-8 text (a `.docx`,
-say) can't be displayed: the card and the reader name the type instead, and
-**Open original** downloads the file. PDFs are drawn by
+File bytes are served by `GET /api/repositories/{id}/records/{key}/media`,
+which **Open original** links to and **Download** saves. Bytes that are
+neither a PDF nor UTF-8 text (a `.docx`, say) can't be displayed: the card and
+the reader name the type instead, and **Open original** downloads the file.
+
+`OrderReceipts` also implements `content_metadata(receipt)`, declaring each
+file receipt's name (`order-104.pdf`) and type (`application/pdf`). The file
+names aren't `OrderReceipt` fields: the repository keeps them beside the
+receipts it read from `data/receipts/`. A declared name labels the card and
+the reader and names the downloaded file. A declared type is taken over
+working the type out from the bytes, but only picks between the same three
+outcomes: a PDF, text, or a download. A receipt held in the record, or saved
+from the UI, declares nothing and is worked out from its content as before. PDFs are drawn by
 [pdf.js](https://mozilla.github.io/pdf.js/), loaded from a CDN the first
 time a PDF is shown, so displaying one needs network access.
 
-A record carries no file name or type to say that its text is Markdown, so
+Whether text is Markdown isn't taken from a file name or a declared type, so
 the UI goes by the text itself: headings, code fences, links and tables
 count for more than list items and bold text, and enough of them make it
 Markdown. It is then rendered by [marked](https://marked.js.org/), with
@@ -56,7 +64,7 @@ something already in it.
 └── app/
     ├── __init__.py      # imports both modules so decorators register at startup
     ├── entities.py       # OrderReceipt(id, order_id, document, issued_at) — @Entity
-    └── repositories.py   # OrderReceipts — @Storage @Repository(OrderReceipt), in-memory, pre-seeded
+    └── repositories.py   # OrderReceipts — @Storage @Repository(OrderReceipt), in-memory, pre-seeded, with content_metadata()
 ```
 
 ## Dependencies

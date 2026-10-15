@@ -6,6 +6,8 @@ previewing the start of its document; selecting a card opens the document.
 What it opens as follows from OrderReceipt's `document` field: a dict is a
 collapsible JSON tree, text is text (a tree again if it is JSON, rendered if
 it reads as Markdown), and the bytes of a file are a PDF or a text file.
+content_metadata() names each file receipt and gives its type, which labels
+its card and names it when downloaded.
 
 OrderReceipts comes pre-seeded in-memory (see app/repositories.py's
 _SEED_RECEIPTS, two of them read from data/receipts) rather than seeded here,
