@@ -1112,6 +1112,20 @@ def test_record_media_takes_a_declared_image_type_and_names_the_content():
     assert part.status_code == 206
 
 
+def test_record_media_names_the_content_on_a_range_past_the_end():
+    NS = described_papers_namespace(
+        [Paper(name="a", body=b"0123456789")], {"a": ContentMetadata(filename="a.txt")}
+    )
+
+    with Context(namespaces={NS}) as ctx:
+        client = TestClient(UiServer(ctx, "proj")._app)
+        r = client.get("/api/repositories/papers/records/a/media", headers={"Range": "bytes=99-"})
+
+    assert r.status_code == 416
+    assert r.headers["content-range"] == "bytes */10"
+    assert r.headers["content-disposition"] == "inline; filename=\"a.txt\"; filename*=UTF-8''a.txt"
+
+
 def test_record_media_sends_no_content_disposition_without_a_filename():
     NS = described_papers_namespace(
         [Paper(name="a", body=b"text")], {"a": ContentMetadata(content_type="text/plain")}

@@ -12,6 +12,7 @@ from opendataframework.namespace import Namespace
 from opendataframework.repository import Repository
 from opendataframework.service import Service
 from opendataframework.task import Task
+from opendataframework.view import ContentMetadata, ImageView
 
 from odf.mcp.server import McpServer
 
@@ -394,6 +395,27 @@ def test_query_repository_ignores_unknown_filter_keys():
 
     _, data = result
     assert data["total"] == 3
+
+
+def test_query_repository_leaves_out_content_metadata():
+    NS = make_ns()
+
+    @NS
+    @Repository(Widget)
+    class Widgets:
+        def all(self):
+            return _widgets()
+
+        def data_view(self):
+            return ImageView(field="name")
+
+        def content_metadata(self, widget):
+            return ContentMetadata(filename=f"{widget.name}.png", content_type="image/png")
+
+    with Context(namespaces={NS}) as ctx:
+        _, data = call(McpServer(ctx, "proj")._mcp, "query_repository", {"key": ctx.key(Widgets)})
+
+    assert all("$content" not in r for r in data["records"])
 
 
 def test_query_repository_unknown_repo_raises():
