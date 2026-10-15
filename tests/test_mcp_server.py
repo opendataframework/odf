@@ -7,6 +7,7 @@ from mcp.server.fastmcp.exceptions import ToolError
 from opendataframework.component import Component, McpTool
 from opendataframework.context import Context
 from opendataframework.entity import Entity
+from opendataframework.function import Function
 from opendataframework.namespace import Namespace
 from opendataframework.repository import Repository
 from opendataframework.service import Service
@@ -68,6 +69,22 @@ def test_list_components_returns_resolved_graph():
     assert any(node["label"] == "Thing" and node["type"] == "component" for node in nodes)
 
 
+def test_list_components_lists_functions():
+    NS = make_ns()
+
+    @NS
+    @Function
+    def double(value: int) -> int:
+        return value * 2
+
+    with Context(namespaces={NS}) as ctx:
+        nodes = structured(call(McpServer(ctx, "proj")._mcp, "list_components"))
+
+    node = next(node for node in nodes if node["label"] == "double")
+    assert node["id"] == "n-s.double"
+    assert node["type"] == "function"
+
+
 def test_list_components_reports_service_running_state():
     NS = make_ns()
 
@@ -122,6 +139,41 @@ def test_start_component_rejects_non_service():
         mcp = McpServer(ctx, "proj")._mcp
         with pytest.raises(ToolError, match="is not a Service"):
             call(mcp, "start_component", {"key": ctx.key(Thing)})
+
+
+def test_lifecycle_tools_reject_a_function_by_type():
+    NS = make_ns()
+
+    @NS
+    @Function
+    def double(value: int) -> int:
+        return value * 2
+
+    with Context(namespaces={NS}) as ctx:
+        mcp = McpServer(ctx, "proj")._mcp
+        with pytest.raises(ToolError, match="n-s.double is not a Service"):
+            call(mcp, "start_component", {"key": "n-s.double"})
+        with pytest.raises(ToolError, match="n-s.double is not a Service"):
+            call(mcp, "stop_component", {"key": "n-s.double"})
+        with pytest.raises(ToolError, match="n-s.double is not a Task or Pipeline"):
+            call(mcp, "execute_task", {"key": "n-s.double"})
+        with pytest.raises(ToolError, match="is not a repository"):
+            call(mcp, "query_repository", {"key": "n-s.double"})
+
+
+def test_component_logs_reads_a_function_s_calls(tmp_path):
+    NS = make_ns()
+
+    @NS
+    @Function
+    def double(value: int) -> int:
+        return value * 2
+
+    with Context(namespaces={NS}, log_dir=tmp_path) as ctx:
+        ctx.call("n-s.double", value=2)
+        result = call(McpServer(ctx, "proj")._mcp, "component_logs", {"key": "n-s.double"})
+
+    assert any("completed" in entry["message"] for entry in structured(result))
 
 
 def test_start_component_unknown_key_raises():

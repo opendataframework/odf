@@ -6,7 +6,7 @@ const TW2 = TW / 2, TH2 = TH / 2;
 // Populated from CSS custom properties by readTheme() — see Theme section.
 const ACCENT = {
   config: '', component: '', repository: '',
-  service: '', task: '', pipeline: '', agent: '', alert: '',
+  service: '', task: '', pipeline: '', agent: '', function: '', alert: '',
 };
 
 // Colors for the six built-in @Layer names, also populated from CSS custom
@@ -19,6 +19,7 @@ const LAYER_DEFAULT_COLORS = {
 const TYPE_LABEL = {
   config:'Config', component:'@Component', repository:'@Repository',
   service:'@Service', task:'@Task', pipeline:'@Pipeline', agent:'@Agent',
+  function:'@Function',
 };
 
 // The map-panel mode each DataView kind opens into (see setMapMode below) —
@@ -677,8 +678,39 @@ function drawObservatory(sx, sy, accent, lit) {
   ctx.restore();
 }
 
+// Function → relay box: a low box with a conduit across its roof, and a pulse
+// carried through it from one end to the other, as a call passes through.
+function drawRelayBox(sx, sy, accent, lit) {
+  const bh = 14, scale = 0.7;
+  drawBox(sx, sy, bh, accent, lit, scale);
+  const top = sy - bh;
+  const x0 = sx - TW2 * scale * 0.6, y0 = top + TH2 * scale * 0.6 - 10;
+  const x1 = sx + TW2 * scale * 0.6, y1 = top - TH2 * scale * 0.6 - 10;
+
+  ctx.save();
+  ctx.strokeStyle = rgba(accent, lit ? 0.9 : 0.6);
+  ctx.lineWidth = 1.2;
+  ctx.beginPath();
+  ctx.moveTo(x0, y0 + 10);
+  ctx.lineTo(x0, y0);
+  ctx.lineTo(x1, y1);
+  ctx.lineTo(x1, y1 + 10);
+  ctx.stroke();
+  ctx.restore();
+
+  const t = (animT * 0.6 + sx * 0.01) % 1;
+  ctx.save();
+  ctx.beginPath();
+  ctx.arc(x0 + (x1 - x0) * t, y0 + (y1 - y0) * t, 1.8, 0, Math.PI * 2);
+  ctx.fillStyle = accent;
+  ctx.shadowColor = accent;
+  ctx.shadowBlur = lit ? 6 : 3;
+  ctx.fill();
+  ctx.restore();
+}
+
 // ── Icon registry ──────────────────────────────────────────────────────────
-// One entry per selectable icon shape. The seven below are the exec-type
+// One entry per selectable icon shape. The eight below are the exec-type
 // defaults (drawn when a node has no `icon` override — see iconKey() below).
 // Every other built-in icon is purely user-selectable, assignable to any node
 // regardless of exec type, and lives in its group's file under icons/,
@@ -698,6 +730,7 @@ const ICONS = {
   task:       { draw: drawFactoryCube,    bh: 30, scale: 0.8,  extraTop: 20, label: '@Task factory cube',      group: 'Defaults' },
   pipeline:   { draw: drawConveyorPad,    bh: 10, scale: 1,    extraTop: 0,  label: '@Pipeline conveyor',      group: 'Defaults' },
   agent:      { draw: drawObservatory,    bh: 24, scale: 0.75, extraTop: 18, label: '@Agent observatory',      group: 'Defaults' },
+  function:   { draw: drawRelayBox,       bh: 14, scale: 0.7,  extraTop: 6,  label: '@Function relay box',     group: 'Defaults' },
 };
 // Derives the label placement/hit-testing extents for one ICONS entry —
 // shared by the built-in postprocessing pass below and by ODF.registerIcon
@@ -2062,6 +2095,7 @@ function renderStats(data) {
   document.getElementById('stat-tasks').textContent     = String(types.task || 0);
   document.getElementById('stat-pipelines').textContent = String(types.pipeline || 0);
   document.getElementById('stat-agents').textContent    = String(types.agent || 0);
+  document.getElementById('stat-functions').textContent = String(types.function || 0);
   document.getElementById('hdr-subtitle').textContent   = `Topology · ${data.project}`;
   document.getElementById('node-count').textContent     = String(data.stats.objects).padStart(2, '0');
   document.title = `${BRAND} — ${data.project}`;

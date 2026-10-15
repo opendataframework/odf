@@ -10,6 +10,7 @@ repository data that was previously only reachable by clicking through the UI.
 
 import inspect
 import threading
+from collections.abc import Callable
 from typing import Any
 
 try:
@@ -70,7 +71,7 @@ class McpServer:
         @mcp.tool()
         def list_components() -> list[dict]:
             """List every resolved component, repository, service, task,
-            pipeline, and agent: its type, layer, and — for services —
+            pipeline, agent, and function: its type, layer, and — for services —
             whether it is currently running. Each entry's "id" is its key,
             "<namespace>.<name>" (e.g. "service.postgres"): pass it as the
             "key" argument to the other tools. An "agent"-typed entry is
@@ -124,7 +125,7 @@ class McpServer:
             try:
                 self._context.start(key)
             except KeyError:
-                raise ValueError(f"No resolved component with key {key!r}") from None
+                raise self._missing(key, "a Service") from None
             except TypeError as exc:
                 raise ValueError(str(exc)) from exc
             return f"{key} started"
@@ -136,7 +137,7 @@ class McpServer:
             try:
                 self._context.stop(key)
             except KeyError:
-                raise ValueError(f"No resolved component with key {key!r}") from None
+                raise self._missing(key, "a Service") from None
             except TypeError as exc:
                 raise ValueError(str(exc)) from exc
             return f"{key} stopped"
@@ -149,7 +150,7 @@ class McpServer:
             try:
                 return self._context.execute(key)
             except KeyError:
-                raise ValueError(f"No resolved component with key {key!r}") from None
+                raise self._missing(key, "a Task or Pipeline") from None
             except TypeError as exc:
                 raise ValueError(str(exc)) from exc
 
@@ -193,12 +194,22 @@ class McpServer:
         self._mcp = mcp
         self._app = mcp.streamable_http_app()
 
-    def _lookup(self, key: str) -> type:
-        """Return the resolved class addressed by ``key``.
+    def _missing(self, key: str, expected: str) -> ValueError:
+        """Return the error for ``key`` naming no resolved instance of ``expected``.
+
+        The ``Context`` reports a function's key there as unknown, since a
+        function has no instance; say what it is instead.
+        """
+        if keys.lookup(self._context, key) is not None:
+            return ValueError(f"{key} is not {expected}")
+        return ValueError(f"No resolved component with key {key!r}")
+
+    def _lookup(self, key: str) -> type | Callable[..., object]:
+        """Return the resolved class or function addressed by ``key``.
 
         Raises:
             ValueError: If ``key`` is not ``<namespace>.<name>``, or names no
-                resolved class.
+                resolved class or function.
         """
         cls = keys.lookup(self._context, key)
         if cls is None:

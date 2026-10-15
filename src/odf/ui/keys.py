@@ -15,11 +15,12 @@ execution type instead: a ``@Task`` registered as ``loader`` is served under
 Pure introspection, like ``ui/data.py``: no HTTP concerns live here.
 """
 
-from collections.abc import Callable
+from collections.abc import Callable, Iterator
 
 from opendataframework.agent import Agent
 from opendataframework.component import Component
 from opendataframework.context import Context
+from opendataframework.function import Function
 from opendataframework.namespace import Namespace, parse
 from opendataframework.pipeline import Pipeline
 from opendataframework.repository import Repository
@@ -27,7 +28,7 @@ from opendataframework.service import Service
 from opendataframework.task import Task
 from opendataframework.utils import normalize
 
-# Order matters only in that a class is expected to be registered under
+# Order matters only in that an object is expected to be registered under
 # exactly one of these — first match wins if that assumption is ever broken.
 EXEC_NAMESPACES: list[tuple[str, type[Namespace]]] = [
     ("repository", Repository),
@@ -35,6 +36,7 @@ EXEC_NAMESPACES: list[tuple[str, type[Namespace]]] = [
     ("task", Task),
     ("pipeline", Pipeline),
     ("agent", Agent),
+    ("function", Function),
     ("component", Component),
 ]
 
@@ -46,6 +48,7 @@ COLLECTIONS: dict[str, str] = {
     "task": "tasks",
     "pipeline": "pipelines",
     "agent": "agents",
+    "function": "functions",
 }
 
 
@@ -77,33 +80,44 @@ def href(context: Context, obj: type | Callable[..., object]) -> str | None:
     return f"/api/{collection}/{name_of(key)}" if key and collection else None
 
 
-def lookup(context: Context, key: str) -> type | None:
-    """Return the resolved class addressed by ``key``, in any casing, if any.
+def resolved(context: Context) -> Iterator[type | Callable[..., object]]:
+    """Yield every resolved class, then every resolved function."""
+    yield from context.instances
+    yield from context.functions
+
+
+def lookup(context: Context, key: str) -> type | Callable[..., object] | None:
+    """Return the resolved class or function addressed by ``key``, in any casing, if any.
 
     Raises:
         ValueError: If ``key`` is not ``<namespace>.<name>``.
     """
     wanted = parse(key)
-    return next((cls for cls in context.instances if key_of(context, cls) == wanted), None)
+    return next((obj for obj in resolved(context) if key_of(context, obj) == wanted), None)
 
 
-def resolve(context: Context, kind: str, name: str) -> type | None:
-    """Return the resolved class of execution type ``kind`` registered as ``name``, if any.
+def resolve(context: Context, kind: str, name: str) -> type | Callable[..., object] | None:
+    """Return the resolved class or function of execution type ``kind`` registered as ``name``.
 
     Args:
         context: A ``Context`` that has already been opened.
         kind: An execution type, such as ``"task"``.
         name: The registered name, in any casing.
+
+    Returns:
+        The class or function, or ``None`` if nothing resolved matches.
     """
     wanted = normalize(name)
-    for cls in context.instances:
-        key = key_of(context, cls)
-        if key is not None and name_of(key) == wanted and exec_type(cls) == kind:
-            return cls
+    for obj in resolved(context):
+        key = key_of(context, obj)
+        if key is not None and name_of(key) == wanted and exec_type(obj) == kind:
+            return obj
     return None
 
 
-def resolve_collection(context: Context, collection: str, name: str) -> type | None:
-    """Return the resolved class served at ``/api/{collection}/{name}``, if any."""
+def resolve_collection(
+    context: Context, collection: str, name: str
+) -> type | Callable[..., object] | None:
+    """Return the resolved class or function served at ``/api/{collection}/{name}``, if any."""
     kind = next((kind for kind, path in COLLECTIONS.items() if path == collection), None)
     return resolve(context, kind, name) if kind is not None else None

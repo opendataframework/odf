@@ -1,8 +1,12 @@
+from collections.abc import Callable
+from typing import Annotated
+
 import pytest
 from opendataframework.agent import Agent
 from opendataframework.component import Component
 from opendataframework.context import Context
 from opendataframework.entity import Entity
+from opendataframework.function import Function
 from opendataframework.layer import Storage
 from opendataframework.namespace import Namespace
 from opendataframework.pipeline import Pipeline
@@ -118,6 +122,91 @@ def test_same_class_name_in_two_namespaces_gets_two_nodes():
     assert len(keys) == 2
     assert ids(data) == keys
     assert {n["href"] for n in data["nodes"]} == {"/api/tasks/loader", "/api/components/loader"}
+
+
+# --- functions ----------------------------------------------------------------
+
+
+def make_functions():
+    """Return ``(NS, Db, load, Refresh)``: Db -> load -> Refresh, and load -> sync."""
+    NS = make_ns()
+
+    @NS
+    @Component
+    class FnDb: ...
+
+    @NS("loader")
+    @Storage
+    @Function
+    def load(path: str, db: FnDb) -> int:
+        """Load rows from a file into the database.
+
+        Longer details.
+        """
+        return 1
+
+    @NS
+    @Function
+    def sync(run: Annotated[Callable[..., int], load]) -> int:
+        return run("data.csv")
+
+    @NS
+    @Task
+    class FnRefresh:
+        def __init__(self, load: Annotated[Callable[..., int], load]) -> None:
+            self.load = load
+
+        def execute(self) -> None: ...
+
+    return NS, FnDb, load, FnRefresh
+
+
+def test_function_is_a_node_addressed_by_its_key():
+    NS, *_ = make_functions()
+
+    with Context(namespaces={NS}) as ctx:
+        data = build_topology(ctx, "proj")
+
+    node = next(n for n in data["nodes"] if n["label"] == "load")
+    assert node["id"] == "n-s.loader"
+    assert node["name"] == "loader"
+    assert node["type"] == "function"
+    assert node["decorator"] == "@Function"
+    assert node["layer"] == "storage"
+    assert node["href"] == "/api/functions/loader"
+    assert node["file"] == "tests/test_ui_topology.py"
+    assert node["desc"] == "Load rows from a file into the database."
+    assert node["details"] is False
+    assert node["chart"] is False
+    assert data["stats"]["types"]["function"] == 2
+
+
+def test_function_edges_run_both_ways():
+    NS, *_ = make_functions()
+
+    with Context(namespaces={NS}) as ctx:
+        data = build_topology(ctx, "proj")
+
+    assert edge_pairs(data) == {
+        ("n-s.fn-db", "n-s.loader"),
+        ("n-s.loader", "n-s.fn-refresh"),
+        ("n-s.loader", "n-s.sync"),
+    }
+    cols = {n["id"]: n["col"] for n in data["nodes"]}
+    assert cols["n-s.fn-db"] < cols["n-s.loader"] < cols["n-s.sync"]
+
+
+def test_functions_list_filters_functions_and_bridges_a_hidden_one():
+    NS, *_ = make_functions()
+
+    view = TopologyView.from_config({"functions": ["sync", "missing"]})
+    with Context(namespaces={NS}) as ctx:
+        data = build_topology(ctx, "proj", view)
+        unmatched = view.unmatched(ctx)
+
+    assert "n-s.loader" not in ids(data)
+    assert {("n-s.fn-db", "n-s.sync"), ("n-s.fn-db", "n-s.fn-refresh")} <= edge_pairs(data)
+    assert unmatched == [("functions", "missing")]
 
 
 # --- service running state --------------------------------------------------

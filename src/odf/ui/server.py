@@ -7,7 +7,7 @@ outside, so it is constructed and driven directly by ``Server.start(ui=True)``
 
 import json
 import threading
-from collections.abc import AsyncIterator, Iterator
+from collections.abc import AsyncIterator, Callable, Iterator
 from pathlib import Path
 from typing import TYPE_CHECKING
 
@@ -581,8 +581,8 @@ class UiServer:
 
         self._app = app
 
-    def _find_or_404(self, collection: str, name: str) -> type:
-        """Resolve ``/api/{collection}/{name}`` to its class, or raise 404."""
+    def _find_or_404(self, collection: str, name: str) -> type | Callable[..., object]:
+        """Resolve ``/api/{collection}/{name}`` to its class or function, or raise 404."""
         cls = keys.resolve_collection(self._context, collection, name)
         if cls is None:
             raise HTTPException(status_code=404, detail="Component not found")
@@ -590,14 +590,14 @@ class UiServer:
 
     def _get_details(self, collection: str, name: str) -> DetailsProtocol:
         """Resolve a component to its instance, or raise 403 if not detailed."""
-        instance = self._context.instances[self._find_or_404(collection, name)]
+        instance = self._context.instances.get(self._find_or_404(collection, name))
         if not isinstance(instance, DetailsProtocol):
             raise HTTPException(status_code=403, detail="Component has no details")
         return instance
 
     def _get_chart(self, collection: str, name: str) -> ChartProtocol:
         """Resolve a component to its instance, or raise 403 if not chartable."""
-        instance = self._context.instances[self._find_or_404(collection, name)]
+        instance = self._context.instances.get(self._find_or_404(collection, name))
         if not isinstance(instance, ChartProtocol):
             raise HTTPException(status_code=403, detail="Component has no chart")
         return instance

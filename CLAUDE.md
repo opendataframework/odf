@@ -72,7 +72,7 @@ drawing CSS can't express goes in its `theme.js` through
 stay a classic script, since custom icon scripts use its top-level names as
 globals.
 
-`app.js` holds only the seven exec-type default icons. Every other built-in
+`app.js` holds only the eight exec-type default icons. Every other built-in
 icon goes in its group's file under `ui/static/icons/` (a new group is a new
 file plus a `<script>` tag in `index.html`, after `icons/shared.js`), where
 it registers through `ODF.registerIcon` with that file's `group` and draws

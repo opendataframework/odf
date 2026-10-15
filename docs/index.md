@@ -84,7 +84,7 @@ as its own collection, by registered name:
 
 | Route | For |
 |---|---|
-| `GET /api/{collection}/{name}/logs` | any component (`components`, `repositories`, `services`, `tasks`, `pipelines`, `agents`) |
+| `GET /api/{collection}/{name}/logs` | any component (`components`, `repositories`, `services`, `tasks`, `pipelines`, `agents`, `functions`) |
 | `GET /api/{collection}/{name}/details`, `.../chart` | a component implementing `details()` / `chart()` |
 | `POST /api/services/{name}/start`, `.../stop` | a `@Service` |
 | `POST /api/tasks/{name}/execute`, `/api/pipelines/{name}/execute` | a `@Task` / `@Pipeline` |
@@ -122,10 +122,11 @@ config = false                       # default true: show the Config node
 repositories = ["readings"]          # only these repositories
 tasks = ["seed-readings"]            # only these tasks
 agents = []                          # no agents
+functions = ["load-data"]            # only these functions
 components = []                      # no plain components (e.g. a Storage component)
 ```
 
-`repositories`, `services`, `tasks`, `pipelines`, `agents` and `components` each take
+`repositories`, `services`, `tasks`, `pipelines`, `agents`, `functions` and `components` each take
 registered names, the name part of each key (`seed-readings` for
 `task.seed-readings`), in any casing. A kind without a list shows all of its
 components; a kind with a list shows only the listed ones, and an empty list

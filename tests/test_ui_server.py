@@ -8,6 +8,7 @@ from fastapi.testclient import TestClient
 from opendataframework.component import Component
 from opendataframework.context import Context
 from opendataframework.entity import Entity
+from opendataframework.function import Function
 from opendataframework.namespace import Namespace
 from opendataframework.repository import Repository
 from opendataframework.service import Service
@@ -263,6 +264,40 @@ def test_component_logs_endpoint_unknown_component_returns_404():
         r = client.get("/api/components/nonexistent/logs")
 
     assert r.status_code == 404
+
+
+def test_function_logs_endpoint_returns_its_calls(tmp_path):
+    NS = make_ns()
+
+    @NS
+    @Function
+    def double(value: int) -> int:
+        return value * 2
+
+    with Context(namespaces={NS}, log_dir=tmp_path) as ctx:
+        ctx.call(ctx.key(double), value=2)
+        client = TestClient(UiServer(ctx, "proj")._app)
+        r = client.get("/api/functions/double/logs")
+
+    assert r.status_code == 200
+    assert any("completed" in e["message"] for e in r.json())
+
+
+def test_function_has_no_details_or_chart():
+    NS = make_ns()
+
+    @NS
+    @Function
+    def double(value: int) -> int:
+        return value * 2
+
+    with Context(namespaces={NS}) as ctx:
+        client = TestClient(UiServer(ctx, "proj")._app)
+        details = client.get("/api/functions/double/details")
+        chart = client.get("/api/functions/double/chart")
+
+    assert details.status_code == 403
+    assert chart.status_code == 403
 
 
 # --- component details endpoint -------------------------------------------------
@@ -1779,7 +1814,16 @@ def test_serves_the_shared_script():
 
 
 ICON_SCRIPTS = sorted(p.name for p in (themes.STATIC_DIR / "icons").glob("*.js"))
-DEFAULT_ICONS = {"config", "component", "repository", "service", "task", "pipeline", "agent"}
+DEFAULT_ICONS = {
+    "config",
+    "component",
+    "repository",
+    "service",
+    "task",
+    "pipeline",
+    "agent",
+    "function",
+}
 
 
 @pytest.mark.parametrize("name", ICON_SCRIPTS)

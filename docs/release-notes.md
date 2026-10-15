@@ -122,6 +122,13 @@
   call goes through `context.call()`, so it is logged to the agent's log. See the
   [`19-agent`](https://github.com/opendataframework/odf/tree/main/examples/19-agent)
   example.
+- **Functions**: `@Function` functions (new in `opendataframework` 0.3.0) appear in the
+  topology as `function` nodes, with their own default icon and color and a `Functions`
+  count in the header. They are linked to the components injected into them and to the
+  classes and functions that ask for them through `Annotated[Callable[...], func]`. A
+  `functions` list in `[ui.topology]` filters them. MCP's `list_components` lists them,
+  and the logs of their calls are served at `/api/functions/{name}/logs` and by
+  `component_logs`.
 
 ### Changed
 
