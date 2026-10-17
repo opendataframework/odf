@@ -29,6 +29,7 @@ external consumers.
 | 18 | [`18-custom-mcp-tool`](https://github.com/opendataframework/odf/tree/main/examples/18-custom-mcp-tool) | A `StockRoom` component whose `mcp_tools()` adds a typed `stock-room.low_stock` tool next to the fixed MCP tools. | [MCP Server](mcp.md) |
 | 19 | [`19-agent`](https://github.com/opendataframework/odf/tree/main/examples/19-agent) | A `Librarian` `@Agent` whose `invoke(question, limit=3)` takes arguments: called through `context.call()`, invoked from a form in the UI, and exposed as its own typed `agent.librarian.invoke` MCP tool. | [MCP Server](mcp.md), [Chat](chat.md) |
 | 20 | [`20-function`](https://github.com/opendataframework/odf/tree/main/examples/20-function) | Adopting plain functions with `@Function`: `to_eur` and `store_total` keep their signatures and still work when called directly, while `context.call()` injects their `Rates`/`Orders` dependencies and another function through `Annotated`. Each one gets a **Call** action in the UI and its own typed `<key>.call` MCP tool. | [MCP Server](mcp.md), [Chat](chat.md) |
+| 21 | [`21-notebook-view`](https://github.com/opendataframework/odf/tree/main/examples/21-notebook-view) | A `Notebooks` repository over the `.ipynb` files in `notebooks/`, with a `DocumentView`: each notebook opens as its cells and outputs, and **Edit in Jupyter** edits it in place, saving through `save()` back to its file. | [UI](ui.md#notebooks) |
 
 Examples 2–5 mirror `odf init --template <name>`'s scaffolded layouts —
 each is runnable both as a plain script (`python main.py`) and via

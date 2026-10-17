@@ -103,6 +103,47 @@ def test_start_ui_rejects_a_non_boolean_annotations_setting():
         server.stop()
 
 
+def test_start_ui_turns_notebook_editing_off_from_config():
+    server = Server.from_dict({"ui": {"notebooks": False}})
+    server.start(ui=True, ui_port=18775, app_module=None)
+    try:
+        last_err = None
+        for _ in range(50):
+            try:
+                with urllib.request.urlopen(f"{server.ui_url}/api/ui/extensions", timeout=1) as res:
+                    body = json.load(res)
+                    break
+            except OSError as e:
+                last_err = e
+                time.sleep(0.1)
+        else:
+            raise AssertionError(f"UI server never became ready: {last_err}")
+        assert body["notebooks"] is False
+    finally:
+        server.stop()
+
+
+def test_start_ui_rejects_a_non_boolean_notebooks_setting():
+    server = Server.from_dict({"ui": {"notebooks": "yes"}})
+    try:
+        with pytest.raises(ValueError, match="notebooks"):
+            server.start(ui=True, ui_port=18776, app_module=None)
+    finally:
+        server.stop()
+
+
+def test_start_ui_refuses_notebook_editing_without_jupyter(monkeypatch):
+    from odf.ui import notebooks
+
+    monkeypatch.setattr(notebooks, "available", lambda: False)
+    server = Server.from_dict({"ui": {"notebooks": True}})
+    try:
+        with pytest.raises(ImportError, match="notebook"):
+            server.start(ui=True, ui_port=18777, app_module=None)
+    finally:
+        server.stop()
+
+
 def test_start_ui_warns_about_topology_names_matching_no_component():
     server = Server.from_dict({"ui": {"topology": {"tasks": ["nothing-here"]}}})
     try:

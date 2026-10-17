@@ -71,7 +71,7 @@ Repositories can declare a `data_view()` to pick how their data renders
 (table, map, timeseries, image, video, audio, document, streaming video/audio)
 instead of the default table. The view types themselves are documented upstream
 in [View](https://opendataframework.github.io/opendataframework/view/); the
-[Examples](examples.md) page has one example per view (01, 06–13).
+[Examples](examples.md) page has one example per view (01, 06–13, 21).
 
 A repository whose view shows content (an image, video, audio or document
 view) can also implement
@@ -86,6 +86,36 @@ as Markdown, by a `text/markdown` type or a `.md` name, is rendered, and one
 declared as anything else is shown as written. Records list it, under a
 `$content` key, so the UI has it without a request per record. See
 [`examples/12-document-view`](https://github.com/opendataframework/odf/tree/main/examples/12-document-view).
+
+### Notebooks
+
+A Jupyter notebook in a document view opens as its cells and their saved
+outputs: Markdown cells rendered, code as written, images inline, and HTML
+outputs such as a DataFrame shown with anything that could run removed.
+**View source** shows its JSON. A record counts as a notebook when its content
+parses as one; declaring an `.ipynb` name or the `application/x-ipynb+json`
+type also makes its card preview the cells instead of the JSON.
+
+When the `notebook` package is installed in the project's environment
+(`pip install odf[notebook]`), a notebook kept as a file (`bytes`) in a
+writable repository can also be edited in place: **Edit in Jupyter** in the
+reader's rail swaps the rendered notebook for Jupyter Notebook's own editor,
+with kernels and extensions as in a local notebook server. Jupyter is
+started the first time a notebook is edited, by the same interpreter as the
+UI, on a free port of the UI's host with a random token, and is stopped with
+the UI. Kernels start in the directory `odf run` was started from, so a cell
+can `import app` or open `data/...` the same way the project does.
+
+Jupyter reads and saves each notebook through the repository, as
+`PUT /api/repositories/{name}/records/{key}/media`, which calls `save()` with
+the record's document field replaced. Where a notebook ends up is therefore up
+to the repository: a file, a database row, an object store. Notebooks autosave
+every 5 seconds unless your Jupyter settings say otherwise, since closing the
+editor or moving to another record drops it. Notebooks can't be created,
+renamed or deleted from Jupyter; that is done to the records, in the UI. In
+Jupyter's file browser each repository is a folder, with a folder per record
+holding its notebook. `[ui] notebooks = false` turns editing off. See
+[`examples/21-notebook-view`](https://github.com/opendataframework/odf/tree/main/examples/21-notebook-view).
 
 A component implementing `details()` gets a details panel, and one implementing
 `chart()` a **View Chart** button (see
@@ -166,6 +196,7 @@ Every key `odf` reads from `config.toml`:
 | `[ui] favicon`, `[ui] logo` | built-in | Image files replacing the favicon and header logo |
 | `[ui] brand` | `"ODF"` | Brand label in the header |
 | `[ui] annotations` | `true` | Allow labelling data in the views |
+| `[ui] notebooks` | `true` if `notebook` is installed | Edit notebooks in the document view with Jupyter (see [Notebooks](#notebooks)); `true` without `notebook` installed raises an `ImportError` |
 | `[ui.topology]` | show everything | What the topology shows (see [above](#choosing-what-the-topology-shows)) |
 | `[project] layout-file` | `"layout.json"` | Where node positions, icons and colors are saved |
 | `[project] annotations-file` | `"annotations.json"` | Where labels and classes are saved |
@@ -185,6 +216,8 @@ registered name:
 | `GET /api/agents/{name}/parameters`, `POST .../invoke` | an `@Agent` |
 | `GET /api/functions/{name}/parameters`, `POST .../call` | an `@Function` |
 | `/api/repositories/{name}/records`, `.../stream`, ... | a `@Repository`'s data |
+| `PUT /api/repositories/{name}/records/{key}/media` | replacing a document file through `save()` (see [Notebooks](#notebooks)) |
+| `POST /api/notebooks/session` | starting Jupyter for notebook editing; returns its `port` and `token` |
 
 The collection comes from the execution type, not the key's namespace: a `@Task`
 registered as `loader` is `/api/tasks/loader`, whatever its key. An action that

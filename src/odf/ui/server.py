@@ -5,6 +5,7 @@ outside, so it is constructed and driven directly by ``Server.start(ui=True)``
 / ``Server.stop()``, after the ``Context`` has already resolved.
 """
 
+import dataclasses
 import json
 import threading
 from collections.abc import AsyncIterator, Callable, Iterator
@@ -17,6 +18,7 @@ try:
     from fastapi.encoders import jsonable_encoder
     from fastapi.responses import FileResponse, HTMLResponse, Response, StreamingResponse
     from pydantic import ValidationError
+    from starlette.concurrency import run_in_threadpool
 except ImportError as exc:
     raise ImportError(
         "server.start(ui=True) requires the 'ui' extra. Install with: pip install odf[ui]"
@@ -38,6 +40,7 @@ from opendataframework.view import (
 )
 
 from odf.ui import annotations, arguments, data, keys, layout, media, themes
+from odf.ui.notebooks import NotebookServer, local_host
 from odf.ui.topology import TopologyView, build_topology
 
 if TYPE_CHECKING:
@@ -107,6 +110,10 @@ class UiServer:
             ``odf.ui.topology.TopologyView``. ``None`` (the default) shows
             everything. Display-only: hidden components stay reachable through
             the other endpoints.
+        notebooks: Whether a notebook in a document view can be edited in
+            the reader, in a Jupyter Notebook server launched on the first
+            edit (see ``odf.ui.notebooks``). Needs the ``notebook`` package.
+            ``False`` (the default) only renders notebooks.
     """
 
     def __init__(
@@ -125,6 +132,7 @@ class UiServer:
         brand: str | None = None,
         theme: str = "default",
         topology: TopologyView | None = None,
+        notebooks: bool = False,
     ) -> None:
         """Build the FastAPI app and register every route (see class docstring for args)."""
         self._context = context
@@ -143,6 +151,9 @@ class UiServer:
         self._brand = brand
         self._theme_dir = themes.theme_dir(theme)
         self._topology = topology
+        self._notebooks = (
+            NotebookServer(self.local_url, port, host, Path.cwd()) if notebooks else None
+        )
         self._server: uvicorn.Server | None = None
         self._thread: threading.Thread | None = None
 
@@ -176,6 +187,7 @@ class UiServer:
                 "logo": "/api/ui/logo" if self._logo is not None else None,
                 "brand": self._brand,
                 "annotations": self._annotations_path is not None,
+                "notebooks": self._notebooks is not None,
             }
 
         @app.get("/api/ui/logo")
@@ -349,6 +361,29 @@ class UiServer:
                 media_type=content_type,
                 headers=headers,
             )
+
+        @app.put("/api/repositories/{repo_id}/records/{key}/media", status_code=204)
+        async def put_record_media(repo_id: str, key: str, request: Request) -> None:
+            """Replace a document record's file with the request body, through ``save()``.
+
+            Only a record whose document is a file (bytes) takes one: a
+            document held in the record itself is edited as a field instead.
+            This is how a notebook edited in Jupyter is saved (see
+            ``odf.ui.notebook_contents``).
+            """
+            body = await request.body()
+            await run_in_threadpool(self._replace_document, repo_id, key, body)
+
+        @app.post("/api/notebooks/session")
+        def notebook_session() -> dict:
+            """Launch the Jupyter that edits notebooks, if needed, and say how to reach it."""
+            if self._notebooks is None:
+                raise HTTPException(status_code=404, detail="Notebook editing is not enabled")
+            try:
+                port = self._notebooks.start()
+            except RuntimeError as exc:
+                raise HTTPException(status_code=503, detail=str(exc)) from exc
+            return {"port": port, "token": self._notebooks.token}
 
         @app.get("/api/repositories/{repo_id}/annotations")
         def repository_annotations(repo_id: str) -> dict:
@@ -675,6 +710,23 @@ class UiServer:
             raise HTTPException(status_code=403, detail="Repository has no data view")
         return view
 
+    def _replace_document(self, repo_id: str, key: str, content: bytes) -> None:
+        """Save the record matching ``key`` with ``content`` as its document file."""
+        _, instance, entity_cls = self._get_writable(repo_id)
+        if not isinstance(instance, ReadableProtocol):
+            raise HTTPException(status_code=403, detail="Repository is not readable")
+        view = self._get_data_view(repo_id)
+        if not isinstance(view, DocumentView):
+            raise HTTPException(status_code=403, detail="Repository has no document view")
+        key_field = data.key_field_name(entity_cls)
+        coerced_key = data.coerce_key(entity_cls, key_field, key)
+        record = next((r for r in instance.all() if getattr(r, key_field) == coerced_key), None)
+        if record is None:
+            raise HTTPException(status_code=404, detail="Record not found")
+        if not isinstance(getattr(record, view.field), (bytes, bytearray)):
+            raise HTTPException(status_code=409, detail="Record's document is not a file")
+        instance.save(dataclasses.replace(record, **{view.field: content}))
+
     def _get_annotatable_view(self, repo_id: str) -> DataView:
         """Resolve a repository id's data view, or raise 404 if it can't be annotated."""
         view = self._get_data_view(repo_id)
@@ -736,6 +788,11 @@ class UiServer:
         """The base URL the UI is served from."""
         return f"http://{self._host}:{self._port}"
 
+    @property
+    def local_url(self) -> str:
+        """The base URL to reach the UI at from this machine, whatever it binds to."""
+        return f"http://{local_host(self._host)}:{self._port}"
+
     def start(self) -> None:
         """Start serving in a background daemon thread. Returns immediately."""
         config = uvicorn.Config(self._app, host=self._host, port=self._port, log_level="warning")
@@ -749,3 +806,5 @@ class UiServer:
             self._server.should_exit = True
         if self._thread is not None:
             self._thread.join(timeout=5)
+        if self._notebooks is not None:
+            self._notebooks.stop()

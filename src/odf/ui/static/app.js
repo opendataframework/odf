@@ -3558,7 +3558,12 @@ function renderLightboxRail() {
     button.hidden = !tools.includes(button.dataset.tool);
     button.setAttribute('aria-pressed', button.dataset.tool === tool);
   }
-  const actions = ['media-lightbox-source', 'media-lightbox-open', 'media-lightbox-download'].some(id => !document.getElementById(id).hidden);
+  const actions = ['media-lightbox-source', 'media-lightbox-notebook', 'media-lightbox-open', 'media-lightbox-download'].some(id => !document.getElementById(id).hidden);
+  const editButton = document.getElementById('media-lightbox-notebook');
+  const editLabel = notebookEditing ? 'Close Jupyter' : 'Edit in Jupyter';
+  editButton.title = editLabel;
+  editButton.setAttribute('aria-label', editLabel);
+  editButton.setAttribute('aria-pressed', notebookEditing);
   document.getElementById('media-lightbox-rail-sep').hidden = !tools.length || !actions;
   lightboxRail.hidden = !tools.length && !actions;
   document.getElementById('media-lightbox').dataset.tool = tool || '';
@@ -3577,8 +3582,9 @@ function renderLightboxRail() {
       : tool === 'span' ? 'Select text to add a label'
       : tool === 'range' ? 'Drag on the timeline, or press M at each end, to add a range'
       : tool === 'point' ? 'Click the timeline, or press M, to add a point'
-        : tool ? 'Pick a tool to add a label' : '';
-  hint.hidden = !tool;
+        : tool ? 'Pick a tool to add a label'
+          : notebookEditing ? 'Jupyter saves every few seconds; Ctrl+S saves now' : '';
+  hint.hidden = !hint.textContent;
 }
 
 // A box of the set size centred on `point` (0..1 fractions of the image),
@@ -4401,7 +4407,8 @@ function wireMediaReplay(schema) {
 // image. Bytes arrive as null in the records themselves (see
 // odf.ui.data.to_json_safe_dict), which is how a file is told apart. Text
 // that parses as JSON is a tree too, and text that reads as Markdown is
-// rendered, see looksLikeMarkdown().
+// rendered, see looksLikeMarkdown(). A Jupyter notebook is drawn as its
+// cells, and a notebook file can be edited in place (see "Notebooks" below).
 
 // pdf.js draws PDFs. It is only fetched once a PDF is on screen.
 const PDFJS_URL = 'https://unpkg.com/pdfjs-dist@4.10.38/build/';
@@ -4419,7 +4426,7 @@ let docLoadToken = 0;   // bumped whenever the reader is emptied, so a slow load
 let openPdf = null;     // the pdf.js document open in the reader
 let pdfPageObserver = null; // draws the open PDF's pages as they scroll into view
 let markdownRenderer = null; // text => safe HTML, or the promise loading it
-let openText = null;    // the text document open in the reader: { text, note, json, rendered, astral }
+let openText = null;    // the text document open in the reader: { text, note, json, notebook, rendered, astral }
 
 function loadPdfJs() {
   if (!pdfJs) {
@@ -4441,7 +4448,10 @@ function loadMarkdownRenderer() {
         node.setAttribute('target', '_blank');
         node.setAttribute('rel', 'noopener noreferrer');
       });
-      return text => purify.sanitize(marked.parse(text, { gfm: true }), { FORBID_TAGS: ['style', 'form'] });
+      const sanitize = html => purify.sanitize(html, { FORBID_TAGS: ['style', 'form'] });
+      const render = text => sanitize(marked.parse(text, { gfm: true }));
+      render.html = sanitize; // for markup that is HTML already, a notebook's outputs
+      return render;
     });
     markdownRenderer.catch(() => { markdownRenderer = null; }); // offline, say: try again on the next document
   }
@@ -4463,6 +4473,154 @@ function looksLikeMarkdown(text) {
   }
   return false;
 }
+
+// ── Notebooks ─────────────────────────────────────────────────────────────
+// A Jupyter notebook is a JSON document with `nbformat` and `cells`, drawn as
+// its cells and their saved outputs: Markdown cells rendered, code as written,
+// images inline, and HTML outputs (a DataFrame, say) through the same
+// sanitizer as Markdown, so nothing in them runs. View source shows the JSON.
+// A notebook that is a file (bytes) can also be edited in Jupyter itself,
+// embedded in the reader, when the server has it (see odf.ui.notebooks).
+
+let notebooksEnabled = false; // whether the server edits notebooks in Jupyter (see loadUiExtensions)
+let notebookEditing = false;  // whether the reader holds the Jupyter editor
+
+function isNotebook(value) {
+  return Boolean(value) && typeof value === 'object' && !Array.isArray(value) &&
+    'nbformat' in value && Array.isArray(value.cells);
+}
+
+// Whether a record's declared content is a notebook: an .ipynb name or the
+// notebook type.
+function declaredNotebook(record) {
+  const content = record['$content'];
+  if (!content) return false;
+  const type = (content.content_type || '').split(';')[0].trim().toLowerCase();
+  return type === 'application/x-ipynb+json' || /\.ipynb$/i.test(content.filename || '');
+}
+
+// A notebook field's text: a string, or a list of lines.
+function notebookText(value) {
+  return Array.isArray(value) ? value.join('') : String(value ?? '');
+}
+
+// The start of a notebook for a card: its cells' sources, picked out of the
+// leading bytes of its JSON, which needn't parse on their own. Null when none
+// are found there.
+function notebookSnippet(text) {
+  const sources = [];
+  for (const match of text.matchAll(/"source"\s*:\s*("(?:[^"\\]|\\.)*"|\[\s*(?:"(?:[^"\\]|\\.)*"\s*,?\s*)*\])/g)) {
+    try {
+      sources.push(notebookText(JSON.parse(match[1])));
+    } catch (err) {
+      break;
+    }
+  }
+  return sources.length ? docSnippet(sources.join('\n\n')) : null;
+}
+
+// Terminal colours in a traceback, which HTML has no use for.
+function stripAnsi(text) {
+  return text.replace(/\x1b\[[0-9;]*[A-Za-z]/g, '');
+}
+
+// One output of a code cell, `render` being loadMarkdownRenderer()'s, or null
+// when it couldn't be fetched.
+function renderNotebookOutput(output, render) {
+  if (output.output_type === 'stream') {
+    const stderr = output.name === 'stderr' ? ' doc-nb-stderr' : '';
+    return `<pre class="doc-nb-stream${stderr}">${escapeHtml(stripAnsi(notebookText(output.text)))}</pre>`;
+  }
+  if (output.output_type === 'error') {
+    const trace = (output.traceback || []).map(stripAnsi).join('\n') || `${output.ename}: ${output.evalue}`;
+    return `<pre class="doc-nb-error">${escapeHtml(trace)}</pre>`;
+  }
+  const data = output.data || {};
+  for (const type of ['image/png', 'image/jpeg', 'image/gif']) {
+    if (data[type]) return `<img src="data:${type};base64,${escapeHtml(notebookText(data[type]).replace(/\s/g, ''))}" alt="">`;
+  }
+  if (render) {
+    if (data['text/html']) return `<div class="doc-nb-html">${render.html(notebookText(data['text/html']))}</div>`;
+    if (data['image/svg+xml']) return `<div class="doc-nb-html">${render.html(notebookText(data['image/svg+xml']))}</div>`;
+    if (data['text/markdown']) return `<div class="doc-markdown">${render(notebookText(data['text/markdown']))}</div>`;
+  }
+  if (data['text/plain']) return `<pre>${escapeHtml(stripAnsi(notebookText(data['text/plain'])))}</pre>`;
+  return '';
+}
+
+async function renderNotebook(nb) {
+  let render = null;
+  try {
+    render = await loadMarkdownRenderer();
+  } catch (err) {
+    // Offline, say: Markdown and HTML are shown as written.
+  }
+  const cells = nb.cells.map(cell => {
+    const source = notebookText(cell.source);
+    if (cell.cell_type === 'markdown') {
+      const body = render ? `<div class="doc-markdown">${render(source)}</div>` : `<pre class="doc-nb-input">${escapeHtml(source)}</pre>`;
+      return `<div class="doc-nb-cell doc-nb-markdown"><div class="doc-nb-prompt"></div><div class="doc-nb-body">${body}</div></div>`;
+    }
+    if (cell.cell_type !== 'code') {
+      return `<div class="doc-nb-cell"><div class="doc-nb-prompt"></div><div class="doc-nb-body"><pre class="doc-nb-input">${escapeHtml(source)}</pre></div></div>`;
+    }
+    const outputs = (cell.outputs || []).map(o => renderNotebookOutput(o, render)).join('');
+    return '<div class="doc-nb-cell">' +
+      `<div class="doc-nb-prompt">[${cell.execution_count ?? ' '}]:</div>` +
+      `<div class="doc-nb-body"><pre class="doc-nb-input">${escapeHtml(source)}</pre>` +
+      (outputs ? `<div class="doc-nb-output">${outputs}</div>` : '') +
+      '</div></div>';
+  });
+  return `<div class="doc-notebook">${cells.join('') || '<span class="detail-empty">// no cells</span>'}</div>`;
+}
+
+// The path Jupyter knows a record's notebook by, see odf.ui.notebook_contents.
+function notebookPath(record) {
+  const schema = repoSchemas[activeRepoId];
+  const key = String(record[schema.key]);
+  const name = /\.ipynb$/i.test(contentName(record)) ? contentName(record) : `${key}.ipynb`;
+  return [schema.name, key, name].map(encodeURIComponent).join('/');
+}
+
+// Swaps the rendered notebook for Jupyter's editor, launching Jupyter first
+// if it isn't running.
+async function editNotebook() {
+  const record = lightboxRecords[lightboxIndex];
+  const token = docLoadToken;
+  const reader = document.getElementById('media-lightbox-doc');
+  const button = document.getElementById('media-lightbox-notebook');
+  closeImageLabelForm();
+  selectedBox = -1;
+  openText = null;
+  notebookEditing = true;
+  document.getElementById('media-lightbox-source').hidden = true;
+  button.disabled = true;
+  reader.innerHTML = '<span class="detail-empty">// starting Jupyter</span>';
+  renderLightboxRail();
+  let session;
+  try {
+    const res = await fetch('/api/notebooks/session', { method: 'POST' });
+    if (!res.ok) throw new Error((await res.json().catch(() => ({}))).detail || `HTTP ${res.status}`);
+    session = await res.json();
+  } catch (err) {
+    if (token !== docLoadToken) return;
+    addLog(`Failed to start Jupyter: ${err.message}`, ACCENT.alert);
+    openLightbox(lightboxIndex);
+    return;
+  }
+  if (token !== docLoadToken) return;
+  button.disabled = false;
+  const src = `http://${location.hostname}:${session.port}/notebooks/${notebookPath(record)}?token=${encodeURIComponent(session.token)}`;
+  reader.classList.add('doc-reader-frame');
+  reader.innerHTML = `<iframe class="doc-notebook-frame" title="Jupyter Notebook" src="${escapeHtml(src)}"></iframe>`;
+}
+
+// Leaving the editor shows the notebook as Jupyter last saved it.
+document.getElementById('media-lightbox-notebook').addEventListener('click', () => {
+  if (lightboxIndex < 0) return;
+  if (notebookEditing) openLightbox(lightboxIndex);
+  else editNotebook();
+});
 
 async function showDocumentView(repoId) {
   activeRepoId = repoId;
@@ -4491,6 +4649,7 @@ async function loadDocumentPreviews(grid) {
   for (const tile of grid.querySelectorAll('.media-tile')) {
     const value = lightboxRecords[tile.dataset.index][schema.view.field];
     if (value === null || value === undefined) files.push(tile);
+    else if (isNotebook(value)) showNotebookPreview(tile, JSON.stringify(value));
     else tile.querySelector('.doc-preview').textContent =
       docSnippet(typeof value === 'string' ? value : JSON.stringify(value, null, 2));
   }
@@ -4500,13 +4659,26 @@ async function loadDocumentPreviews(grid) {
   }
 }
 
+// Previews a notebook's JSON on a card as its cells' sources. Returns false,
+// leaving the card alone, when none are found in it.
+function showNotebookPreview(tile, text) {
+  const snippet = notebookSnippet(text);
+  if (snippet === null) return false;
+  tile.querySelector('.doc-preview').textContent = snippet;
+  tile.querySelector('.media-duration').textContent = 'notebook';
+  return true;
+}
+
 async function loadFilePreview(tile, url) {
   const preview = tile.querySelector('.doc-preview');
+  const record = lightboxRecords[tile.dataset.index];
   try {
     const res = await fetch(url, { headers: { Range: `bytes=0-${DOC_SNIPPET_BYTES - 1}` } });
     const type = res.headers.get('Content-Type') || '';
     if (res.ok && type.startsWith('text/')) {
-      preview.textContent = docSnippet(await res.text());
+      const text = await res.text();
+      const notebook = declaredNotebook(record) || /^\s*\{\s*"cells"\s*:/.test(text);
+      if (!(notebook && showNotebookPreview(tile, text))) preview.textContent = docSnippet(text);
       return;
     }
     if (res.body) res.body.cancel();
@@ -4541,10 +4713,15 @@ function unloadDocumentReader() {
   if (openPdf) openPdf.destroy();
   openPdf = null;
   openText = null;
+  notebookEditing = false;
   document.getElementById('media-lightbox-source').hidden = true;
+  const button = document.getElementById('media-lightbox-notebook');
+  button.hidden = true;
+  button.disabled = false;
   const reader = document.getElementById('media-lightbox-doc');
   reader.hidden = true;
-  reader.innerHTML = '';
+  reader.classList.remove('doc-reader-frame');
+  reader.innerHTML = ''; // drops the Jupyter editor, if open
 }
 
 // The value of text that is a JSON object or array, undefined for any other.
@@ -4557,15 +4734,16 @@ function parseJsonDocument(text) {
   }
 }
 
-// Shows a text document in the reader: as a tree if it is JSON, rendered if
-// it is Markdown, or as its source either way while the tool last picked for
-// text is the one that labels it. `note` is HTML to put under it, and
+// Shows a text document in the reader: as its cells if it is a notebook, as a
+// tree if it is other JSON, rendered if it is Markdown, or as its source
+// either way while the tool last picked for text is the one that labels it. `note` is HTML to put under it, and
 // `markdown` whether it is declared Markdown (see declaredMarkdown()).
 function showDocumentText(text, note, markdown) {
   const json = parseJsonDocument(text);
   const labelling = annotationsEnabled && lightboxTools.text === 'span';
   // `astral`: whether it has characters that take two UTF-16 units, see unitsToPoints().
-  openText = { text, note, json, rendered: !labelling && (json !== undefined || (markdown ?? looksLikeMarkdown(text))), astral: /[\uD800-\uDFFF]/.test(text) };
+  const notebook = isNotebook(json) ? json : undefined;
+  openText = { text, note, json, notebook, rendered: !labelling && (json !== undefined || (markdown ?? looksLikeMarkdown(text))), astral: /[\uD800-\uDFFF]/.test(text) };
   renderDocumentText();
 }
 
@@ -4575,7 +4753,10 @@ async function renderDocumentText() {
   const reader = document.getElementById('media-lightbox-doc');
   const toggle = document.getElementById('media-lightbox-source');
   let html = null;
-  if (doc.rendered && doc.json !== undefined) {
+  if (doc.rendered && doc.notebook !== undefined) {
+    html = await renderNotebook(doc.notebook);
+    if (token !== docLoadToken) return;
+  } else if (doc.rendered && doc.json !== undefined) {
     html = `<div class="doc-tree">${renderJsonTree(doc.json)}</div>`;
   } else if (doc.rendered) {
     try {
@@ -4587,11 +4768,18 @@ async function renderDocumentText() {
   }
   reader.innerHTML = (html === null ? '<div class="doc-source"><pre class="doc-text"></pre></div>' : html) + doc.note;
   if (html === null) renderDocumentSource();
-  const label = doc.rendered ? 'View source' : (doc.json !== undefined ? 'View as tree' : 'View as Markdown');
+  const label = doc.rendered ? 'View source'
+    : doc.notebook !== undefined ? 'View as notebook'
+      : doc.json !== undefined ? 'View as tree' : 'View as Markdown';
   toggle.title = label;
   toggle.setAttribute('aria-label', label);
   toggle.setAttribute('aria-pressed', !doc.rendered);
   toggle.hidden = false;
+  // Only a file can be saved back, see PUT .../records/{key}/media.
+  const record = lightboxRecords[lightboxIndex];
+  const schema = repoSchemas[activeRepoId];
+  document.getElementById('media-lightbox-notebook').hidden = !(notebooksEnabled && doc.notebook !== undefined &&
+    schema.writable && record && record[schema.view.field] == null);
   renderLightboxRail();
 }
 
@@ -4627,7 +4815,10 @@ async function openDocument(record, url) {
     document.getElementById('media-lightbox-open').hidden = true;
     document.getElementById('media-lightbox-download').hidden = true;
     if (typeof value === 'string') showDocumentText(value, '', declaredMarkdown(record));
-    else reader.innerHTML = `<div class="doc-tree">${renderJsonTree(value)}</div>`;
+    else if (isNotebook(value)) {
+      const html = await renderNotebook(value);
+      if (token === docLoadToken) reader.innerHTML = html;
+    } else reader.innerHTML = `<div class="doc-tree">${renderJsonTree(value)}</div>`;
     return;
   }
   reader.innerHTML = '<span class="detail-empty">// loading</span>';
@@ -5387,6 +5578,7 @@ async function loadUiExtensions() {
     console.error('Failed to load UI extensions', err);
   }
   annotationsEnabled = Boolean(ext.annotations);
+  notebooksEnabled = Boolean(ext.notebooks);
 
   if (ext.logo) {
     const mark = document.getElementById('brand-mark');

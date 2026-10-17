@@ -24,6 +24,9 @@ mcp = [
 chat = [
     "ollama>=0.4.0",
 ]
+notebook = [
+    "notebook (>=7.6.0,<8.0.0)",
+]
 examples = [
     "opencv-python (>=5.0.0.93,<6.0.0.0)",
     "matplotlib (>=3.9.0,<4.0.0)",

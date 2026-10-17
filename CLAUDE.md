@@ -57,6 +57,7 @@ needs a third-party dependency:
 | `mcp/server.py` | MCP server exposing component lifecycle + task/pipeline execution + repository data queries as tools | `mcp`, `uvicorn` |
 | `ui/server.py`, `ui/topology.py`, `ui/keys.py`, `ui/data.py`, `ui/arguments.py`, `ui/layout.py`, `ui/extensions.py`, `ui/themes.py` | UI dev server | `fastapi`, `uvicorn` |
 | `ui/static/` | The UI itself: `index.html` + `app.js` shared by every theme, `icons/` holding the built-in topology icons (one file per picker group, plus `shared.js`), and `themes/<name>/` holding each theme's `theme.css`, `favicon.svg` and optional `theme.js` | (Leaflet from a CDN; no build step) |
+| `ui/notebooks.py`, `ui/notebook_contents.py` | Jupyter Notebook launched on demand to edit notebooks in the document view; `notebook_contents.py` is its contents manager, loaded only inside that Jupyter subprocess, reading and saving records through the UI's HTTP API | `notebook` (optional) |
 | `chat/engine.py` | Chat window backing a `Server`'s UI | `ollama` |
 
 Every component is addressed by its upstream key, `<namespace>.<name>`
@@ -152,7 +153,7 @@ not per commit; format mirrors `opendataframework`'s release notes).
 
 ## Examples
 
-`examples/` has 20 examples. `01-table-view/` (a repository with no
+`examples/` has 21 examples. `01-table-view/` (a repository with no
 `data_view()` at all, so the UI falls back to the implicit default table)
 and `06-location-view/` (`data_view() -> LocationView` overriding that
 default with a map) are the two ends of the `data_view()` concept.
@@ -164,7 +165,8 @@ belong with the CLI that describes them, not the core package).
 (streaming/video/audio/image/document/timeseries views, chart, chart via
 Plotly, MCP + chat) ported from the original monorepo's `demo/` project.
 `17-custom-icon/`, `18-custom-mcp-tool/`, `19-agent/` (an `@Agent`
-invoked from the UI, over MCP and from chat) and `20-function/` (plain
-functions adopted with `@Function`) were added here since. Treat new examples here as small and focused, one concept each, matching
+invoked from the UI, over MCP and from chat), `20-function/` (plain
+functions adopted with `@Function`) and `21-notebook-view/` (notebooks in a
+`DocumentView`, edited in an embedded Jupyter) were added here since. Treat new examples here as small and focused, one concept each, matching
 `opendataframework/examples/`'s style rather than `demo/`'s
 everything-at-once approach.

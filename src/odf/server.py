@@ -139,7 +139,10 @@ class Server:
                 ``Config`` node, and ``repositories``/``services``/``tasks``/
                 ``pipelines``/``components`` list the only components of that
                 kind to show (a kind without a list shows all of its
-                components).
+                components). A notebook in a document view can be edited in
+                place, in an embedded Jupyter Notebook, when the ``notebook``
+                package is installed (``pip install odf[notebook]``);
+                ``[ui] notebooks = false`` turns that off.
             ui_host: Interface for the UI server to bind to.
             ui_port: Port for the UI server to bind to.
             theme: Which UI theme (visual file-set) to serve —
@@ -179,10 +182,11 @@ class Server:
             ValueError: If a circular dependency is detected, if
                 ``chat=True`` is passed without ``ui=True``, if
                 ``theme``/``[ui] theme`` names a UI theme that doesn't
-                exist, or if ``[ui.topology]`` has an unknown key or a value
-                of the wrong type.
+                exist, if ``[ui.topology]`` has an unknown key or a value
+                of the wrong type, or if ``[ui] notebooks`` isn't a boolean.
             ImportError: If ``ui=True``/``mcp=True``/``chat=True`` but the
-                corresponding extra is not installed.
+                corresponding extra is not installed, or if ``[ui] notebooks
+                = true`` but the ``notebook`` package is not.
 
         Warns:
             UserWarning: If, after ``Project.start()``, no application
@@ -224,7 +228,7 @@ class Server:
             )
             self._mcp_server.start()
         if ui:
-            from odf.ui import extensions
+            from odf.ui import extensions, notebooks
             from odf.ui.server import UiServer
             from odf.ui.topology import TopologyView
 
@@ -250,6 +254,14 @@ class Server:
             annotate = ui_cfg.get("annotations", True)
             if not isinstance(annotate, bool):
                 raise ValueError(f"[ui] annotations must be true or false, got {annotate!r}.")
+            edit_notebooks = ui_cfg.get("notebooks", notebooks.available())
+            if not isinstance(edit_notebooks, bool):
+                raise ValueError(f"[ui] notebooks must be true or false, got {edit_notebooks!r}.")
+            if edit_notebooks and not notebooks.available():
+                raise ImportError(
+                    "[ui] notebooks = true requires Jupyter Notebook in the project's "
+                    "environment. Install with: pip install odf[notebook]"
+                )
             annotations_file = self.config.get("project", {}).get(
                 "annotations-file", "annotations.json"
             )
@@ -274,6 +286,7 @@ class Server:
                 brand=ui_cfg.get("brand"),
                 theme=resolved_theme,
                 topology=topology,
+                notebooks=edit_notebooks,
             )
             self._ui_server.start()
         self._running = True

@@ -1038,6 +1038,109 @@ def test_record_media_returns_404_for_a_document_held_inline():
     assert [r["body"] for r in records] == [{"total": 1}, "hi"]
 
 
+def writable_papers_namespace(papers):
+    """Like ``papers_namespace``, with ``save()`` replacing the paper of the same name."""
+    NS = make_ns()
+
+    @NS
+    @Repository(Paper)
+    class Papers:
+        def all(self):
+            return list(papers)
+
+        def save(self, paper):
+            papers[:] = [paper if p.name == paper.name else p for p in papers]
+
+        def delete(self, name):
+            papers[:] = [p for p in papers if p.name != name]
+
+        def data_view(self):
+            return DocumentView(field="body")
+
+    return NS
+
+
+def test_put_record_media_saves_a_document_file_through_the_repository():
+    papers = [Paper(name="a", body=b"old"), Paper(name="b", body=b"other")]
+    NS = writable_papers_namespace(papers)
+
+    with Context(namespaces={NS}) as ctx:
+        client = TestClient(UiServer(ctx, "proj")._app)
+        r = client.put("/api/repositories/papers/records/a/media", content=b'{"cells": []}')
+        served = client.get("/api/repositories/papers/records/a/media")
+
+    assert r.status_code == 204
+    assert papers == [Paper(name="a", body=b'{"cells": []}'), Paper(name="b", body=b"other")]
+    assert served.content == b'{"cells": []}'
+
+
+def test_put_record_media_refuses_a_document_held_inline_or_missing():
+    papers = [Paper(name="text", body="hi")]
+    NS = writable_papers_namespace(papers)
+
+    with Context(namespaces={NS}) as ctx:
+        client = TestClient(UiServer(ctx, "proj")._app)
+        inline = client.put("/api/repositories/papers/records/text/media", content=b"x")
+        missing = client.put("/api/repositories/papers/records/nope/media", content=b"x")
+
+    assert inline.status_code == 409
+    assert missing.status_code == 404
+    assert papers == [Paper(name="text", body="hi")]
+
+
+def test_put_record_media_refuses_a_read_only_or_non_document_repository():
+    read_only = papers_namespace([Paper(name="a", body=b"old")])
+    NS = make_ns()
+
+    @NS
+    @Repository(Photo)
+    class Photos:
+        def all(self):
+            return [Photo(name="a", image=b"\xff\xd8\xff")]
+
+        def save(self, photo): ...
+
+        def delete(self, name): ...
+
+        def data_view(self):
+            return ImageView(field="image")
+
+    with Context(namespaces={read_only, NS}) as ctx:
+        client = TestClient(UiServer(ctx, "proj")._app)
+        paper = client.put("/api/repositories/papers/records/a/media", content=b"x")
+        photo = client.put("/api/repositories/photos/records/a/media", content=b"x")
+
+    assert paper.status_code == 403
+    assert photo.status_code == 403
+
+
+def test_notebook_editing_is_off_by_default():
+    with Context(namespaces=set()) as ctx:
+        client = TestClient(UiServer(ctx, "proj")._app)
+        extensions = client.get("/api/ui/extensions").json()
+        session = client.post("/api/notebooks/session")
+
+    assert extensions["notebooks"] is False
+    assert session.status_code == 404
+
+
+def test_notebook_session_reports_a_jupyter_that_fails_to_start(monkeypatch):
+    from odf.ui import notebooks
+
+    def fail(self):
+        raise RuntimeError("Jupyter exited with code 1 while starting")
+
+    monkeypatch.setattr(notebooks.NotebookServer, "start", fail)
+    with Context(namespaces=set()) as ctx:
+        client = TestClient(UiServer(ctx, "proj", notebooks=True)._app)
+        extensions = client.get("/api/ui/extensions").json()
+        session = client.post("/api/notebooks/session")
+
+    assert extensions["notebooks"] is True
+    assert session.status_code == 503
+    assert "code 1" in session.json()["detail"]
+
+
 def described_papers_namespace(papers, metadata):
     """A ``Papers`` repository like ``papers_namespace``'s, declaring ``metadata`` per name."""
     NS = make_ns()

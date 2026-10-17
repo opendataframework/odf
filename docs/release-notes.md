@@ -1,5 +1,20 @@
 # Release Notes
 
+## 0.4.0
+
+### Added
+
+- **UI**: Jupyter notebooks in a document view open as their cells and saved outputs
+  (Markdown rendered, images inline, HTML outputs sanitized) instead of raw JSON, with
+  **View source** for the JSON. With the `notebook` package installed in the project
+  (`pip install odf[notebook]`), **Edit in Jupyter** in the reader's rail embeds Jupyter
+  Notebook's own editor in the reader. Jupyter starts on the first edit, with kernels in
+  the project directory, and saves each notebook back through the repository's `save()`
+  via the new `PUT /api/repositories/{name}/records/{key}/media`. `[ui] notebooks = false`
+  in `config.toml` turns editing off. See [UI](ui.md#notebooks) and the
+  [`21-notebook-view`](https://github.com/opendataframework/odf/tree/main/examples/21-notebook-view)
+  example.
+
 ## 0.3.0
 
 ### Added

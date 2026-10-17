@@ -559,6 +559,22 @@ button.media-tile:hover,button.media-tile:focus-visible{border-color:var(--title
 .doc-markdown th:not([align]){text-align:left}
 .doc-markdown img{max-width:100%}
 .doc-markdown hr{margin:1.5em 0;border:0;border-top:1px solid var(--border)}
+.doc-notebook{padding-bottom:16px}
+.doc-nb-cell{display:grid;grid-template-columns:44px minmax(0,1fr);column-gap:8px;margin-bottom:12px}
+.doc-nb-prompt{padding-top:9px;font-family:'SF Mono',Consolas,monospace;font-size:10px;color:var(--text-dim);text-align:right;white-space:nowrap}
+.doc-nb-body{min-width:0}
+.doc-nb-markdown .doc-markdown>:last-child{margin-bottom:0}
+.doc-nb-input{margin:0;padding:8px 10px;overflow:auto;border:1px solid var(--border);border-radius:3px;background:var(--hover-bg);font-family:'SF Mono',Consolas,monospace;font-size:11.5px;line-height:1.5;white-space:pre;color:var(--text)}
+.doc-nb-output{margin-top:6px;padding:0 10px;overflow:auto;font-size:12px;color:var(--text)}
+.doc-nb-output pre{margin:0 0 4px;font-family:'SF Mono',Consolas,monospace;font-size:11.5px;line-height:1.5;white-space:pre-wrap;overflow-wrap:anywhere;color:var(--text)}
+.doc-nb-output .doc-nb-stderr,.doc-nb-output .doc-nb-error{padding:4px 6px;border-radius:3px;background:color-mix(in srgb, var(--accent-alert) 10%, transparent)}
+.doc-nb-output .doc-nb-error{color:var(--accent-alert)}
+.doc-nb-output img,.doc-nb-html svg{display:block;max-width:100%;height:auto;margin-bottom:4px;background:#fff}
+.doc-nb-html table{margin-bottom:4px;border-collapse:collapse;font-size:11.5px}
+.doc-nb-html th,.doc-nb-html td{padding:3px 8px;border:1px solid var(--border);text-align:right}
+.doc-nb-html thead th{background:var(--hover-bg);font-weight:600}
+.doc-reader.doc-reader-frame{padding:0;overflow:hidden}
+.doc-reader>.doc-notebook-frame{display:block;width:100%;max-width:none;height:100%;border:0;background:#fff}
 .doc-note{padding:8px 0;font-size:10.5px;color:var(--text-muted)}
 .doc-header{display:flex;flex-wrap:wrap;gap:10px;font-size:10.5px;color:var(--text-dim);margin-bottom:8px;padding-bottom:8px;border-bottom:1px solid var(--border)}
 .doc-header b{color:var(--text-muted);font-weight:600}
