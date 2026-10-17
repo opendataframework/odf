@@ -35,16 +35,6 @@ examples = [
 [project.scripts]
 odf = "odf.cli:app"
 
-# TEMPORARY: resolve opendataframework 0.3.0 from the local index until it is
-# on PyPI. Remove both tables below and regenerate poetry.lock before release.
-[[tool.poetry.source]]
-name = "local-pypi"
-url = "http://localhost:8080/simple/"
-priority = "explicit"
-
-[tool.poetry.dependencies]
-opendataframework = { source = "local-pypi" }
-
 [build-system]
 requires = ["poetry-core>=2.0.0,<3.0.0"]
 build-backend = "poetry.core.masonry.api"
