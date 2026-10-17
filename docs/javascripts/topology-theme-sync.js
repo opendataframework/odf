@@ -1,5 +1,5 @@
 // Keeps the embedded topology demo (docs/assets/topology-demo/, see
-// docs/index.md's "UI" section) in sync with the docs site's own
+// docs/index.md's "The UI, live" section) in sync with the docs site's own
 // light/dark toggle. It's a same-origin iframe, so this mirrors
 // mkdocs-material's `data-md-color-scheme` on <body> into the iframe's
 // own `odf-ui-theme` localStorage key — read by its initTheme() on

@@ -1,29 +1,31 @@
 """Resolves a UI theme name to its file-set directory.
 
-A theme is a self-contained ``index.html``/``favicon.svg`` pair under
-``static/themes/<name>/`` — the whole UI (HTML/CSS/JS, including its own
-copy of the light/dark color-mode toggle) in one file, so themes never
-share templates/styles and can't bleed into each other.
+The UI's markup (``static/index.html``) and behavior (``static/app.js``)
+are shared by every theme. A theme is a ``theme.css``/``favicon.svg`` pair
+under ``static/themes/<name>/`` — a complete stylesheet of its own, so
+themes never share styles and can't bleed into each other — plus an
+optional ``theme.js`` for canvas drawing a stylesheet can't express.
 """
 
 from pathlib import Path
 
-_THEMES_DIR = Path(__file__).parent / "static" / "themes"
-_REQUIRED_FILES = ("index.html", "favicon.svg")
+STATIC_DIR = Path(__file__).parent / "static"
+_THEMES_DIR = STATIC_DIR / "themes"
+_REQUIRED_FILES = ("theme.css", "favicon.svg")
 
 
 def list_themes() -> list[str]:
     """Return the names of every available theme, sorted.
 
-    A directory under ``static/themes/`` counts as a theme once it has an
-    ``index.html`` — ``theme_dir`` checks for the rest of the required
+    A directory under ``static/themes/`` counts as a theme once it has a
+    ``theme.css`` — ``theme_dir`` checks for the rest of the required
     files at resolve time, so an incomplete theme still shows up here but
     fails clearly when selected.
     """
     if not _THEMES_DIR.is_dir():
         return []
     return sorted(
-        p.name for p in _THEMES_DIR.iterdir() if p.is_dir() and (p / "index.html").is_file()
+        p.name for p in _THEMES_DIR.iterdir() if p.is_dir() and (p / "theme.css").is_file()
     )
 
 

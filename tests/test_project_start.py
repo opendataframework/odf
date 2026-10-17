@@ -74,6 +74,35 @@ def test_start_ui_rejects_invalid_ui_topology_config():
         server.stop()
 
 
+def test_start_ui_turns_annotations_off_from_config():
+    server = Server.from_dict({"ui": {"annotations": False}})
+    server.start(ui=True, ui_port=18773, app_module=None)
+    try:
+        last_err = None
+        for _ in range(50):
+            try:
+                with urllib.request.urlopen(f"{server.ui_url}/api/ui/extensions", timeout=1) as res:
+                    body = json.load(res)
+                    break
+            except OSError as e:
+                last_err = e
+                time.sleep(0.1)
+        else:
+            raise AssertionError(f"UI server never became ready: {last_err}")
+        assert body["annotations"] is False
+    finally:
+        server.stop()
+
+
+def test_start_ui_rejects_a_non_boolean_annotations_setting():
+    server = Server.from_dict({"ui": {"annotations": "false"}})
+    try:
+        with pytest.raises(ValueError, match="annotations"):
+            server.start(ui=True, ui_port=18774, app_module=None)
+    finally:
+        server.stop()
+
+
 def test_start_ui_warns_about_topology_names_matching_no_component():
     server = Server.from_dict({"ui": {"topology": {"tasks": ["nothing-here"]}}})
     try:

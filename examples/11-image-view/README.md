@@ -2,7 +2,9 @@
 
 A single `DeliveryPhotos` repository implementing `data_view() -> ImageView`
 instead of getting the default table. The topology UI renders it as a grid
-of thumbnails, one per record, instead of a grid of columns.
+of thumbnails, one per record, instead of a grid of columns. Selecting a
+thumbnail opens that image full size, with the record's other fields as a
+caption.
 
 This isolates the `ImageView` variant covered in
 [`opendataframework`'s view docs](https://opendataframework.github.io/opendataframework/view/) —
@@ -11,10 +13,11 @@ a single still image per record,
 `VideoView` and [`10-audio-view`](../10-audio-view)'s `AudioView`, but one
 image instead of a clip.
 
-`DeliveryPhotos` comes pre-seeded in-memory with two synthesized photos (see
-`app/repositories.py`'s `_SEED_PHOTOS`) — there's no reason to reach for a
-file when the data is this small, and a photo grid is a lot more useful to
-look at with something already in it.
+`DeliveryPhotos` comes pre-seeded with the three pictures in `data/photos/`
+(see `app/repositories.py`'s `_SEED_PHOTOS`), one each as JPEG, PNG and WebP
+— a photo grid is a lot more useful to look at with something already in it.
+The files are read once at startup; the repository itself stays in-memory,
+with each record's `image` field holding the encoded bytes.
 
 ## Structure
 
@@ -22,6 +25,8 @@ look at with something already in it.
 11-image-view/
 ├── config.toml          # no custom keys needed for this example
 ├── main.py              # entry point — reads back the pre-seeded photos, prints data_view()
+├── data/
+│   └── photos/          # order-101.jpg, order-102.png, order-103.webp — the seed pictures
 └── app/
     ├── __init__.py      # imports both modules so decorators register at startup
     ├── entities.py       # DeliveryPhoto(id, order_id, image, captured_at) — @Entity
@@ -30,12 +35,7 @@ look at with something already in it.
 
 ## Dependencies
 
-Needs the `examples` extra (`pip install odf[examples]`), which pulls in
-both `opencv-python` (`cv2`) and `numpy` to synthesize each photo. Both are
-also in the repo's `dev` dependency group, so a plain `poetry install`
-covers it too (see [`CLAUDE.md`](../../CLAUDE.md)). No binary asset is
-committed — each photo is a solid color block (derived from the order id)
-with the order id drawn on it via `cv2.putText`.
+None beyond `odf` itself — the photos are plain files, read as bytes.
 
 ## Run it
 
@@ -44,12 +44,13 @@ cd examples/11-image-view
 python main.py
 ```
 
-Expected output (byte counts and timestamps will vary):
+Expected output (timestamps will vary):
 
 ```
 All photos:
-  DeliveryPhoto(id=1, order_id=101, bytes=4247, captured_at=1788037458.134099)
-  DeliveryPhoto(id=2, order_id=102, bytes=4620, captured_at=1788039258.134099)
+  DeliveryPhoto(id=1, order_id=101, bytes=40500, captured_at=1791198425.9238558)
+  DeliveryPhoto(id=2, order_id=102, bytes=2676, captured_at=1791200225.9238558)
+  DeliveryPhoto(id=3, order_id=103, bytes=13078, captured_at=1791201425.9238558)
 
 data_view() -> ImageView(field='image')
 ```
@@ -63,3 +64,123 @@ odf run
 `GET /api/repositories` reports `DeliveryPhotos`' view as
 `{"kind": "image", "field": "image"}` — that's what tells the UI to render a
 grid of thumbnails instead of a table.
+
+## Annotating
+
+An open photo can be labelled with boxes, for simple cases where a separate
+annotation tool or a one-off script would be more than the job needs:
+
+- The tools are in the rail at the top left of the open photo. It opens on
+  **Select** (`V`), which draws nothing; the tool picked is remembered in the
+  browser.
+- With **Draw a box** (`B`), drag on the photo to draw a box, type its label
+  and press `Enter`. Labels already used in the repository are listed under the input, to click or to
+  pick with `↓`/`↑` and `Enter`; typing narrows the list, and the last label
+  is prefilled.
+- For boxes of one size, which some algorithms need, pick **Place a
+  fixed-size box** (`F`) and set the width and height beside it in image
+  pixels (16 × 16 to start with). A click on a spot with no box then places one
+  centred on the pointer, and a drag carries it to where it is released, so
+  it can also go on top of another box. Near an edge the box slides inside
+  the photo rather than being cut, and a photo smaller than the box takes
+  none. The size is remembered in the browser.
+- Select a box and press `Delete` (or its `×`) to remove it. There is no move
+  or resize: delete the box and draw it again. A label no box in the
+  repository uses any more is dropped from the list.
+- Select a box's label to change it.
+- A box inside a larger one stays on top, so it can still be selected,
+  whichever was drawn first.
+- `Esc` backs out of the label input, then the selection, then the photo.
+
+Every change is saved to `annotations.json` in the directory `odf run` was
+started from (`[project] annotations-file` in `config.toml` names another
+path). `annotations = false` under `[ui]` in `config.toml` turns annotating
+off for a project that doesn't need it. The file looks like this:
+
+```json
+{
+  "version": 1,
+  "repositories": {
+    "delivery-photos": {
+      "labels": ["parcel", "door"],
+      "records": {
+        "1": {
+          "width": 640,
+          "height": 480,
+          "annotations": [
+            {"type": "box", "label": "parcel", "x": 212, "y": 230, "width": 150, "height": 98}
+          ]
+        }
+      }
+    }
+  }
+}
+```
+
+- `repositories` is keyed by repository id, and `records` by record key (as a
+  string). A record with no boxes has no entry.
+- `labels` lists the labels that repository's boxes use, in the order each was
+  first used. A label no box uses any more is dropped, so a label's index is a
+  stable class id only while every label before it stays in use.
+- `x`, `y`, `width` and `height` are pixels in the image, with `x`/`y` the
+  box's top-left corner. `width` and `height` on the record are the image's own
+  size, so boxes can be normalised without opening the image.
+
+### Classifying
+
+A whole photo can also be given one class, such as `ok` or `damaged`, with or
+without boxes:
+
+- Under the open photo is a row of the repository's classes. Select **+**,
+  type a class and press `Enter` to add one and give it to the photo.
+- Select a class, or press its number (`1` to `9`), to give it to the open
+  photo. A photo has one class, so this replaces the one it had; selecting its
+  own class takes it away. The photo stays open: `→` moves to the next.
+- Each card in the grid shows its photo's class.
+
+Classes are two more keys in the repository's block, apart from the boxes and
+their `labels`:
+
+```json
+"delivery-photos": {
+  "classes": ["ok", "damaged"],
+  "record_classes": {"1": "ok", "2": "damaged"}
+}
+```
+
+- `record_classes` maps a record key (as a string) to its class. A record with
+  no class has no entry.
+- `classes` lists the classes in use, in the order each was first used. A
+  class no record has any more is dropped.
+
+```python
+block = json.load(open("annotations.json"))["repositories"]["delivery-photos"]
+df["class"] = df["id"].astype(str).map(block["record_classes"])
+```
+
+The same row is under an open document, video or audio clip, and the table
+view has a `class` column with the same choice per row.
+
+### Reading the boxes
+
+The file is plain JSON, so a training pipeline reads it without importing
+`odf`, and converts to whatever its model expects:
+
+```python
+import json
+
+block = json.load(open("annotations.json"))["repositories"]["delivery-photos"]
+for key, record in block["records"].items():
+    W, H = record["width"], record["height"]
+    for box in record["annotations"]:
+        class_id = block["labels"].index(box["label"])
+        x, y, w, h = box["x"], box["y"], box["width"], box["height"]
+        coco = [x, y, w, h]
+        voc = [x, y, x + w, y + h]  # xmin, ymin, xmax, ymax
+        yolo = [class_id, (x + w / 2) / W, (y + h / 2) / H, w / W, h / H]
+```
+
+Coordinates follow the photo as the browser displays it, which applies any
+EXIF rotation. A loader that ignores EXIF orientation by default (Pillow, for
+one) needs it applied (`PIL.ImageOps.exif_transpose`) for the boxes to line up
+on rotated phone photos.

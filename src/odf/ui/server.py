@@ -7,14 +7,16 @@ outside, so it is constructed and driven directly by ``Server.start(ui=True)``
 
 import json
 import threading
-from collections.abc import AsyncIterator, Iterator
+from collections.abc import AsyncIterator, Callable, Iterator
 from pathlib import Path
 from typing import TYPE_CHECKING
 
 try:
     import uvicorn
     from fastapi import FastAPI, HTTPException, Request
+    from fastapi.encoders import jsonable_encoder
     from fastapi.responses import FileResponse, HTMLResponse, Response, StreamingResponse
+    from pydantic import ValidationError
 except ImportError as exc:
     raise ImportError(
         "server.start(ui=True) requires the 'ui' extra. Install with: pip install odf[ui]"
@@ -23,17 +25,19 @@ except ImportError as exc:
 from opendataframework.component import ChartProtocol, DetailsProtocol
 from opendataframework.context import Context
 from opendataframework.repository import ReadableProtocol, StreamableProtocol, WritableProtocol
-from opendataframework.utils import kebab
 from opendataframework.view import (
     AudioView,
     DataView,
+    DocumentView,
     ImageView,
+    LocationView,
     StreamingAudioView,
     StreamingVideoView,
+    TimeseriesView,
     VideoView,
 )
 
-from odf.ui import data, layout, themes
+from odf.ui import annotations, arguments, data, keys, layout, media, themes
 from odf.ui.topology import TopologyView, build_topology
 
 if TYPE_CHECKING:
@@ -44,11 +48,12 @@ _STREAM_BOUNDARY = "odf-frame"
 _MEDIA_CONTENT_TYPES: dict[type, str] = {
     ImageView: "image/jpeg",
     VideoView: "video/mp4",
-    # WAV rather than MP3 — the demo's only AudioView repository (VoiceMemos)
-    # synthesizes clips with the stdlib `wave` module to avoid an encoding
-    # dependency; nothing else uses plain AudioView today.
     AudioView: "audio/wav",
+    DocumentView: "application/octet-stream",
 }
+
+# The views whose annotations are one list for the repository, not per record.
+_LIST_VIEWS = (TimeseriesView, LocationView)
 
 
 class UiServer:
@@ -67,6 +72,12 @@ class UiServer:
             ``/api/layout`` endpoints become a read-only no-op — mirroring how
             ``Context``'s ``log_dir=None`` disables file logging. ``Project``
             opts in to a real path when starting the UI.
+        annotations_file: Path to persist annotations drawn in the image,
+            document, video, audio, timeseries and location views, and the classes given to records,
+            to, as JSON (see ``odf.ui.annotations``). ``None`` (the default)
+            disables annotation — the UI offers no drawing and the save
+            endpoint returns 404. ``Project`` opts in to a real path when
+            starting the UI.
         chat_engine: A ready ``ChatEngine`` to serve the chat window through,
             or ``None`` (the default) to disable it — the chat toggle stays
             hidden in the UI and ``POST /api/chat`` returns 404. ``Project``
@@ -88,7 +99,7 @@ class UiServer:
             (the default) keeps the built-in ``"ODF"`` label. Distinct from
             ``project`` — that's the specific project being visualized;
             this is the product/tool name wrapping around it.
-        theme: Name of the UI theme (visual/layout file-set) to serve — see
+        theme: Name of the UI theme (visual file-set) to serve — see
             ``odf.ui.themes``. Defaults to ``"default"``. Orthogonal to the
             UI's own client-side light/dark color-mode toggle, which each
             theme keeps working independently.
@@ -105,6 +116,7 @@ class UiServer:
         host: str = "127.0.0.1",
         port: int = 4747,
         layout_file: str | Path | None = None,
+        annotations_file: str | Path | None = None,
         chat_engine: ChatEngine | None = None,
         icon_scripts: list[Path] | None = None,
         colors: dict[str, str] | None = None,
@@ -120,6 +132,9 @@ class UiServer:
         self._host = host
         self._port = port
         self._layout_path = Path(layout_file) if layout_file is not None else None
+        self._annotations_path = Path(annotations_file) if annotations_file is not None else None
+        # Saving is load-modify-write on one file, from FastAPI's thread pool.
+        self._annotations_lock = threading.Lock()
         self._chat = chat_engine
         self._icon_scripts = list(icon_scripts) if icon_scripts is not None else []
         self._colors = dict(colors) if colors is not None else {}
@@ -152,7 +167,7 @@ class UiServer:
 
         @app.get("/api/ui/extensions")
         def ui_extensions() -> dict:
-            """List registered icon scripts, extra named colors, the custom logo, and brand."""
+            """List icon scripts, extra colors, the custom logo, brand, and enabled features."""
             return {
                 "iconScripts": [
                     f"/api/ui/icon-scripts/{i}" for i in range(len(self._icon_scripts))
@@ -160,6 +175,7 @@ class UiServer:
                 "colors": self._colors,
                 "logo": "/api/ui/logo" if self._logo is not None else None,
                 "brand": self._brand,
+                "annotations": self._annotations_path is not None,
             }
 
         @app.get("/api/ui/logo")
@@ -192,8 +208,9 @@ class UiServer:
             """List a repository's records, paginated and filtered by query params."""
             _, instance, entity_cls = self._get_readable(repo_id)
             filters = data.parse_filters(entity_cls, request.query_params.items())
+            view = data.resolve_view(instance, readable=True)
             records, total = data.list_records(
-                instance, entity_cls, limit=limit, offset=offset, filters=filters
+                instance, entity_cls, limit=limit, offset=offset, filters=filters, view=view
             )
             response.headers["X-Total-Count"] = str(total)
             return records
@@ -233,13 +250,13 @@ class UiServer:
         def start_stream(repo_id: str) -> None:
             """Start a streamable repository's shared background stream."""
             repo_cls, _, _ = self._get_streamable(repo_id)
-            self._context.start_stream(repo_cls.__name__)
+            self._context.start_stream(self._context.key(repo_cls))
 
         @app.post("/api/repositories/{repo_id}/stop-stream", status_code=204)
         def stop_stream(repo_id: str) -> None:
             """Stop a streamable repository's shared background stream."""
             repo_cls, _, _ = self._get_streamable(repo_id)
-            self._context.stop_stream(repo_cls.__name__)
+            self._context.stop_stream(self._context.key(repo_cls))
 
         @app.get("/api/repositories/{repo_id}/stream")
         def stream_records(repo_id: str) -> Response:
@@ -247,7 +264,7 @@ class UiServer:
             repo_cls, _, _ = self._get_streamable(repo_id)
             view = self._get_streaming_view(repo_id)
             try:
-                entities = self._context.iter_stream(repo_cls.__name__)
+                entities = self._context.iter_stream(self._context.key(repo_cls))
             except KeyError as exc:
                 raise HTTPException(
                     status_code=409,
@@ -275,64 +292,229 @@ class UiServer:
             )
 
         @app.get("/api/repositories/{repo_id}/records/{key}/media")
-        def record_media(repo_id: str, key: str) -> Response:
-            """Return the raw media bytes (image/video/audio) for one record."""
+        def record_media(repo_id: str, key: str, request: Request) -> Response:
+            """Return the raw media bytes (image/video/audio/document) for one record.
+
+            Honors a single-range ``Range`` header with a ``206``, which is
+            what lets a browser seek within a clip (and Safari play one).
+
+            A document is only ever served as a PDF, as plain text or as an
+            opaque download, and never left for the browser to sniff, so
+            stored markup can't run on the UI's origin when it is opened.
+
+            A repository's ``content_metadata()`` names the content, sent as
+            ``Content-Disposition``, and declares its type, taken over
+            sniffing within those same rules (see ``media.media_type``).
+            """
             _, instance, entity_cls = self._get_readable(repo_id)
             view = self._get_data_view(repo_id)
-            content_type = _MEDIA_CONTENT_TYPES.get(type(view))
-            if content_type is None:
+            default_type = _MEDIA_CONTENT_TYPES.get(type(view))
+            if default_type is None:
                 raise HTTPException(status_code=403, detail="Repository has no media view")
             key_field = data.key_field_name(entity_cls)
             coerced_key = data.coerce_key(entity_cls, key_field, key)
             record = next((r for r in instance.all() if getattr(r, key_field) == coerced_key), None)
             if record is None:
                 raise HTTPException(status_code=404, detail="Record not found")
-            return Response(content=getattr(record, view.field), media_type=content_type)
+            content = getattr(record, view.field)
+            if not isinstance(content, (bytes, bytearray)):
+                raise HTTPException(status_code=404, detail="Record has no media")
+            content = bytes(content)
+            metadata = data.content_metadata(instance, view, record)
+            declared_type = metadata.content_type if metadata is not None else None
+            headers = {"Accept-Ranges": "bytes"}
+            sniff_length = media.SNIFF_LENGTH
+            if isinstance(view, DocumentView):
+                sniff_length = media.DOCUMENT_SNIFF_LENGTH
+            if isinstance(view, DocumentView) or declared_type:
+                headers["X-Content-Type-Options"] = "nosniff"
+            disposition = media.content_disposition(metadata.filename if metadata else None)
+            if disposition is not None:
+                headers["Content-Disposition"] = disposition
+            content_type = media.media_type(content[:sniff_length], default_type, declared_type)
+            try:
+                byte_range = media.parse_range(request.headers.get("range"), len(content))
+            except ValueError:
+                return Response(
+                    status_code=416,
+                    headers={**headers, "Content-Range": f"bytes */{len(content)}"},
+                )
+            if byte_range is None:
+                return Response(content=content, media_type=content_type, headers=headers)
+            start, end = byte_range
+            headers["Content-Range"] = f"bytes {start}-{end}/{len(content)}"
+            return Response(
+                content=content[start : end + 1],
+                status_code=206,
+                media_type=content_type,
+                headers=headers,
+            )
 
-        @app.get("/api/components/{component_id}/logs")
-        def component_logs(component_id: str) -> list[dict]:
+        @app.get("/api/repositories/{repo_id}/annotations")
+        def repository_annotations(repo_id: str) -> dict:
+            """Return a repository's labels and annotations.
+
+            An image, document, video or audio repository's are per record,
+            a timeseries or location repository's one list (see
+            ``odf.ui.annotations``).
+            """
+            view = self._get_annotatable_view(repo_id)
+            block = annotations.series if isinstance(view, _LIST_VIEWS) else annotations.repository
+            if self._annotations_path is None:
+                return block({}, repo_id)
+            with self._annotations_lock:
+                return block(self._load_annotations(), repo_id)
+
+        @app.put("/api/repositories/{repo_id}/annotations")
+        def put_repository_annotations(repo_id: str, body: dict) -> dict:
+            """Replace a timeseries or location repository's annotations, returning its labels."""
+            view = self._get_annotatable_view(repo_id)
+            if not isinstance(view, _LIST_VIEWS):
+                raise HTTPException(
+                    status_code=404, detail="Repository's annotations are per record"
+                )
+            replace = (
+                annotations.set_series
+                if isinstance(view, TimeseriesView)
+                else annotations.set_regions
+            )
+            if self._annotations_path is None:
+                raise HTTPException(status_code=404, detail="Annotations are not enabled")
+            with self._annotations_lock:
+                saved = self._load_annotations()
+                try:
+                    block = replace(saved, repo_id, body.get("annotations"))
+                except ValueError as exc:
+                    raise HTTPException(status_code=400, detail=str(exc)) from exc
+                annotations.save(self._annotations_path, saved)
+            return {"labels": block["labels"]}
+
+        @app.put("/api/repositories/{repo_id}/records/{key}/annotations")
+        def put_record_annotations(repo_id: str, key: str, body: dict) -> dict:
+            """Replace one record's annotations, returning the repository's labels."""
+            view = self._get_annotatable_view(repo_id)
+            if isinstance(view, _LIST_VIEWS):
+                raise HTTPException(
+                    status_code=404, detail="Repository's annotations are not per record"
+                )
+            if self._annotations_path is None:
+                raise HTTPException(status_code=404, detail="Annotations are not enabled")
+            with self._annotations_lock:
+                saved = self._load_annotations()
+                try:
+                    if isinstance(view, DocumentView):
+                        block = annotations.set_document_record(
+                            saved, repo_id, key, body.get("annotations")
+                        )
+                    elif isinstance(view, (VideoView, AudioView)):
+                        block = annotations.set_clip_record(
+                            saved, repo_id, key, body.get("duration"), body.get("annotations")
+                        )
+                    else:
+                        block = annotations.set_record(
+                            saved,
+                            repo_id,
+                            key,
+                            body.get("width"),
+                            body.get("height"),
+                            body.get("annotations"),
+                        )
+                except ValueError as exc:
+                    raise HTTPException(status_code=400, detail=str(exc)) from exc
+                annotations.save(self._annotations_path, saved)
+            return {"labels": block["labels"]}
+
+        @app.get("/api/repositories/{repo_id}/classes")
+        def repository_classes(repo_id: str) -> dict:
+            """Return a repository's classes and the class of each record that has one."""
+            self._get_classifiable_view(repo_id)
+            if self._annotations_path is None:
+                return annotations.classes({}, repo_id)
+            with self._annotations_lock:
+                return annotations.classes(self._load_annotations(), repo_id)
+
+        @app.put("/api/repositories/{repo_id}/records/{key}/class")
+        def put_record_class(repo_id: str, key: str, body: dict) -> dict:
+            """Set one record's class, or clear it, returning the repository's classes."""
+            self._get_classifiable_view(repo_id)
+            if self._annotations_path is None:
+                raise HTTPException(status_code=404, detail="Annotations are not enabled")
+            with self._annotations_lock:
+                saved = self._load_annotations()
+                try:
+                    block = annotations.set_class(saved, repo_id, key, body.get("class"))
+                except ValueError as exc:
+                    raise HTTPException(status_code=400, detail=str(exc)) from exc
+                annotations.save(self._annotations_path, saved)
+            return {"classes": block["classes"]}
+
+        # Every resolved class is served under its execution type's
+        # collection, by registered name: a @Task registered as "loader" is
+        # /api/tasks/loader (see odf.ui.keys). Actions that only apply to one
+        # kind have routes for that kind only.
+
+        @app.get("/api/{collection}/{name}/logs")
+        def component_logs(collection: str, name: str) -> list[dict]:
             """Return a component's tailed log records."""
-            cls = self._find_class_or_404(component_id)
-            return self._context.tail_logs(cls.__name__)
+            cls = self._find_or_404(collection, name)
+            return self._context.tail_logs(self._context.key(cls))
 
-        @app.get("/api/components/{component_id}/details")
-        def component_details(component_id: str) -> dict[str, str]:
+        @app.get("/api/{collection}/{name}/details")
+        def component_details(collection: str, name: str) -> dict[str, str]:
             """Return a component's ``DetailsProtocol`` key/value details."""
-            return self._get_details(component_id).details()
+            return self._get_details(collection, name).details()
 
-        @app.get("/api/components/{component_id}/chart", response_class=HTMLResponse)
-        def component_chart(component_id: str) -> str:
+        @app.get("/api/{collection}/{name}/chart", response_class=HTMLResponse)
+        def component_chart(collection: str, name: str) -> str:
             """Return a component's ``ChartProtocol`` HTML chart."""
-            return self._get_chart(component_id).chart()
+            return self._get_chart(collection, name).chart()
 
-        @app.post("/api/components/{component_id}/start", status_code=204)
-        def start_component(component_id: str) -> None:
-            """Start a component through the context."""
-            cls = self._find_class_or_404(component_id)
+        @app.post("/api/services/{name}/start", status_code=204)
+        def start_service(name: str) -> None:
+            """Start a service through the context."""
+            cls = self._find_or_404("services", name)
             try:
-                self._context.start(cls.__name__)
+                self._context.start(self._context.key(cls))
             except TypeError as exc:
                 raise HTTPException(status_code=400, detail=str(exc)) from exc
 
-        @app.post("/api/components/{component_id}/stop", status_code=204)
-        def stop_component(component_id: str) -> None:
-            """Stop a component through the context."""
-            cls = self._find_class_or_404(component_id)
+        @app.post("/api/services/{name}/stop", status_code=204)
+        def stop_service(name: str) -> None:
+            """Stop a service through the context."""
+            cls = self._find_or_404("services", name)
             try:
-                self._context.stop(cls.__name__)
+                self._context.stop(self._context.key(cls))
             except TypeError as exc:
                 raise HTTPException(status_code=400, detail=str(exc)) from exc
 
-        @app.post("/api/components/{component_id}/execute", status_code=204)
-        def execute_component(component_id: str) -> None:
-            """Execute a component's task/pipeline through the context."""
-            cls = self._find_class_or_404(component_id)
+        @app.post("/api/{collection}/{name}/execute", status_code=204)
+        def execute(collection: str, name: str) -> None:
+            """Execute a task or pipeline through the context."""
+            if collection not in ("tasks", "pipelines"):
+                raise HTTPException(status_code=404, detail="Not found")
+            cls = self._find_or_404(collection, name)
             try:
-                self._context.execute(cls.__name__)
-            except TypeError as exc:
-                raise HTTPException(status_code=400, detail=str(exc)) from exc
+                self._context.execute(self._context.key(cls))
             except Exception as exc:
                 raise HTTPException(status_code=500, detail=str(exc)) from exc
+
+        # Whatever takes arguments (see odf.ui.arguments): an agent's
+        # /api/agents/{name}/{parameters,invoke}, a function's
+        # /api/functions/{name}/{parameters,call}.
+        for kind, entry in arguments.ENTRIES.items():
+            collection = keys.COLLECTIONS[kind]
+            app.add_api_route(
+                f"/api/{collection}/{{name}}/parameters",
+                self._parameters_route(collection),
+                methods=["GET"],
+                name=f"{kind}_parameters",
+            )
+            app.add_api_route(
+                f"/api/{collection}/{{name}}/{entry.verb}",
+                self._call_route(collection),
+                methods=["POST"],
+                name=f"{kind}_{entry.verb}",
+            )
 
         @app.get("/api/chat/config")
         def chat_config() -> dict:
@@ -351,10 +533,47 @@ class UiServer:
                 self._chat_events(body.get("messages", [])), media_type="application/x-ndjson"
             )
 
+        # The UI's own files are revalidated on every load: ``/theme.css`` and
+        # ``/theme.js`` change content with the selected theme, and all of them
+        # change together on upgrade, so a stale cached copy would mix them.
+        no_cache = {"Cache-Control": "no-cache"}
+
         @app.get("/")
         def index() -> FileResponse:
-            """Serve the selected theme's ``index.html``."""
-            return FileResponse(self._theme_dir / "index.html")
+            """Serve the UI's ``index.html``, shared by every theme."""
+            return FileResponse(themes.STATIC_DIR / "index.html", headers=no_cache)
+
+        @app.get("/app.js")
+        def app_js() -> FileResponse:
+            """Serve the UI's script, shared by every theme."""
+            return FileResponse(
+                themes.STATIC_DIR / "app.js", media_type="application/javascript", headers=no_cache
+            )
+
+        @app.get("/icons/{name}")
+        def icon_group(name: str) -> FileResponse:
+            """Serve one of the UI's built-in icon group scripts."""
+            icons_dir = themes.STATIC_DIR / "icons"
+            if name not in {p.name for p in icons_dir.glob("*.js")}:
+                raise HTTPException(status_code=404, detail=f"Unknown icon script: {name}")
+            return FileResponse(
+                icons_dir / name, media_type="application/javascript", headers=no_cache
+            )
+
+        @app.get("/theme.css")
+        def theme_css() -> FileResponse:
+            """Serve the selected theme's stylesheet."""
+            return FileResponse(
+                self._theme_dir / "theme.css", media_type="text/css", headers=no_cache
+            )
+
+        @app.get("/theme.js")
+        def theme_js() -> Response:
+            """Serve the selected theme's script — empty if it doesn't have one."""
+            path = self._theme_dir / "theme.js"
+            if not path.is_file():
+                return Response("", media_type="application/javascript", headers=no_cache)
+            return FileResponse(path, media_type="application/javascript", headers=no_cache)
 
         @app.get("/favicon.svg")
         def favicon() -> FileResponse:
@@ -364,25 +583,58 @@ class UiServer:
 
         self._app = app
 
-    def _find_class_or_404(self, component_id: str) -> type:
-        """Resolve a kebab-case component id to its class, or raise 404."""
-        for cls in self._context.instances:
-            if kebab(cls.__name__) == component_id:
-                return cls
-        raise HTTPException(status_code=404, detail="Component not found")
+    def _parameters_route(self, collection: str) -> Callable[[str], dict]:
+        """Return the route serving the JSON schema of a ``collection`` object's arguments."""
 
-    def _get_details(self, component_id: str) -> DetailsProtocol:
-        """Resolve a component id to its instance, or raise 403 if not detailed."""
-        cls = self._find_class_or_404(component_id)
-        instance = self._context.instances[cls]
+        def parameters(name: str) -> dict:
+            """Return the JSON schema of the arguments the named object takes."""
+            obj = self._find_or_404(collection, name)
+            return arguments.model(self._context, obj).model_json_schema()
+
+        return parameters
+
+    def _call_route(self, collection: str) -> Callable[[str, dict], dict]:
+        """Return the route calling a ``collection`` object through ``Context.call()``."""
+
+        def call(name: str, body: dict) -> dict:
+            """Call the named object, with the request body as its arguments."""
+            obj = self._find_or_404(collection, name)
+            model = arguments.model(self._context, obj)
+            try:
+                validated = model.model_validate(body)
+            except ValidationError as exc:
+                raise HTTPException(
+                    status_code=422, detail=jsonable_encoder(exc.errors(include_url=False))
+                ) from exc
+            kwargs = {field: getattr(validated, field) for field in type(validated).model_fields}
+            try:
+                result = self._context.call(self._context.key(obj), **kwargs)
+            except Exception as exc:
+                raise HTTPException(status_code=500, detail=str(exc)) from exc
+            try:
+                return {"result": jsonable_encoder(result)}
+            except Exception:
+                return {"result": str(result)}
+
+        return call
+
+    def _find_or_404(self, collection: str, name: str) -> type | Callable[..., object]:
+        """Resolve ``/api/{collection}/{name}`` to its class or function, or raise 404."""
+        cls = keys.resolve_collection(self._context, collection, name)
+        if cls is None:
+            raise HTTPException(status_code=404, detail="Component not found")
+        return cls
+
+    def _get_details(self, collection: str, name: str) -> DetailsProtocol:
+        """Resolve a component to its instance, or raise 403 if not detailed."""
+        instance = self._context.instances.get(self._find_or_404(collection, name))
         if not isinstance(instance, DetailsProtocol):
             raise HTTPException(status_code=403, detail="Component has no details")
         return instance
 
-    def _get_chart(self, component_id: str) -> ChartProtocol:
-        """Resolve a component id to its instance, or raise 403 if not chartable."""
-        cls = self._find_class_or_404(component_id)
-        instance = self._context.instances[cls]
+    def _get_chart(self, collection: str, name: str) -> ChartProtocol:
+        """Resolve a component to its instance, or raise 403 if not chartable."""
+        instance = self._context.instances.get(self._find_or_404(collection, name))
         if not isinstance(instance, ChartProtocol):
             raise HTTPException(status_code=403, detail="Component has no chart")
         return instance
@@ -422,6 +674,27 @@ class UiServer:
         if view is None:
             raise HTTPException(status_code=403, detail="Repository has no data view")
         return view
+
+    def _get_annotatable_view(self, repo_id: str) -> DataView:
+        """Resolve a repository id's data view, or raise 404 if it can't be annotated."""
+        view = self._get_data_view(repo_id)
+        if not isinstance(view, (ImageView, DocumentView, VideoView, AudioView, *_LIST_VIEWS)):
+            raise HTTPException(status_code=404, detail="Repository's view takes no annotations")
+        return view
+
+    def _get_classifiable_view(self, repo_id: str) -> DataView:
+        """Resolve a repository id's data view, or raise 404 if its records take no class."""
+        view = self._get_data_view(repo_id)
+        if isinstance(view, (StreamingVideoView, StreamingAudioView)):
+            raise HTTPException(status_code=404, detail="Repository has no stored records")
+        return view
+
+    def _load_annotations(self) -> dict:
+        """Load the annotations file, or raise 500 if it exists but can't be read."""
+        try:
+            return annotations.load(self._annotations_path)
+        except ValueError as exc:
+            raise HTTPException(status_code=500, detail=str(exc)) from exc
 
     def _get_streaming_view(self, repo_id: str) -> StreamingVideoView | StreamingAudioView:
         """Resolve a repository id's data view, or raise 403 if it isn't streaming."""

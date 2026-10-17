@@ -13,7 +13,7 @@ class DeliveryPhoto:
     Attributes:
         id: Primary key, ``None`` until ``DeliveryPhotos.save()`` assigns one.
         order_id: The order this photo is proof-of-delivery for.
-        image: The photo, JPEG-encoded.
+        image: The encoded photo (JPEG, PNG, WebP, ...).
         captured_at: ``time.time()`` when the photo was captured.
     """
 

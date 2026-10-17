@@ -1,8 +1,8 @@
 """View: VideoView, a bounded, seekable clip per record — not a live feed.
 
 SecurityClips implements data_view() -> VideoView instead of the default
-table. The topology UI renders a list of seekable video clips, one per
-record, instead of a grid of columns. Unlike 07-streaming-video-view's
+table. The topology UI renders a grid of cards, one per record, each
+opening its clip in a player, instead of a grid of columns. Unlike 07-streaming-video-view's
 StreamingVideoView, this repository is ReadableProtocol (all()/save()), not
 StreamableProtocol — there is a genuine "every record" here.
 

@@ -45,7 +45,7 @@ class StockRoom:
         ]
 
     def mcp_tools(self) -> list[McpTool]:
-        """Expose ``low_stock`` as a custom MCP tool, registered as ``stock-room.low_stock``."""
+        """Expose ``low_stock`` as a custom MCP tool, ``component.stock-room.low_stock``."""
         return [
             McpTool(
                 name="low_stock",

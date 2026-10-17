@@ -25,9 +25,9 @@ class Webcam:
         """Read the configured device index; leave the camera unopened.
 
         Args:
-            config: Project config; reads ``webcam.device`` (default ``0``).
+            config: Project config; reads ``repository.webcam.device`` (default ``0``).
         """
-        cfg = config.get("webcam")
+        cfg = config.get("repository").get("webcam")
         self.device = cfg.get("device", 0)
         self.capture = None
 

@@ -2,7 +2,7 @@
 
 A `StockRoom` component implementing `opendataframework.component.McpToolsProtocol`'s
 `mcp_tools()`, so `server.start(mcp=True)` registers its `low_stock` tool
-as `stock-room.low_stock`, alongside the six fixed built-in tools
+as `component.stock-room.low_stock`, alongside the six fixed built-in tools
 `odf.mcp.server.McpServer` always registers (`list_components`,
 `query_repository`, `start_component`, `stop_component`, `execute_task`,
 `component_logs`).
@@ -11,8 +11,8 @@ This isolates the concept covered in [`docs/index.md`](../../docs/index.md#mcp-s
 components aren't limited to the fixed generic surface — any resolved
 component can add its own tools, detected structurally
 (`isinstance(instance, McpToolsProtocol)`, never invoked by `Context`
-itself) and namespaced `<kebab(ClassName)>.<tool name>` to avoid colliding
-with the fixed tools or another component's own. Unlike
+itself) and prefixed by the component's key, `<namespace>.<name>.<tool name>`,
+to avoid colliding with the fixed tools or another component's own. Unlike
 [`16-mcp-chat`](../16-mcp-chat) — whose `app/` is deliberately generic, so
 it only demonstrates the fixed surface — `StockRoom` here is the one new
 thing: a component whose own `mcp_tools()` returns something.
@@ -23,6 +23,15 @@ a fixed one: `execute_task()` takes no arguments at all, and
 "items at or below an explicit numeric threshold" — `low_stock(threshold:
 int | None = None)` can, because it's a real typed parameter on a
 purpose-built tool.
+
+That typed parameter is also what a client sees. The MCP server passes the
+tool's `description` and its handler's signature,
+`low_stock(threshold: int | None = None) -> list[dict]`, to the client as the
+tool's description and input schema. `McpTool` therefore requires both: a
+non-empty description, and a handler with every parameter and the return
+value annotated (`-> None` counts). A lambda or a module with
+`from __future__ import annotations` is rejected, so `odf run` stops with a
+start-up error.
 
 `Items` comes pre-seeded in-memory with three items, two already below
 their reorder level (see `app/repositories.py`'s `_SEED_ITEMS`), so
@@ -44,7 +53,7 @@ their reorder level (see `app/repositories.py`'s `_SEED_ITEMS`), so
 
 ## Dependencies
 
-Needs the `mcp` extra (`pip install odf[mcp]`) for the MCP server and its
+Needs the `mcp` extra (`pip install "odf[mcp]"`) for the MCP server and its
 client, already in the repo's `dev` dependency group, so a plain
 `poetry install` covers it (see [`CLAUDE.md`](../../CLAUDE.md)).
 
@@ -62,10 +71,10 @@ Topology UI running at http://127.0.0.1:4747
 MCP server running at http://127.0.0.1:4748/mcp
 
 Driving the project over MCP, the same way an MCP client would:
-Tools exposed over MCP: ['list_components', 'query_repository', 'start_component', 'stop_component', 'execute_task', 'component_logs', 'stock-room.low_stock']
+Tools exposed over MCP: ['list_components', 'query_repository', 'start_component', 'stop_component', 'execute_task', 'component_logs', 'component.stock-room.low_stock']
 
-stock-room.low_stock()            -> [{"name": "Packing tape", "quantity": 4, "reorder_level": 10}, {"name": "Shipping labels", "quantity": 2, "reorder_level": 20}]
-stock-room.low_stock(threshold=5) -> [{"name": "Packing tape", "quantity": 4, "reorder_level": 10}, {"name": "Shipping labels", "quantity": 2, "reorder_level": 20}]
+component.stock-room.low_stock()            -> [{"name": "Packing tape", "quantity": 4, "reorder_level": 10}, {"name": "Shipping labels", "quantity": 2, "reorder_level": 20}]
+component.stock-room.low_stock(threshold=5) -> [{"name": "Packing tape", "quantity": 4, "reorder_level": 10}, {"name": "Shipping labels", "quantity": 2, "reorder_level": 20}]
 ```
 
 Or start it via the CLI/UI:

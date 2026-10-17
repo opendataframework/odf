@@ -1,12 +1,12 @@
 # CLI
 
 The `odf` command-line tool scaffolds new projects and runs existing ones. It is
-installed alongside the framework:
+installed with the package; the `ui` extra adds the UI `odf run` starts by default:
 
 <!-- termynal -->
 
 ```
-$ pip install odf
+$ pip install "odf[ui]"
 ---> 100%
 Installed
 ```
@@ -16,7 +16,7 @@ $ odf --help
 
  Usage: odf [OPTIONS] COMMAND [ARGS]...
 
- ODF — config-driven Python framework for building data applications.
+ Open Data Framework CLI.
 
 Commands:
   init  Scaffold a new ODF project: a config.toml and an importable app package.
@@ -39,9 +39,9 @@ odf init [NAME] [--template/-t TEMPLATE]
   already contain files.
 * `--template` / `-t` — which starting layout to scaffold. Defaults to `default`.
 
-Every template runs immediately after `pip install odf` — no extra dependencies —
-because they're all built on `odf` core plus the Python standard library
-(`sqlite3` for storage).
+No template needs a dependency of its own: each is built on `opendataframework`
+plus the Python standard library (`sqlite3` for storage). Running one with the
+UI, as `odf run` does by default, needs the `odf[ui]` extra.
 
 ### Templates
 
@@ -103,10 +103,10 @@ the `app` package, the same layout `odf init` produces.
 | `--app` | `app` | Import name of the package that registers components — see [Server](server.md#the-app-module) for the same convention used when building a `Server` directly in Python |
 | `--ui` / `--no-ui` | `--ui` | Start the UI |
 | `--ui-host`, `--ui-port` | `127.0.0.1`, `4747` | Interface/port for the UI |
-| `--theme` | config's `[ui] theme`, or `default` | UI theme (visual file-set) to serve. Built in: `default`, `glitch`, `neo`, `emerald` |
-| `--mcp` / `--no-mcp` | `--no-mcp` | Start the MCP server |
+| `--theme` | config's `[ui] theme`, or `default` | UI theme (visual file-set) to serve. Built in: `default`, `glitch`, `neo`, `emerald`, `onyx` (see [UI](ui.md#themes-icons-and-branding)) |
+| `--mcp` / `--no-mcp` | `--no-mcp` | Start the [MCP server](mcp.md) |
 | `--mcp-host`, `--mcp-port` | `127.0.0.1`, `4748` | Interface/port for the MCP server |
-| `--chat` / `--no-chat` | `--no-chat` | Add a chat window to the UI (requires `--ui`) |
+| `--chat` / `--no-chat` | `--no-chat` | Add a [chat window](chat.md) to the UI (requires `--ui`) |
 
 ```text
 $ odf run
@@ -114,5 +114,19 @@ UI running at http://127.0.0.1:4747
 Press Ctrl+C to stop
 ```
 
-The UI (`--ui`, on by default) requires the `odf[ui]` extra
-(`fastapi`/`uvicorn`); pass `--no-ui` to run without it.
+When `opendataframework` or `odf` rejects the project at start-up, `odf run`
+prints the reason on one line and exits with status 1, without a traceback.
+When the error comes from a decorator, the line ends with the file and line of
+the decorated class:
+
+```text
+$ odf run
+Error: Repository expects a class registered with @Entity, got 'Item'. Decorate it with @Entity — or, if Item is the repository itself, pass its entity: @Repository(SomeEntity) (app/repositories.py:8)
+```
+
+An exception raised by the project's own code, such as a constructor or a
+`setup()`, is shown with its full traceback.
+
+The [UI](ui.md) (`--ui`, on by default) requires the `odf[ui]` extra
+(`fastapi`/`uvicorn`); pass `--no-ui` to run without it. `--mcp` requires
+`odf[mcp]` and `--chat` requires `odf[chat]`.

@@ -2,7 +2,7 @@
 
 Backs the "drag a node to a new cell", "change a node's icon", "change a
 node's color", and "add cells to the grid" interactions in the UI
-(see ``index.html``'s drag handling, icon/color pickers, and grid-controls
+(see ``app.js``'s drag handling, icon/color pickers, and grid-controls
 buttons) so layout customizations survive a page refresh. Scoped to whatever
 ``Path`` a ``UiServer`` is constructed with — not process-global state, so
 multiple ``Project`` instances never share a file unless explicitly
@@ -28,7 +28,8 @@ def load(path: Path) -> dict[str, dict[str, int | str]]:
         Mapping of node id to ``{"col": int, "row": int, "icon": str, "color": str}``,
         where ``"icon"`` and ``"color"`` are optional (a node with no such
         override omits the corresponding key). The reserved key ``"_grid"``
-        (never a valid node id — those are always kebab-case class names) maps
+        (never a valid node id — those are ``<namespace>.<name>`` keys, or
+        ``config``) maps
         instead to ``{"nw": int, "ne": int, "se": int, "sw": int}``, the number
         of user-added empty cells extending each edge of the isometric diamond
         past the auto-fit bounds derived from node positions.

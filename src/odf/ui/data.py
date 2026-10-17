@@ -25,9 +25,10 @@ from opendataframework.repository import (
     StreamableProtocol,
     WritableProtocol,
 )
-from opendataframework.utils import kebab
 from opendataframework.view import (
     AudioView,
+    ContentMetadata,
+    ContentMetadataProtocol,
     DataView,
     DataViewProtocol,
     DocumentView,
@@ -40,6 +41,8 @@ from opendataframework.view import (
     TimeseriesView,
     VideoView,
 )
+
+from odf.ui import keys
 
 
 def build_repositories(context: Context) -> list[dict]:
@@ -63,26 +66,24 @@ def build_repositories(context: Context) -> list[dict]:
     return schemas
 
 
-def find_repository(context: Context, repo_id: str) -> tuple[type, object, type] | None:
-    """Look up a repository by its topology id (kebab-case class name).
+def find_repository(context: Context, name: str) -> tuple[type, object, type] | None:
+    """Look up a repository by its registered name (its key's name part).
 
     Args:
         context: A ``Context`` that has already been opened.
-        repo_id: The kebab-case id, as used by ``ui/topology.py`` node ids.
+        name: The registered name, as in ``/api/repositories/{name}``.
 
     Returns:
         ``(repo_cls, instance, entity_cls)``, or ``None`` if no resolved,
         dataclass-entity-backed repository matches.
     """
-    repo_classes = set(dict(Repository.items()).values())
-    for cls, instance in context.instances.items():
-        if cls not in repo_classes or kebab(cls.__name__) != repo_id:
-            continue
-        entity = Repository.entity(cls)
-        if entity is None or not dataclasses.is_dataclass(entity):
-            continue
-        return cls, instance, entity
-    return None
+    cls = keys.resolve(context, "repository", name)
+    if cls is None:
+        return None
+    entity = Repository.entity(cls)
+    if entity is None or not dataclasses.is_dataclass(entity):
+        return None
+    return cls, context.instances[cls], entity
 
 
 def parse_filters(entity_cls: type, query_params: Iterable[tuple[str, str]]) -> dict[str, str]:
@@ -112,6 +113,7 @@ def list_records(
     limit: int | None = None,
     offset: int = 0,
     filters: dict[str, str] | None = None,
+    view: DataView | None = None,
 ) -> tuple[list[dict], int]:
     """Return a page of entities from ``instance.all()`` as plain dicts.
 
@@ -138,6 +140,10 @@ def list_records(
             filtering rather than type-aware comparisons, so it works
             uniformly across str/int/float/bool fields without risking a
             coercion error on partial input.
+        view: The repository's resolved view. Given one that points at
+            content, each record declaring ``content_metadata()`` carries
+            it under the reserved ``"$content"`` key (see
+            ``content_metadata``). ``None`` (the default) adds nothing.
 
     Returns:
         ``(records, total)`` — the page of JSON-serializable dicts, and the
@@ -149,7 +155,32 @@ def list_records(
         all_entities = [e for e in all_entities if _matches_filters(e, filters)]
     total = len(all_entities)
     page = all_entities[offset : offset + limit] if limit is not None else all_entities
-    return [to_json_safe_dict(entity) for entity in page], total
+    records = []
+    for entity in page:
+        record = to_json_safe_dict(entity)
+        metadata = content_metadata(instance, view, entity)
+        if metadata is not None and (metadata.filename or metadata.content_type):
+            record["$content"] = dataclasses.asdict(metadata)
+        records.append(record)
+    return records, total
+
+
+def content_metadata(
+    instance: object, view: DataView | None, entity: Any
+) -> ContentMetadata | None:
+    """Return what a repository declares about one record's content, if anything.
+
+    Only a view that points at content (``ImageView``/``VideoView``/
+    ``AudioView``/``DocumentView``) has content to describe, and only a
+    repository implementing ``ContentMetadataProtocol`` describes it.
+    ``"$content"`` can't be a dataclass field name, so the key
+    ``list_records`` stores this under can't collide with one.
+    """
+    if not isinstance(view, (ImageView, VideoView, AudioView, DocumentView)):
+        return None
+    if not isinstance(instance, ContentMetadataProtocol):
+        return None
+    return instance.content_metadata(entity)
 
 
 def _matches_filters(entity: Any, filters: dict[str, str]) -> bool:
@@ -246,8 +277,11 @@ def _describe_repository(context: Context, cls: type, entity: type, instance: ob
     readable = isinstance(instance, ReadableProtocol)
     streamable = isinstance(instance, StreamableProtocol)
     view = resolve_view(instance, readable=readable)
+    key = context.key(cls)
     return {
-        "id": kebab(cls.__name__),
+        "id": key,
+        "name": keys.name_of(key),
+        "href": keys.href(context, cls),
         "label": cls.__name__,
         "entity": entity.__name__,
         "key": key_field_name(entity),
@@ -255,7 +289,7 @@ def _describe_repository(context: Context, cls: type, entity: type, instance: ob
         "readable": readable,
         "writable": isinstance(instance, WritableProtocol),
         "streamable": streamable,
-        "streaming": streamable and context.is_streaming(cls.__name__),
+        "streaming": streamable and context.is_streaming(key),
         "view": _view_dict(view) if view is not None else None,
         "replay_field": resolve_replay_field(instance, view),
     }

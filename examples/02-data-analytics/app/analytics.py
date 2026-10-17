@@ -21,13 +21,13 @@ class SummarizeReadings:
 
         Args:
             readings: The repository to aggregate.
-            config: Project config; reads ``summarize-readings.report-path``
+            config: Project config; reads ``task.summarize-readings.report-path``
                 (default ``"reports/summary.json"``).
             logger: Logger to report the write to.
         """
         self.readings = readings
-        self.report_path = config.get("summarize-readings").get(
-            "report-path", "reports/summary.json"
+        self.report_path = (
+            config.get("task").get("summarize-readings").get("report-path", "reports/summary.json")
         )
         self.logger = logger
 

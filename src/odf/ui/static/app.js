@@ -1,591 +1,3 @@
-<!DOCTYPE html>
-<html lang="en">
-<head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>ODF — Topology (glitch)</title>
-<link rel="icon" type="image/svg+xml" href="/favicon.svg">
-<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin="">
-<style>
-*,*::before,*::after{margin:0;padding:0;box-sizing:border-box}
-
-:root, :root[data-theme="dark"] {
-  --bg: #0e0e10;
-  --bg-canvas: #0a0a0b;
-  --panel: #18181b;
-  --panel-rgb: 24,24,27;
-  --border: #26262c;
-  --border-strong: #3a3a40;
-  --text: #efeff1;
-  --text-muted: #adadb8;
-  --text-dim: #6d6d76;
-  --hover-bg: #202024;
-  --title-accent: #ffffff;
-
-  --accent-config: #71717a;
-  --accent-component: #9147ff;
-  --accent-repository: #009cdc;
-  --accent-service: #00b7c2;
-  --accent-task: #00ad03;
-  --accent-pipeline: #f2a900;
-  --accent-alert: #eb0400;
-
-  --layer-api: #772ce8;
-  --layer-storage: #e91e8c;
-  --layer-analytics: #ffd60a;
-  --layer-messaging: #ff5c00;
-  --layer-monitoring: #5c6bc0;
-  --layer-security: #0ea5b7;
-
-  --wire: #26262c;
-  --wire-glow: #3a3a40;
-  --tile-fill: #18181b;
-  --tile-stroke: #232327;
-  --label-bg-rgb: 14,14,16;
-  --label-bg-alpha: 0.92;
-  --vignette-rgb: 5,5,6;
-  --vignette-alpha: 0.6;
-
-  /* Chromatic-split "signal glitch" channel colors — glitch-theme-local,
-     not part of the cross-theme variable contract. Reused throughout for
-     a thin RGB-misregistration fringe on shadows/rings/text instead of
-     neo's thick-border brutalism. */
-  --split-a: #00b7c2;
-  --split-b: #e91e8c;
-
-  --panel-shadow: 1px 0 0 color-mix(in srgb, var(--split-a) 28%, transparent), -1px 0 0 color-mix(in srgb, var(--split-b) 22%, transparent), inset 0 1px 0 rgba(255,255,255,.03);
-  --ok: #00ad03;
-}
-
-:root[data-theme="light"] {
-  --bg: #f7f7f8;
-  --bg-canvas: #ffffff;
-  --panel: #ffffff;
-  --panel-rgb: 255,255,255;
-  --border: #e5e5e8;
-  --border-strong: #d1d1d6;
-  --text: #0e0e10;
-  --text-muted: #53535f;
-  --text-dim: #848494;
-  --hover-bg: #efeff1;
-  --title-accent: #000000;
-
-  --accent-config: #52525b;
-  --accent-component: #7828d1;
-  --accent-repository: #0077a8;
-  --accent-service: #007a82;
-  --accent-task: #027a03;
-  --accent-pipeline: #a86e00;
-  --accent-alert: #b30300;
-
-  --layer-api: #5b1fb8;
-  --layer-storage: #b0106a;
-  --layer-analytics: #a68800;
-  --layer-messaging: #c94700;
-  --layer-monitoring: #3f4a94;
-  --layer-security: #0a7986;
-
-  --wire: #d1d1d6;
-  --wire-glow: #b5b5bd;
-  --tile-fill: #ffffff;
-  --tile-stroke: #ececee;
-  --label-bg-rgb: 255,255,255;
-  --label-bg-alpha: 0.94;
-  --vignette-rgb: 20,20,24;
-  --vignette-alpha: 0.05;
-
-  --split-a: #007a82;
-  --split-b: #b0106a;
-
-  --panel-shadow: 1px 0 0 color-mix(in srgb, var(--split-a) 22%, transparent), -1px 0 0 color-mix(in srgb, var(--split-b) 18%, transparent), inset 0 1px 0 rgba(0,0,0,.03);
-  --ok: #027a03;
-}
-
-*{scrollbar-width:thin;scrollbar-color:var(--border-strong) transparent}
-*::-webkit-scrollbar{width:8px;height:8px}
-*::-webkit-scrollbar-track{background:transparent}
-*::-webkit-scrollbar-thumb{background:linear-gradient(180deg, var(--split-a), var(--split-b))}
-
-html,body{background:var(--bg)}
-
-body{
-  color:var(--text);
-  font-family:Inter,'Segoe UI',Roboto,-apple-system,BlinkMacSystemFont,Helvetica,Arial,sans-serif;
-  height:100vh;display:flex;flex-direction:column;overflow:hidden;user-select:none;
-}
-
-.mono{font-family:'SF Mono','IBM Plex Mono','JetBrains Mono',Consolas,'Courier New',monospace}
-
-#topbar{height:3px;flex-shrink:0;background:linear-gradient(90deg,var(--split-a),transparent 50%),linear-gradient(270deg,var(--split-b),transparent 50%);opacity:.8}
-
-#shell{flex:1;min-height:0;display:flex;flex-direction:column;gap:8px;padding:8px}
-
-/* Faint static scanline texture over the whole app — one insertion point
-   instead of repeating it per panel; below every popup/drawer's z-index
-   (6+) so it never obscures them, and pointer-events:none so it can't
-   intercept clicks. Static (no animation), so it's unaffected by
-   prefers-reduced-motion. */
-#shell::after{content:"";position:fixed;inset:0;z-index:1;pointer-events:none;background-image:repeating-linear-gradient(0deg, rgba(0,0,0,.045) 0, rgba(0,0,0,.045) 1px, transparent 1px, transparent 3px)}
-
-.panel{background:var(--panel);border:1px solid var(--border);border-radius:2px;box-shadow:var(--panel-shadow)}
-
-#hdr{padding:0 16px;height:46px;display:flex;align-items:center;gap:0;flex-shrink:0}
-.brand{display:flex;align-items:center;gap:10px;margin-right:18px;padding-right:18px;border-right:1px solid var(--border)}
-.brand-mark{width:18px;height:18px;flex-shrink:0;border:1.5px solid var(--accent-component);position:relative;transform:rotate(45deg);box-shadow:1.5px 0 0 color-mix(in srgb, var(--split-a) 55%, transparent),-1.5px 0 0 color-mix(in srgb, var(--split-b) 55%, transparent)}
-.brand-mark::after{content:"";position:absolute;inset:4px;background:var(--accent-component);opacity:.85}
-.brand-mark.has-logo{border:none;transform:none}
-.brand-mark.has-logo::after{content:none}
-.brand-mark img{width:100%;height:100%;object-fit:contain;display:block}
-.hdr-title{font-family:Inter,'Segoe UI',Roboto,-apple-system,BlinkMacSystemFont,Helvetica,Arial,sans-serif;color:var(--text);font-size:13px;font-weight:600;letter-spacing:.04em;text-shadow:1px 0 color-mix(in srgb, var(--split-a) 50%, transparent),-1px 0 color-mix(in srgb, var(--split-b) 50%, transparent)}
-.hdr-title small{display:block;color:var(--text-dim);font-size:9.5px;font-weight:500;letter-spacing:.09em;text-transform:uppercase;margin-top:2px}
-
-.hdr-stats{display:flex;align-items:center;gap:0;height:100%}
-.hdr-stat{display:flex;flex-direction:column;gap:3px;padding:0 18px;border-right:1px solid var(--border);justify-content:center}
-.hdr-stat:last-child{border-right:none}
-.hdr-stat .k{color:var(--text-dim);font-size:9px;letter-spacing:.1em;text-transform:uppercase;font-family:Inter,'Segoe UI',Roboto,-apple-system,BlinkMacSystemFont,Helvetica,Arial,sans-serif}
-.hdr-stat .v{font-family:Inter,'Segoe UI',Roboto,-apple-system,BlinkMacSystemFont,Helvetica,Arial,sans-serif;font-size:13px;font-weight:600;font-variant-numeric:tabular-nums}
-
-.hdr-status{display:flex;align-items:center;gap:7px;margin-left:auto;padding:0 16px;font-family:Inter,'Segoe UI',Roboto,-apple-system,BlinkMacSystemFont,Helvetica,Arial,sans-serif;font-size:10px;letter-spacing:.08em;text-transform:uppercase;color:var(--text-muted)}
-.hdr-status .dot{width:6px;height:6px;background:var(--ok);box-shadow:0 0 0 2px color-mix(in srgb, var(--ok) 20%, transparent),1px 0 0 color-mix(in srgb, var(--split-a) 55%, transparent),-1px 0 0 color-mix(in srgb, var(--split-b) 55%, transparent);animation:pulse-dot 2.4s ease-in-out infinite}
-.hdr-clock{font-family:Inter,'Segoe UI',Roboto,-apple-system,BlinkMacSystemFont,Helvetica,Arial,sans-serif;font-size:11px;color:var(--text-dim);font-variant-numeric:tabular-nums;padding:0 16px;border-left:1px solid var(--border)}
-@keyframes pulse-dot{0%,100%{opacity:1}50%{opacity:.35}}
-
-.theme-toggle{background:transparent;border:1px solid var(--border);color:var(--text-muted);font-family:Inter,'Segoe UI',Roboto,-apple-system,BlinkMacSystemFont,Helvetica,Arial,sans-serif;font-size:10px;font-weight:600;letter-spacing:.06em;text-transform:uppercase;padding:6px 11px;border-radius:2px;cursor:pointer;display:flex;align-items:center;gap:6px;transition:background .12s,color .12s,border-color .12s}
-.theme-toggle:hover{background:var(--hover-bg);color:var(--title-accent);border-color:var(--border-strong);box-shadow:0 0 0 1px var(--split-a),0 0 0 2px color-mix(in srgb, var(--split-b) 60%, transparent)}
-.theme-toggle .glyph{font-size:12px}
-
-#body{display:flex;flex:1;min-height:0;gap:8px}
-
-/* Sidebar: an always-visible icon rail (#sb-rail, one .sb-tab per SIDEBAR_TABS
-   entry + a collapse chevron) beside the active tab's panel (#sb-panels).
-   .collapsed hides only the panel, so the rail stays as the way back in. */
-#sidebar{width:312px;flex-shrink:0;display:flex;flex-direction:row;overflow:hidden}
-#sidebar.collapsed{width:auto}
-#sb-rail{width:40px;flex-shrink:0;display:flex;flex-direction:column;align-items:center;gap:4px;padding:8px 0;border-right:1px solid var(--border)}
-#sidebar.collapsed #sb-rail{border-right:none}
-.sb-tab,#sb-collapse{width:28px;height:28px;padding:0;background:transparent;border:1px solid transparent;border-radius:2px;color:var(--text-muted);cursor:pointer;display:flex;align-items:center;justify-content:center;transition:background .12s,color .12s,border-color .12s}
-.sb-tab:hover,#sb-collapse:hover{background:var(--hover-bg);color:var(--title-accent);border-color:var(--border-strong)}
-.sb-tab.active{color:var(--title-accent);border-color:var(--border-strong);background:var(--hover-bg)}
-.sb-tab svg,#sb-collapse svg{width:16px;height:16px;fill:none;stroke:currentColor;stroke-width:1.6;stroke-linecap:round;stroke-linejoin:round}
-#sb-collapse{margin-top:auto}
-#sidebar.collapsed #sb-collapse svg{transform:rotate(180deg)}
-#sb-panels{flex:1;min-width:0;overflow-y:auto;display:flex;flex-direction:column}
-#sidebar.collapsed #sb-panels{display:none}
-.sb-panel{display:none}
-.sb-panel.active{display:flex;flex-direction:column;flex:1;min-height:0}
-.sb-section{padding:14px 16px}
-.sb-section + .sb-section{border-top:1px solid var(--border)}
-.sb-heading{color:var(--text-dim);font-family:Inter,'Segoe UI',Roboto,-apple-system,BlinkMacSystemFont,Helvetica,Arial,sans-serif;font-size:9.5px;font-weight:600;letter-spacing:.1em;text-transform:uppercase;margin-bottom:11px;display:flex;align-items:center;justify-content:space-between;text-shadow:1px 0 color-mix(in srgb, var(--split-a) 45%, transparent),-1px 0 color-mix(in srgb, var(--split-b) 45%, transparent)}
-.sb-heading .count{color:var(--text-dim);font-weight:500}
-.node-item{--row-accent:var(--text-dim);display:flex;align-items:center;gap:8px;padding:6px 8px;cursor:pointer;margin-bottom:1px;border-left:2px solid transparent;transition:background .12s,border-color .12s,box-shadow .12s}
-.node-item:hover{background:var(--hover-bg);box-shadow:1px 0 0 color-mix(in srgb, var(--split-a) 40%, transparent),-1px 0 0 color-mix(in srgb, var(--split-b) 40%, transparent)}
-.node-item.selected{background:color-mix(in srgb, var(--row-accent) 12%, transparent);border-left-color:var(--row-accent)}
-.node-tag{font-family:Inter,'Segoe UI',Roboto,-apple-system,BlinkMacSystemFont,Helvetica,Arial,sans-serif;font-size:8px;font-weight:700;padding:2px 5px;text-transform:uppercase;letter-spacing:.03em;flex-shrink:0;white-space:nowrap;border-radius:1px}
-.node-lbl{font-size:11.5px;color:var(--text);font-family:'SF Mono',Consolas,monospace}
-.layer-badge{font-family:Inter,'Segoe UI',Roboto,-apple-system,BlinkMacSystemFont,Helvetica,Arial,sans-serif;font-size:8px;font-weight:700;padding:2px 5px;text-transform:uppercase;letter-spacing:.03em;flex-shrink:0;white-space:nowrap;border-radius:1px}
-
-.layer-group{margin-bottom:2px}
-.layer-group-header{display:flex;align-items:center;gap:7px;padding:6px 8px;cursor:pointer;user-select:none;border-radius:1px}
-.layer-group-header:hover{background:var(--hover-bg);box-shadow:1px 0 0 color-mix(in srgb, var(--split-a) 40%, transparent),-1px 0 0 color-mix(in srgb, var(--split-b) 40%, transparent)}
-.layer-caret{width:8px;height:8px;flex-shrink:0;color:var(--text-dim);transition:transform .12s;display:flex;align-items:center;justify-content:center}
-.layer-group.collapsed .layer-caret{transform:rotate(-90deg)}
-.layer-swatch-btn{width:10px;height:10px;border-radius:50%;border:1px solid rgba(0,0,0,.2);flex-shrink:0;cursor:pointer;padding:0}
-.layer-swatch-btn:hover{box-shadow:0 0 0 1px var(--split-a),0 0 0 2px color-mix(in srgb, var(--split-b) 60%, transparent)}
-.layer-group-name{font-size:10.5px;font-weight:600;letter-spacing:.03em;text-transform:uppercase;font-family:Inter,'Segoe UI',Roboto,-apple-system,BlinkMacSystemFont,Helvetica,Arial,sans-serif;color:var(--text-muted);flex:1}
-.layer-group-count{font-size:9.5px;color:var(--text-dim);font-family:Inter,'Segoe UI',Roboto,-apple-system,BlinkMacSystemFont,Helvetica,Arial,sans-serif}
-.layer-group-body{display:flex;flex-direction:column}
-.layer-group.collapsed .layer-group-body{display:none}
-.layer-group-body .node-item{padding-left:22px}
-
-#map{flex:1;min-width:0;position:relative;overflow:hidden}
-canvas{display:block;cursor:grab}
-
-.corner-bracket{position:absolute;width:14px;height:14px;border-color:var(--border-strong);pointer-events:none;z-index:3;opacity:.9}
-.corner-bracket.tl{top:8px;left:8px;border-top:1.5px solid;border-left:1.5px solid}
-.corner-bracket.tr{top:8px;right:8px;border-top:1.5px solid;border-right:1.5px solid}
-.corner-bracket.bl{bottom:8px;left:8px;border-bottom:1.5px solid;border-left:1.5px solid}
-.corner-bracket.br{bottom:8px;right:8px;border-bottom:1.5px solid;border-right:1.5px solid}
-
-#coord-readout{position:absolute;left:14px;bottom:14px;z-index:2;font-family:'SF Mono',Consolas,monospace;font-size:10px;letter-spacing:.05em;color:var(--text-dim);background:rgba(var(--panel-rgb),.75);border:1px solid var(--border);padding:4px 9px;pointer-events:none}
-#coord-readout b{color:var(--text-muted);font-weight:600}
-
-#map-title{position:absolute;top:12px;left:16px;z-index:2;font-family:Inter,'Segoe UI',Roboto,-apple-system,BlinkMacSystemFont,Helvetica,Arial,sans-serif;font-size:9.5px;letter-spacing:.12em;text-transform:uppercase;color:var(--text-dim);pointer-events:none}
-
-#zoom-controls{position:absolute;right:14px;bottom:14px;display:flex;flex-direction:column;gap:3px;z-index:2}
-#zoom-controls button{width:28px;height:28px;background:rgba(var(--panel-rgb),0.9);border:1px solid var(--border);color:var(--text-muted);font-family:Inter,'Segoe UI',Roboto,-apple-system,BlinkMacSystemFont,Helvetica,Arial,sans-serif;font-size:14px;line-height:1;border-radius:2px;cursor:pointer;display:flex;align-items:center;justify-content:center;transition:background .12s,color .12s,border-color .12s}
-#zoom-controls button:hover{background:var(--hover-bg);color:var(--title-accent);border-color:var(--border-strong);box-shadow:0 0 0 1px var(--split-a),0 0 0 2px color-mix(in srgb, var(--split-b) 60%, transparent)}
-#zoom-controls button:active{background:var(--border)}
-#zoom-controls .zc-sep{height:1px;background:var(--border);margin:2px 3px}
-
-/* Grid-expansion D-pad — adds empty cells along one diamond edge per click
-   (see expandGrid()/gridExpand in the script below). Sits just left of
-   zoom-controls, same footprint/style. */
-#grid-controls{position:absolute;right:50px;bottom:14px;display:grid;grid-template-columns:repeat(2,28px);grid-template-rows:repeat(2,28px);gap:3px;z-index:2}
-#grid-controls button{background:rgba(var(--panel-rgb),0.9);border:1px solid var(--border);color:var(--text-muted);font-family:Inter,'Segoe UI',Roboto,-apple-system,BlinkMacSystemFont,Helvetica,Arial,sans-serif;font-size:13px;line-height:1;border-radius:2px;cursor:pointer;display:flex;align-items:center;justify-content:center;transition:background .12s,color .12s,border-color .12s}
-#grid-controls button:hover{background:var(--hover-bg);color:var(--title-accent);border-color:var(--border-strong);box-shadow:0 0 0 1px var(--split-a),0 0 0 2px color-mix(in srgb, var(--split-b) 60%, transparent)}
-#grid-controls button:active{background:var(--border)}
-
-/* Object-type legend — floats over the topology grid like a chart legend,
-   replacing the old fixed "Object Types" section in the sidebar. */
-#type-legend{position:absolute;left:50%;bottom:14px;transform:translateX(-50%);z-index:2;display:flex;align-items:center;justify-content:center;flex-wrap:wrap;gap:4px 16px;max-width:calc(100% - 220px);background:rgba(var(--panel-rgb),.75);border:1px solid var(--border);border-radius:2px;padding:6px 14px;pointer-events:none}
-.tl-item{display:flex;align-items:center;gap:6px;font-size:11px;color:var(--text);font-family:Inter,'Segoe UI',Roboto,-apple-system,BlinkMacSystemFont,Helvetica,Arial,sans-serif;white-space:nowrap}
-.tl-pip{width:8px;height:8px;border:1.3px solid currentColor;background:color-mix(in srgb, currentColor 18%, transparent);flex-shrink:0}
-
-.panel-heading{color:var(--text-dim);font-family:Inter,'Segoe UI',Roboto,-apple-system,BlinkMacSystemFont,Helvetica,Arial,sans-serif;font-size:9.5px;font-weight:600;letter-spacing:.1em;text-transform:uppercase;margin-bottom:9px}
-
-.detail-empty{font-size:12px;color:var(--text-dim);font-family:Inter,'Segoe UI',Roboto,-apple-system,BlinkMacSystemFont,Helvetica,Arial,sans-serif}
-.detail-title{font-family:Inter,'Segoe UI',Roboto,-apple-system,BlinkMacSystemFont,Helvetica,Arial,sans-serif;font-size:14px;font-weight:700;letter-spacing:.01em;margin-bottom:6px;text-shadow:1px 0 color-mix(in srgb, var(--split-a) 50%, transparent),-1px 0 color-mix(in srgb, var(--split-b) 50%, transparent)}
-.detail-meta{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:8px}
-.detail-meta .deco{font-family:Inter,'Segoe UI',Roboto,-apple-system,BlinkMacSystemFont,Helvetica,Arial,sans-serif;font-size:10.5px;color:var(--text-muted)}
-.detail-meta .file{font-family:'SF Mono','Fira Code',Consolas,'Courier New',monospace;font-size:10.5px;color:var(--text-dim);background:var(--hover-bg);border:1px solid var(--border);padding:2px 6px;border-radius:1px}
-.detail-desc{font-size:12px;line-height:1.6;color:var(--text-muted)}
-
-.log-line{display:flex;align-items:flex-start;gap:7px;font-size:11px;color:var(--text-muted);line-height:1.4}
-.log-line .dot{width:5px;height:5px;flex-shrink:0;margin-top:4px}
-.log-line .ts{font-family:'SF Mono',Consolas,monospace;color:var(--text-dim);flex-shrink:0}
-
-/* flex+gap (not the .data-btn margin-left/:first-child pattern used
-   elsewhere) so wrapped rows stay left-aligned instead of drifting right by
-   a stray margin once there are enough buttons to wrap */
-.detail-actions{margin-top:10px;display:flex;flex-wrap:wrap;gap:6px}
-.detail-actions .data-btn{margin-left:0}
-
-/* Inspector popup — anchored to the clicked building's screen position at
-   selection time (not live-tracked; pan/zoom/resize close it instead, see
-   closeInspectorPopup()), replacing the old fixed bottom panel so a new
-   selection is visually obvious rather than silently updating off to the
-   side. */
-.inspector-popup{position:absolute;z-index:6;display:none;width:300px;max-width:calc(100% - 16px);max-height:calc(100% - 16px);overflow-y:auto;background:var(--panel);border:1px solid var(--border-strong);border-radius:2px;box-shadow:0 8px 20px rgba(0,0,0,.3),var(--panel-shadow);padding:14px 16px}
-.inspector-popup.open{display:block}
-#map:not(.mode-topology) .inspector-popup{display:none}
-.inspector-popup-close{position:absolute;top:8px;right:8px;background:transparent;border:1px solid var(--border);color:var(--text-muted);width:20px;height:20px;border-radius:2px;cursor:pointer;font-size:12px;line-height:1;display:flex;align-items:center;justify-content:center}
-.inspector-popup-close:hover{background:var(--hover-bg);color:var(--text)}
-
-/* Style picker — single popover anchored under the inspector popup's
-   compact "Customize" button, bundling the shape (icon) and color pickers
-   into one place instead of two separate action buttons, so the inspector's
-   action row doesn't accumulate a button per customization axis. Reuses the
-   inspector popup's panel/border/shadow language. */
-.style-picker-popover{position:absolute;z-index:7;display:none;background:var(--panel);border:1px solid var(--border-strong);border-radius:2px;box-shadow:0 8px 20px rgba(0,0,0,.3),var(--panel-shadow);padding:8px}
-.style-picker-popover.open{display:block}
-.style-picker-section + .style-picker-section{margin-top:8px;padding-top:8px;border-top:1px solid var(--border)}
-.style-picker-label{font-size:9px;font-weight:600;letter-spacing:.06em;text-transform:uppercase;color:var(--text-muted);font-family:Inter,'Segoe UI',Roboto,-apple-system,BlinkMacSystemFont,Helvetica,Arial,sans-serif;margin-bottom:4px}
-.layer-color-popover{position:fixed;z-index:8}
-.icon-picker-grid,.color-picker-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:4px}
-.icon-swatch{width:44px;height:44px;border:1px solid var(--border);border-radius:2px;background:transparent;cursor:pointer;display:flex;align-items:center;justify-content:center;padding:0}
-.icon-swatch:hover{background:var(--hover-bg);border-color:var(--border-strong);box-shadow:0 0 0 1px var(--split-a),0 0 0 2px color-mix(in srgb, var(--split-b) 60%, transparent)}
-.icon-swatch.selected{border-color:var(--title-accent);box-shadow:0 0 0 1px var(--split-a),0 0 0 2px color-mix(in srgb, var(--split-b) 60%, transparent)}
-.icon-swatch.reset{grid-column:1/-1;display:flex;gap:6px;font-size:10px;color:var(--text-muted);font-family:Inter,'Segoe UI',Roboto,-apple-system,BlinkMacSystemFont,Helvetica,Arial,sans-serif;height:22px}
-.color-swatch{width:32px;height:32px;border:1px solid var(--border);border-radius:2px;cursor:pointer;padding:0}
-.color-swatch:hover{border-color:var(--border-strong);box-shadow:0 0 0 1px var(--split-a),0 0 0 2px color-mix(in srgb, var(--split-b) 60%, transparent)}
-.color-swatch.selected{border-color:var(--title-accent);box-shadow:0 0 0 1px var(--split-a),0 0 0 2px color-mix(in srgb, var(--split-b) 60%, transparent)}
-.color-swatch.reset{grid-column:1/-1;display:flex;align-items:center;gap:6px;font-size:10px;color:var(--text-muted);font-family:Inter,'Segoe UI',Roboto,-apple-system,BlinkMacSystemFont,Helvetica,Arial,sans-serif;height:22px;width:auto;background:transparent}
-
-/* Activity toggle + drawer — global (not tied to topology mode), floats
-   above the map-panel-view so it's reachable from Data/Stream/Logs too. */
-.activity-toggle{position:absolute;top:12px;right:14px;z-index:8;background:rgba(var(--panel-rgb),0.9);border:1px solid var(--border);color:var(--text-muted);font-family:Inter,'Segoe UI',Roboto,-apple-system,BlinkMacSystemFont,Helvetica,Arial,sans-serif;font-size:10px;font-weight:600;letter-spacing:.05em;text-transform:uppercase;padding:6px 10px;border-radius:2px;cursor:pointer;transition:background .12s,color .12s,border-color .12s}
-.activity-toggle:hover{background:var(--hover-bg);color:var(--title-accent);border-color:var(--border-strong);box-shadow:0 0 0 1px var(--split-a),0 0 0 2px color-mix(in srgb, var(--split-b) 60%, transparent)}
-
-#activity-drawer{position:absolute;top:0;right:0;bottom:0;width:300px;max-width:80%;z-index:9;background:var(--panel);border-left:1px solid var(--border-strong);box-shadow:-1px 0 0 color-mix(in srgb, var(--split-a) 35%, transparent),-2px 0 0 color-mix(in srgb, var(--split-b) 25%, transparent),-8px 0 20px rgba(0,0,0,.25);transform:translateX(100%);transition:transform .18s ease;display:flex;flex-direction:column}
-#activity-drawer.open{transform:translateX(0)}
-.activity-drawer-hdr{display:flex;align-items:center;justify-content:space-between;padding:12px 16px;border-bottom:1px solid var(--border);flex-shrink:0}
-.activity-drawer-hdr .panel-heading{margin-bottom:0}
-#log-lines{flex:1;overflow-y:auto;display:flex;flex-direction:column;gap:6px;padding:12px 16px}
-
-/* Toggle buttons row (Activity / Chat) — top right, above the map. */
-.map-toggle-group{position:absolute;top:12px;right:14px;z-index:8;display:flex;gap:6px}
-.map-toggle-group .activity-toggle{position:static}
-#chat-toggle{display:none}
-#chat-toggle.visible{display:inline-flex}
-
-/* Chat drawer — same slide-in-from-right treatment as #activity-drawer. */
-#chat-drawer{position:absolute;top:0;right:0;bottom:0;width:360px;max-width:88%;z-index:9;background:var(--panel);border-left:1px solid var(--border-strong);box-shadow:-1px 0 0 color-mix(in srgb, var(--split-a) 35%, transparent),-2px 0 0 color-mix(in srgb, var(--split-b) 25%, transparent),-8px 0 20px rgba(0,0,0,.25);transform:translateX(100%);transition:transform .18s ease;display:flex;flex-direction:column}
-#chat-drawer.open{transform:translateX(0)}
-#chat-messages{flex:1;overflow-y:auto;display:flex;flex-direction:column;gap:10px;padding:12px 16px;font-family:Inter,'Segoe UI',Roboto,-apple-system,BlinkMacSystemFont,Helvetica,Arial,sans-serif;font-size:11.5px}
-.chat-msg{max-width:92%;padding:7px 10px;border-radius:3px;line-height:1.4;white-space:pre-wrap;word-break:break-word}
-.chat-msg.user{align-self:flex-end;background:color-mix(in srgb, var(--title-accent) 16%, transparent);border:1px solid color-mix(in srgb, var(--title-accent) 40%, transparent);color:var(--text)}
-.chat-msg.assistant{align-self:flex-start;background:var(--hover-bg);border:1px solid var(--border);color:var(--text)}
-.chat-msg.tool{align-self:flex-start;background:transparent;border:1px dashed var(--border-strong);color:var(--text-dim);font-size:10.5px}
-.chat-msg.error{align-self:flex-start;background:color-mix(in srgb, var(--accent-alert) 14%, transparent);border:1px solid var(--accent-alert);color:var(--accent-alert)}
-#chat-footer{display:flex;gap:8px;padding:12px 16px;border-top:1px solid var(--border);flex-shrink:0;position:relative}
-#chat-input{flex:1;resize:none;height:38px;background:var(--hover-bg);border:1px solid var(--border-strong);color:var(--text);font-family:inherit;font-size:11.5px;padding:8px 10px;border-radius:2px}
-#chat-input:focus{outline:none;border-color:var(--title-accent);box-shadow:0 0 0 1px var(--split-a),0 0 0 2px color-mix(in srgb, var(--split-b) 60%, transparent)}
-#chat-send{flex-shrink:0}
-.mention-menu{position:absolute;left:16px;right:16px;bottom:100%;margin-bottom:6px;max-height:160px;overflow-y:auto;background:var(--panel);border:1px solid var(--border-strong);border-radius:2px;box-shadow:0 0 0 1px var(--split-a),0 0 0 2px color-mix(in srgb, var(--split-b) 60%, transparent);z-index:10}
-.mention-menu[hidden]{display:none}
-.mention-item{display:flex;justify-content:space-between;gap:8px;padding:6px 10px;font-family:Inter,'Segoe UI',Roboto,-apple-system,BlinkMacSystemFont,Helvetica,Arial,sans-serif;font-size:11px;cursor:pointer;color:var(--text)}
-.mention-item:hover,.mention-item.active{background:var(--hover-bg);color:var(--title-accent)}
-.mention-label{color:var(--text-dim);font-size:10px}
-
-.data-btn{background:transparent;border:1px solid var(--border);color:var(--text-muted);font-family:Inter,'Segoe UI',Roboto,-apple-system,BlinkMacSystemFont,Helvetica,Arial,sans-serif;font-size:10px;font-weight:600;letter-spacing:.03em;padding:3px 8px;border-radius:2px;cursor:pointer;margin-left:4px;transition:background .12s,color .12s,border-color .12s}
-.data-btn:first-child{margin-left:0}
-.data-btn:hover{background:var(--hover-bg);color:var(--text);box-shadow:0 0 0 1px var(--split-a),0 0 0 2px color-mix(in srgb, var(--split-b) 60%, transparent)}
-.data-btn.primary{color:var(--title-accent);border-color:var(--title-accent)}
-.data-btn.danger{color:var(--accent-alert);border-color:var(--accent-alert)}
-.data-btn.block{display:block;margin:10px 0 0}
-
-.data-table{width:100%;border-collapse:collapse;font-family:'SF Mono',Consolas,monospace;font-size:11.5px}
-.data-table th{text-align:left;color:var(--text-dim);font-size:9.5px;letter-spacing:.08em;text-transform:uppercase;padding:6px 8px;border-bottom:1px solid var(--border-strong)}
-.data-table td{padding:6px 8px;border-bottom:1px solid var(--border);color:var(--text);vertical-align:middle}
-.data-table td.actions{white-space:nowrap;text-align:right}
-.data-table td.detail-empty{padding:6px 8px}
-.data-table input{width:100%;background:var(--hover-bg);border:1px solid var(--border-strong);color:var(--text);font-family:inherit;font-size:inherit;padding:3px 6px;border-radius:1px}
-.data-table .empty-row td{color:var(--text-dim);padding:12px 8px;text-align:center}
-.filter-row th{padding-top:0}
-.filter-row input{text-transform:none;letter-spacing:normal;font-weight:400}
-
-.pagination{display:flex;align-items:center;gap:8px;margin-top:10px;font-family:Inter,'Segoe UI',Roboto,-apple-system,BlinkMacSystemFont,Helvetica,Arial,sans-serif}
-.pagination-range{color:var(--text-dim);font-size:10.5px;margin-right:auto}
-.pagination select{background:transparent;border:1px solid var(--border);color:var(--text-muted);font-family:inherit;font-size:10px;font-weight:600;padding:3px 6px;border-radius:2px;cursor:pointer}
-.data-btn:disabled{opacity:.4;cursor:default;pointer-events:none}
-
-/* Map panel view — replaces the topology canvas in-place for Edit Data /
-   View Stream / Show Logs, instead of a floating modal overlay. */
-#map-panel-view{position:absolute;inset:0;z-index:5;display:none;flex-direction:column;background:var(--panel)}
-#map.mode-topology #map-panel-view{display:none}
-#map:not(.mode-topology) #map-panel-view{display:flex}
-#map:not(.mode-topology) #canvas,
-#map:not(.mode-topology) #map-title,
-#map:not(.mode-topology) .corner-bracket,
-#map:not(.mode-topology) #coord-readout,
-#map:not(.mode-topology) #zoom-controls,
-#map:not(.mode-topology) #grid-controls,
-#map:not(.mode-topology) #type-legend{display:none}
-
-.map-panel-hdr{display:flex;align-items:center;gap:12px;padding:12px 100px 12px 16px;border-bottom:1px solid var(--border);flex-shrink:0}
-#map-panel-title{font-family:Inter,'Segoe UI',Roboto,-apple-system,BlinkMacSystemFont,Helvetica,Arial,sans-serif;font-size:12.5px;font-weight:700;letter-spacing:.02em;color:var(--title-accent);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;text-shadow:1px 0 color-mix(in srgb, var(--split-a) 50%, transparent),-1px 0 color-mix(in srgb, var(--split-b) 50%, transparent)}
-.map-back-btn{background:transparent;border:1px solid var(--border);color:var(--text-muted);font-family:Inter,'Segoe UI',Roboto,-apple-system,BlinkMacSystemFont,Helvetica,Arial,sans-serif;font-size:10.5px;font-weight:600;letter-spacing:.03em;padding:5px 10px;border-radius:2px;cursor:pointer;transition:background .12s,color .12s,border-color .12s}
-.map-back-btn:hover{background:var(--hover-bg);color:var(--title-accent);border-color:var(--border-strong);box-shadow:0 0 0 1px var(--split-a),0 0 0 2px color-mix(in srgb, var(--split-b) 60%, transparent)}
-#map-panel-hdr-extra{margin-left:auto;display:flex;align-items:center;gap:8px}
-.view-mode-select{background:transparent;border:1px solid var(--border);color:var(--text-muted);font-family:Inter,'Segoe UI',Roboto,-apple-system,BlinkMacSystemFont,Helvetica,Arial,sans-serif;font-size:10px;font-weight:600;letter-spacing:.05em;text-transform:uppercase;padding:5px 8px;border-radius:2px;cursor:pointer}
-.view-mode-select:hover{border-color:var(--border-strong);color:var(--title-accent);box-shadow:0 0 0 1px var(--split-a),0 0 0 2px color-mix(in srgb, var(--split-b) 60%, transparent)}
-
-#map-panel-body{flex:1;overflow-y:auto;padding:12px 16px}
-#map.mode-stream #map-panel-body{padding:0;display:flex;align-items:center;justify-content:center;background:#000}
-#map.mode-stream #map-panel-body img{display:block;max-width:100%;max-height:100%;object-fit:contain}
-
-#map.mode-chart #map-panel-body{padding:0;overflow:hidden}
-#chart-frame{width:100%;height:100%;border:0;display:block}
-.stream-placeholder{padding:32px;color:var(--text-dim);font-family:Inter,'Segoe UI',Roboto,-apple-system,BlinkMacSystemFont,Helvetica,Arial,sans-serif;font-size:11.5px}
-.stream-audio-bar{display:flex;align-items:center;gap:10px;padding:20px 28px;font-family:Inter,'Segoe UI',Roboto,-apple-system,BlinkMacSystemFont,Helvetica,Arial,sans-serif}
-.stream-live-dot{flex:none;width:7px;height:7px;border-radius:50%;background:var(--accent-alert);box-shadow:0 0 0 3px color-mix(in srgb, var(--accent-alert) 25%, transparent),1px 0 0 color-mix(in srgb, var(--split-a) 55%, transparent),-1px 0 0 color-mix(in srgb, var(--split-b) 55%, transparent);animation:pulse-dot 1.4s ease-in-out infinite}
-.stream-live-dot.buffering{background:#6a6d72;box-shadow:none;animation:none}
-.stream-live-label{color:#e8e6e3;font-size:11px;font-weight:700;letter-spacing:.1em}
-.stream-audio-bar .data-btn{color:#c7c9cc;border-color:#3a3d42}
-.stream-audio-bar .data-btn:hover{background:rgba(255,255,255,.08);color:#fff}
-
-#map.mode-geo #map-panel-body{padding:0;overflow:hidden;position:relative}
-#geo-map{width:100%;height:100%;background:var(--bg-canvas)}
-.floating-pagination{position:absolute;left:50%;bottom:14px;transform:translateX(-50%);z-index:1000;background:rgba(var(--panel-rgb),0.92);border:1px solid var(--border);border-radius:4px;padding:6px 10px;box-shadow:var(--panel-shadow)}
-.floating-pagination:empty{display:none}
-.floating-pagination .pagination{margin-top:0}
-.timeline-bar{display:flex;align-items:center;gap:8px;font-family:Inter,'Segoe UI',Roboto,-apple-system,BlinkMacSystemFont,Helvetica,Arial,sans-serif}
-.timeline-elapsed,.timeline-total{color:var(--text-dim);font-size:10.5px;font-variant-numeric:tabular-nums;white-space:nowrap}
-.timeline-bar input[type=range]{flex:1;min-width:160px;accent-color:var(--title-accent)}
-.timeline-bar select{background:transparent;border:1px solid var(--border);color:var(--text-muted);font-family:inherit;font-size:10px;font-weight:600;padding:3px 6px;border-radius:2px;cursor:pointer}
-#geo-map .leaflet-tile-pane{transition:filter .12s}
-:root[data-theme="dark"] #geo-map .leaflet-tile-pane{filter:invert(1) hue-rotate(180deg) brightness(0.94) contrast(0.88) saturate(0.9)}
-#geo-map .leaflet-popup-content-wrapper{background:var(--panel);color:var(--text);border:1px solid var(--border-strong);border-radius:2px;box-shadow:0 8px 20px rgba(0,0,0,.3),var(--panel-shadow)}
-#geo-map .leaflet-popup-tip{background:var(--panel);border:1px solid var(--border-strong)}
-#geo-map .leaflet-popup-close-button{color:var(--text-muted)!important}
-#geo-map .leaflet-popup-close-button:hover{color:var(--text)!important}
-#geo-map .leaflet-container{font-family:Inter,'Segoe UI',Roboto,-apple-system,BlinkMacSystemFont,Helvetica,Arial,sans-serif;background:var(--bg-canvas)}
-#geo-map .leaflet-control-zoom a{background:rgba(var(--panel-rgb),0.9);color:var(--text-muted);border-color:var(--border)!important}
-#geo-map .leaflet-control-zoom a:hover{background:var(--hover-bg);color:var(--title-accent)}
-#geo-map .leaflet-control-attribution{background:rgba(var(--panel-rgb),0.85);color:var(--text-dim);font-size:9.5px}
-#geo-map .leaflet-control-attribution a{color:var(--text-muted)}
-.geo-popup .detail-title{font-size:12px;margin-bottom:6px}
-.geo-popup .data-table{font-size:10.5px}
-.geo-popup .data-table th,.geo-popup .data-table td{padding:4px 6px}
-
-.map-logs-lines{display:flex;flex-direction:column;gap:5px;font-family:Inter,'Segoe UI',Roboto,-apple-system,BlinkMacSystemFont,Helvetica,Arial,sans-serif}
-.map-logs-lines .log-line{font-size:11.5px}
-.map-logs-lines .log-line span:last-child{white-space:pre-wrap;word-break:break-word}
-
-/* Image view — grid of thumbnails, one per record. */
-.media-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(140px,1fr));gap:10px}
-.media-tile{border:1px solid var(--border);border-radius:2px;overflow:hidden;background:var(--hover-bg)}
-.media-tile img{display:block;width:100%;height:120px;object-fit:cover}
-.media-tile .media-caption{padding:4px 6px;font-size:10px;color:var(--text-dim);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-
-/* Bounded Video/Audio view — a list of seekable clips, one per record. */
-.media-list{display:flex;flex-direction:column;gap:14px}
-.media-item{border:1px solid var(--border);border-radius:2px;padding:8px;background:var(--hover-bg)}
-.media-item video{display:block;width:100%;max-height:360px;background:#000}
-.media-item audio{display:block;width:100%}
-.media-item .media-caption{font-size:10.5px;color:var(--text-dim);margin-bottom:6px}
-
-/* Document view — one collapsible JSON tree per record. */
-.doc-list{display:flex;flex-direction:column;gap:14px}
-.doc-record{border:1px solid var(--border);border-radius:2px;padding:10px 12px;background:var(--hover-bg)}
-.doc-header{display:flex;flex-wrap:wrap;gap:10px;font-size:10.5px;color:var(--text-dim);margin-bottom:8px;padding-bottom:8px;border-bottom:1px solid var(--border)}
-.doc-header b{color:var(--text-muted);font-weight:600}
-.doc-tree{font-family:'SF Mono',Consolas,monospace;font-size:11.5px;line-height:1.5}
-.doc-children{margin-left:16px;border-left:1px dashed var(--border-strong);padding-left:10px}
-.doc-key{color:var(--title-accent)}
-.doc-string{color:var(--text)}
-.doc-scalar{color:var(--accent-service)}
-.doc-null{color:var(--text-dim);font-style:italic}
-.doc-punct{color:var(--text-dim)}
-
-/* Timeseries view — inline SVG line chart, no charting dependency. */
-#map.mode-timeseries #map-panel-body{position:relative;padding-bottom:52px}
-.ts-legend{display:flex;flex-wrap:wrap;gap:14px;font-size:10.5px;color:var(--text-dim);margin-bottom:10px}
-.ts-legend-item{display:flex;align-items:center;gap:5px;cursor:pointer;user-select:none;transition:opacity .12s}
-.ts-legend-item:hover{color:var(--title-accent)}
-.ts-legend-item.hidden{opacity:.4;text-decoration:line-through}
-.ts-swatch{width:9px;height:9px;border-radius:1px;display:inline-block}
-.timeseries-chart{width:100%;height:calc(100% - 30px)}
-
-/* One-shot hover jitter — the only motion this theme adds beyond the
-   shared pulse-dot animation. Gated behind prefers-reduced-motion so a
-   reduced-motion viewer still gets the static chromatic hover ring
-   defined above, just without the movement. */
-@keyframes glitch-jitter{
-  0%{transform:translateX(0)}
-  25%{transform:translateX(-1px)}
-  50%{transform:translateX(1px)}
-  75%{transform:translateX(-1px)}
-  100%{transform:translateX(0)}
-}
-@media (prefers-reduced-motion: no-preference){
-  .theme-toggle:hover,
-  .data-btn:hover,
-  #zoom-controls button:hover,
-  #grid-controls button:hover,
-  .map-back-btn:hover,
-  .activity-toggle:hover,
-  .view-mode-select:hover,
-  #hdr:hover{
-    animation:glitch-jitter .16s steps(2,end) 1;
-  }
-}
-</style>
-</head>
-<body>
-
-<div id="topbar"></div>
-
-<div id="shell">
-<div id="hdr" class="panel">
-  <div class="brand">
-    <div class="brand-mark" id="brand-mark"></div>
-    <span class="hdr-title"><span id="hdr-brand">ODF</span><small id="hdr-subtitle">Topology · loading…</small></span>
-  </div>
-  <div class="hdr-stats">
-    <div class="hdr-stat"><span class="k">Project</span><span class="v" id="stat-project" style="color:var(--title-accent)">—</span></div>
-    <div class="hdr-stat"><span class="k">Objects</span><span class="v" id="stat-objects">—</span></div>
-    <div class="hdr-stat"><span class="k">Links</span><span class="v" id="stat-links">—</span></div>
-    <div class="hdr-stat"><span class="k">Services</span><span class="v" id="stat-services" style="color:var(--accent-service)">—</span></div>
-    <div class="hdr-stat"><span class="k">Tasks</span><span class="v" id="stat-tasks" style="color:var(--accent-task)">—</span></div>
-    <div class="hdr-stat"><span class="k">Pipelines</span><span class="v" id="stat-pipelines" style="color:var(--accent-pipeline)">—</span></div>
-  </div>
-  <div class="hdr-status"><span class="dot"></span>System Nominal</div>
-  <div class="hdr-clock mono" id="hdr-clock">--:--:--</div>
-  <button id="theme-toggle" class="theme-toggle" title="Toggle light / dark theme" aria-label="Toggle theme" style="margin-left:10px"></button>
-</div>
-
-<div id="body">
-  <div id="sidebar" class="panel">
-    <div id="sb-rail" role="tablist" aria-orientation="vertical" aria-label="Sidebar">
-      <button id="sb-collapse" title="Collapse sidebar" aria-label="Collapse sidebar" aria-controls="sb-panels" aria-expanded="true"><svg viewBox="0 0 16 16"><path d="M10 3 5 8l5 5"/></svg></button>
-    </div>
-    <div id="sb-panels">
-      <div class="sb-panel active" id="sb-panel-objects" data-panel="objects" role="tabpanel">
-        <div class="sb-section" style="flex:1">
-          <div class="sb-heading">Objects <span class="count" id="node-count">00</span></div>
-          <div id="node-list"></div>
-        </div>
-      </div>
-    </div>
-  </div>
-
-  <div id="map" class="panel mode-topology">
-    <canvas id="canvas"></canvas>
-    <div id="map-title">Topology</div>
-    <div class="corner-bracket tl"></div>
-    <div class="corner-bracket tr"></div>
-    <div class="corner-bracket bl"></div>
-    <div class="corner-bracket br"></div>
-    <div id="coord-readout">CELL <b id="cr-cell">—:—</b> &nbsp;ZOOM <b id="cr-zoom">100%</b></div>
-    <div id="type-legend">
-      <div class="tl-item" style="color:var(--accent-config)" title="platform"><span class="tl-pip"></span>Config</div>
-      <div class="tl-item" style="color:var(--accent-component)" title="warehouse"><span class="tl-pip"></span>@Component</div>
-      <div class="tl-item" style="color:var(--accent-repository)" title="server rack"><span class="tl-pip"></span>@Repository</div>
-      <div class="tl-item" style="color:var(--accent-service)" title="antenna"><span class="tl-pip"></span>@Service</div>
-      <div class="tl-item" style="color:var(--accent-task)" title="factory cube"><span class="tl-pip"></span>@Task</div>
-      <div class="tl-item" style="color:var(--accent-pipeline)" title="conveyor"><span class="tl-pip"></span>@Pipeline</div>
-    </div>
-    <div id="zoom-controls">
-      <button id="zoom-in"    title="Zoom in">+</button>
-      <button id="zoom-out"   title="Zoom out">&minus;</button>
-      <div class="zc-sep"></div>
-      <button id="zoom-reset" title="Reset view">&#8962;</button>
-    </div>
-    <div id="grid-controls">
-      <button id="grid-nw" title="Add cells (top-left edge)">&#8598;</button>
-      <button id="grid-ne" title="Add cells (top-right edge)">&#8599;</button>
-      <button id="grid-sw" title="Add cells (bottom-left edge)">&#8601;</button>
-      <button id="grid-se" title="Add cells (bottom-right edge)">&#8600;</button>
-    </div>
-    <div id="map-panel-view">
-      <div class="map-panel-hdr">
-        <button id="map-back-btn" class="map-back-btn">&larr; Topology</button>
-        <span id="map-panel-title">—</span>
-        <div id="map-panel-hdr-extra"></div>
-      </div>
-      <div id="map-panel-body"></div>
-    </div>
-    <div id="inspector-popup" class="inspector-popup">
-      <button id="inspector-popup-close" class="inspector-popup-close" title="Close">&times;</button>
-      <div id="inspector-popup-body"></div>
-    </div>
-    <div id="style-picker-popover" class="style-picker-popover">
-      <div class="style-picker-section">
-        <div class="style-picker-label">Shape</div>
-        <div class="icon-picker-grid" id="icon-picker-grid"></div>
-      </div>
-      <div class="style-picker-section">
-        <div class="style-picker-label">Color</div>
-        <div class="color-picker-grid" id="color-picker-grid"></div>
-      </div>
-    </div>
-    <div class="map-toggle-group">
-      <button id="activity-toggle" class="activity-toggle" title="Toggle activity log">Activity</button>
-      <button id="chat-toggle" class="activity-toggle" title="Toggle chat">Chat</button>
-    </div>
-    <div id="activity-drawer">
-      <div class="activity-drawer-hdr">
-        <span class="panel-heading">Activity</span>
-        <button id="activity-drawer-close" class="map-back-btn">Close</button>
-      </div>
-      <div id="log-lines"></div>
-    </div>
-    <div id="chat-drawer">
-      <div class="activity-drawer-hdr">
-        <span class="panel-heading">Chat</span>
-        <button id="chat-drawer-close" class="map-back-btn">Close</button>
-      </div>
-      <div id="chat-messages"></div>
-      <div id="chat-footer">
-        <div id="chat-mention-menu" class="mention-menu" hidden></div>
-        <textarea id="chat-input" placeholder="Ask about this project… (@ to address a component)"></textarea>
-        <button id="chat-send" class="data-btn primary">Send</button>
-      </div>
-    </div>
-  </div>
-</div>
-</div>
-
-<div id="layer-color-popover" class="style-picker-popover layer-color-popover">
-  <div class="style-picker-section">
-    <div class="style-picker-label">Layer Color</div>
-    <div class="color-picker-grid" id="layer-color-picker-grid"></div>
-  </div>
-</div>
-
-<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
-<script>
 // ── Constants ────────────────────────────────────────────────────────────
 
 const TW = 80, TH = 48;   // tile width / height (diamond)
@@ -594,7 +6,7 @@ const TW2 = TW / 2, TH2 = TH / 2;
 // Populated from CSS custom properties by readTheme() — see Theme section.
 const ACCENT = {
   config: '', component: '', repository: '',
-  service: '', task: '', pipeline: '', alert: '',
+  service: '', task: '', pipeline: '', agent: '', function: '', alert: '',
 };
 
 // Colors for the six built-in @Layer names, also populated from CSS custom
@@ -606,7 +18,8 @@ const LAYER_DEFAULT_COLORS = {
 
 const TYPE_LABEL = {
   config:'Config', component:'@Component', repository:'@Repository',
-  service:'@Service', task:'@Task', pipeline:'@Pipeline',
+  service:'@Service', task:'@Task', pipeline:'@Pipeline', agent:'@Agent',
+  function:'@Function',
 };
 
 // The map-panel mode each DataView kind opens into (see setMapMode below) —
@@ -631,11 +44,18 @@ let nodeMap = {};
 let repoSchemas = {};
 let layoutOverrides = {}; // node id -> {col, row}, persisted via /api/layout
 
+// A node's or repository's API base path, e.g. /api/tasks/loader. Ids are
+// keys (`task.loader`); the server owns the key -> route mapping and sends it
+// as each node's and repository schema's `href`.
+function apiPath(id) {
+  return (nodeMap[id] || repoSchemas[id] || {}).href;
+}
+
 // User-added empty cells extending the grid past the auto-fit bounds derived
 // from node positions — one count per edge of the isometric diamond (see the
 // NE/SE/SW/NW corner math above computeGridBounds). Persisted under the
-// reserved '_grid' key in layoutOverrides (node ids are kebab-case class
-// names and can never collide with it).
+// reserved '_grid' key in layoutOverrides (node ids are `<namespace>.<name>`
+// keys, or `config`, and can never collide with it).
 let gridExpand = { nw: 0, ne: 0, se: 0, sw: 0 };
 
 // ── Canvas ────────────────────────────────────────────────────────────────
@@ -671,7 +91,6 @@ function resize() {
 let BG_CANVAS, TILE_FILL, TILE_STROKE, WIRE, WIRE_GLOW;
 let LABEL_BG_RGB, LABEL_BG_ALPHA, VIGNETTE_RGB, VIGNETTE_ALPHA;
 let TEXT_MUTED, TITLE_ACCENT;
-let SPLIT_A, SPLIT_B;
 
 function readTheme() {
   const s = getComputedStyle(document.documentElement);
@@ -691,8 +110,45 @@ function readTheme() {
   VIGNETTE_ALPHA = v('--vignette-alpha');
   TEXT_MUTED     = v('--text-muted');
   TITLE_ACCENT   = v('--title-accent');
-  SPLIT_A        = v('--split-a');
-  SPLIT_B        = v('--split-b');
+
+  if (THEME_STYLE.onReadTheme) THEME_STYLE.onReadTheme(v);
+}
+
+// Canvas drawing knobs a theme can't express in CSS. The values here are the
+// default look; a theme's optional theme.js overrides any of them through
+// ODF.registerTheme(). `part` is 'tile', 'face' or 'top'.
+const THEME_STYLE = {
+  emptyTileLine: 0.6,
+  tickSize: 1,
+  tileLine: lit => lit ? 1.1 : 0.8,
+  faceLine: 0.8,
+  topLine: lit => lit ? 1.3 : 1,
+  // Shadow applied to the stroke of a lit shape.
+  litShadow(part, accent) {
+    ctx.shadowColor = accent;
+    ctx.shadowBlur = { tile: 7, face: 9, top: 12.6 }[part];
+  },
+  // Optional (buildPath, part, sMul) => void: extra strokes drawn under a lit
+  // shape's own stroke.
+  litFringe: null,
+  // Optional (v) => void, called at the end of readTheme() with its CSS
+  // custom-property reader, for themes that mirror extra variables.
+  onReadTheme: null,
+};
+
+// Strokes the outline of a tile or box face with the caller's strokeStyle and
+// lineWidth, adding the theme's lit fringe and shadow, and leaves the shadow
+// state reset so it can't leak into later drawing calls.
+function strokeShape(buildPath, part, accent, lit, sMul = 1) {
+  if (lit && THEME_STYLE.litFringe) {
+    THEME_STYLE.litFringe(buildPath, part, sMul);
+    buildPath();
+  }
+  if (lit) THEME_STYLE.litShadow(part, accent);
+  ctx.stroke();
+  ctx.shadowBlur = 0;
+  ctx.shadowOffsetX = 0;
+  ctx.shadowOffsetY = 0;
 }
 
 function updateThemeButton(theme) {
@@ -724,7 +180,7 @@ function initTheme() {
 // ── Layer colors ─────────────────────────────────────────────────────────
 // A layer's badge color is resolved user override (persisted alongside the
 // rest of the layout under the reserved '_layers' key, node ids being
-// kebab-case class names that can never collide with it) → curated default
+// `<namespace>.<name>` keys that can never collide with it) → curated default
 // for one of the six built-in layers → a deterministic hash-based hue, so a
 // custom user-defined @Layer still gets a stable color across reloads
 // without needing a predefined entry.
@@ -752,7 +208,7 @@ function layerLabel(name) {
 function layerBadgeHtml(name) {
   if (!name) return '';
   const c = layerColor(name);
-  return `<span class="layer-badge" style="background:color-mix(in srgb, ${c} 16%, transparent);color:${c};border:1px solid color-mix(in srgb, ${c} 45%, transparent);box-shadow:1px 0 0 color-mix(in srgb, var(--split-a) 50%, transparent),-1px 0 0 color-mix(in srgb, var(--split-b) 50%, transparent)">${layerLabel(name)}</span>`;
+  return `<span class="layer-badge" style="background:color-mix(in srgb, ${c} 16%, transparent);color:${c};border:var(--tag-border-width,1px) solid color-mix(in srgb, ${c} 45%, transparent);box-shadow:var(--tag-shadow,none)">${layerLabel(name)}</span>`;
 }
 
 // Persists a layer color override to /api/layout, alongside node positions
@@ -914,32 +370,18 @@ function tilePath(sx, sy) {
   ctx.closePath();
 }
 
-// Chromatic-split fringe stroke — rebuilds `buildPath`'s path offset by
-// dx/dy (via a transform, since an already-recorded path can't be
-// re-offset after the fact) and strokes it in one channel color. Used on
-// "lit" shapes to give the canvas the same RGB-misregistration fringe as
-// the CSS chrome, instead of neo's hard offset drop-shadow.
-function fringeStroke(buildPath, dx, dy, color, alpha, width) {
-  ctx.save();
-  ctx.translate(dx, dy);
-  buildPath();
-  ctx.strokeStyle = rgba(color, alpha);
-  ctx.lineWidth = width;
-  ctx.stroke();
-  ctx.restore();
-}
-
 function drawEmptyTile(sx, sy) {
   tilePath(sx, sy);
   ctx.fillStyle   = TILE_FILL;
   ctx.fill();
   ctx.strokeStyle = TILE_STROKE;
-  ctx.lineWidth   = 0.6;
+  ctx.lineWidth   = THEME_STYLE.emptyTileLine;
   ctx.stroke();
 
   // blueprint tick at tile center
+  const tick = THEME_STYLE.tickSize;
   ctx.fillStyle = TILE_STROKE;
-  ctx.fillRect(sx - 0.5, sy - 0.5, 1, 1);
+  ctx.fillRect(sx - tick / 2, sy - tick / 2, tick, tick);
 }
 
 function drawOccupiedTile(sx, sy, accent, lit) {
@@ -947,16 +389,9 @@ function drawOccupiedTile(sx, sy, accent, lit) {
   path();
   ctx.fillStyle = rgba(accent, lit ? 0.09 : 0.04);
   ctx.fill();
-  if (lit) {
-    fringeStroke(path, 1, 0, SPLIT_A, 0.45, 1);
-    fringeStroke(path, -1, 0, SPLIT_B, 0.45, 1);
-  }
-  path();
   ctx.strokeStyle = rgba(accent, lit ? 0.75 : 0.35);
-  ctx.lineWidth = lit ? 1.1 : 0.8;
-  if (lit) { ctx.shadowColor = accent; ctx.shadowBlur = 7; }
-  ctx.stroke();
-  ctx.shadowBlur = 0;
+  ctx.lineWidth = THEME_STYLE.tileLine(lit);
+  strokeShape(path, 'tile', accent, lit);
 }
 
 // ── Base building primitive (a box, footprint scaled per type) ────────────
@@ -967,7 +402,6 @@ function drawOccupiedTile(sx, sy, accent, lit) {
 // ever drawing the single ground-footprint pad. `drawBox` below is the
 // pad-shaped special case used throughout as the tile-occupancy footprint.
 function isoBox(sx, sy, w2, h2, bh, accent, lit, opts = {}) {
-  const glow = lit ? 9 : 0;
   const fMul = opts.fillAlpha ?? 1;
   const sMul = opts.strokeAlpha ?? 1;
 
@@ -983,16 +417,9 @@ function isoBox(sx, sy, w2, h2, bh, accent, lit, opts = {}) {
   rightFace();
   ctx.fillStyle   = rgba(accent, 0.05 * fMul);
   ctx.fill();
-  if (lit) {
-    fringeStroke(rightFace, 1, 0, SPLIT_A, 0.35 * sMul, 0.8);
-    fringeStroke(rightFace, -1, 0, SPLIT_B, 0.35 * sMul, 0.8);
-  }
-  rightFace();
   ctx.strokeStyle = rgba(accent, (lit ? 0.55 : 0.35) * sMul);
-  ctx.lineWidth   = 0.8;
-  if (glow) { ctx.shadowColor = accent; ctx.shadowBlur = glow; }
-  ctx.stroke();
-  ctx.shadowBlur = 0;
+  ctx.lineWidth   = THEME_STYLE.faceLine;
+  strokeShape(rightFace, 'face', accent, lit, sMul);
 
   // ── Left face ──
   const leftFace = () => {
@@ -1006,16 +433,9 @@ function isoBox(sx, sy, w2, h2, bh, accent, lit, opts = {}) {
   leftFace();
   ctx.fillStyle   = rgba(accent, 0.08 * fMul);
   ctx.fill();
-  if (lit) {
-    fringeStroke(leftFace, 1, 0, SPLIT_A, 0.35 * sMul, 0.8);
-    fringeStroke(leftFace, -1, 0, SPLIT_B, 0.35 * sMul, 0.8);
-  }
-  leftFace();
   ctx.strokeStyle = rgba(accent, (lit ? 0.65 : 0.4) * sMul);
-  ctx.lineWidth   = 0.8;
-  if (glow) { ctx.shadowColor = accent; ctx.shadowBlur = glow; }
-  ctx.stroke();
-  ctx.shadowBlur = 0;
+  ctx.lineWidth   = THEME_STYLE.faceLine;
+  strokeShape(leftFace, 'face', accent, lit, sMul);
 
   // ── Top face ──
   const topFace = () => {
@@ -1029,16 +449,9 @@ function isoBox(sx, sy, w2, h2, bh, accent, lit, opts = {}) {
   topFace();
   ctx.fillStyle   = rgba(accent, (lit ? 0.16 : 0.1) * fMul);
   ctx.fill();
-  if (lit) {
-    fringeStroke(topFace, 1, 0, SPLIT_A, 0.4 * sMul, lit ? 1.3 : 1);
-    fringeStroke(topFace, -1, 0, SPLIT_B, 0.4 * sMul, lit ? 1.3 : 1);
-  }
-  topFace();
   ctx.strokeStyle = rgba(accent, (lit ? 1.0 : 0.6) * sMul);
-  ctx.lineWidth   = lit ? 1.3 : 1;
-  if (glow) { ctx.shadowColor = accent; ctx.shadowBlur = glow * 1.4; }
-  ctx.stroke();
-  ctx.shadowBlur = 0;
+  ctx.lineWidth   = THEME_STYLE.topLine(lit);
+  strokeShape(topFace, 'top', accent, lit, sMul);
 
   return { w2, h2, topY: sy - bh };
 }
@@ -1216,382 +629,108 @@ function drawConveyorPad(sx, sy, accent, lit) {
   ctx.restore();
 }
 
-// ── User-selectable icon styles (assignable to any node, any exec type) ───
-
-// Controller → gamepad body as a small docked box, d-pad + buttons on its face
-function drawController(sx, sy, accent, lit) {
-  const bh = 7, scale = 0.65;
-  const { w2, h2 } = drawBox(sx, sy, bh, accent, lit, scale);
-  const topY = sy - bh;
-
-  const bodyW2 = w2 * 0.92, bodyH2 = h2 * 0.92, bodyBh = 6;
-  isoBox(sx, topY, bodyW2, bodyH2, bodyBh, accent, lit, { fillAlpha: 1.2, strokeAlpha: 1.15 });
-  const cy = topY - bodyBh;
+// @Agent → observatory (domed roof + beam sweeping around it)
+function drawObservatory(sx, sy, accent, lit) {
+  const bh = 24;
+  drawBox(sx, sy, bh, accent, lit, 0.75);
+  const cy = sy - bh, r = 13;
 
   ctx.save();
-  ctx.strokeStyle = rgba(accent, lit ? 0.95 : 0.8);
-  ctx.lineWidth = 1.3;
-  if (lit) { ctx.shadowColor = accent; ctx.shadowBlur = 4; }
-  ctx.beginPath(); ctx.moveTo(sx - w2 * 0.32, cy); ctx.lineTo(sx - w2 * 0.12, cy); ctx.stroke();
-  ctx.beginPath(); ctx.moveTo(sx - w2 * 0.22, cy - 3.5); ctx.lineTo(sx - w2 * 0.22, cy + 3.5); ctx.stroke();
-  ctx.fillStyle = rgba(accent, lit ? 0.85 : 0.6);
-  ctx.beginPath(); ctx.arc(sx + w2 * 0.18, cy - 2.5, 1.8, 0, Math.PI * 2); ctx.fill();
-  ctx.beginPath(); ctx.arc(sx + w2 * 0.3, cy + 2, 1.8, 0, Math.PI * 2); ctx.fill();
+  ctx.beginPath();
+  ctx.ellipse(sx, cy, r, r * (TH2 / TW2), 0, 0, Math.PI);
+  ctx.arc(sx, cy, r, 0, Math.PI, true);
+  ctx.closePath();
+  ctx.fillStyle = rgba(accent, lit ? 0.2 : 0.12);
+  ctx.strokeStyle = rgba(accent, lit ? 0.9 : 0.55);
+  ctx.lineWidth = 1;
+  if (lit) { ctx.shadowColor = accent; ctx.shadowBlur = 5; }
+  ctx.fill();
+  ctx.stroke();
   ctx.restore();
-}
 
-// Sensor → small raised pod with a pulsing dot and radiating ping arcs
-function drawSensor(sx, sy, accent, lit) {
-  const bh = 6, scale = 0.5;
-  const { h2 } = drawBox(sx, sy, bh, accent, lit, scale);
-  const topY = sy - bh;
-
-  const podW2 = TW2 * scale * 0.5, podH2 = h2 * 0.5, podBh = 5;
-  isoBox(sx, topY, podW2, podH2, podBh, accent, lit, { fillAlpha: 1.2, strokeAlpha: 1.15 });
-  const cy = topY - podBh - podH2 * 0.3;
-
+  // A slit in the dome, and the beam leaving it, both turning with time.
+  const angle = animT * 0.8 + sx;
+  const dx = Math.cos(angle), dy = Math.sin(angle) * (TH2 / TW2);
+  const front = Math.sin(angle) > 0;
+  ctx.save();
+  ctx.strokeStyle = rgba(accent, front ? (lit ? 0.85 : 0.6) : 0.2);
+  ctx.lineWidth = 1.4;
+  ctx.beginPath();
+  ctx.moveTo(sx + dx * r * 0.35, cy - r * 0.95);
+  ctx.lineTo(sx + dx * r * 0.85, cy - r * 0.45 + dy * r * 0.4);
+  ctx.stroke();
   const pulse = (Math.sin(animT * 3) + 1) / 2;
+  ctx.strokeStyle = rgba(accent, 0.15 + 0.25 * pulse);
+  ctx.lineWidth = 1;
+  ctx.beginPath();
+  ctx.moveTo(sx, cy - r * 0.9);
+  ctx.lineTo(sx + dx * TW2 * 0.9, cy - r * 0.9 - 10 + dy * TW2 * 0.4);
+  ctx.stroke();
+  ctx.restore();
+
   ctx.save();
   ctx.beginPath();
-  ctx.arc(sx, cy, 2.6, 0, Math.PI * 2);
-  ctx.fillStyle = rgba(accent, 0.8 + 0.2 * pulse);
+  ctx.arc(sx, cy - r - 2, 1.8, 0, Math.PI * 2);
+  ctx.fillStyle = accent;
   ctx.shadowColor = accent;
-  ctx.shadowBlur = 5 + 3 * pulse;
+  ctx.shadowBlur = 3 + 4 * pulse;
   ctx.fill();
-  ctx.strokeStyle = rgba(accent, 0.55 + 0.3 * pulse);
-  ctx.lineWidth = 1.4;
-  for (const r of [7, 13]) {
-    ctx.beginPath();
-    ctx.arc(sx, cy, r, -Math.PI * 0.75, -Math.PI * 0.25);
-    ctx.stroke();
-  }
   ctx.restore();
 }
 
-// Radio → docked base, tapered mast, broadcast arcs (on-air motif)
-function drawRadio(sx, sy, accent, lit) {
-  const bh = 8, scale = 0.5;
+// Function → relay box: a low box with a conduit across its roof, and a pulse
+// carried through it from one end to the other, as a call passes through.
+function drawRelayBox(sx, sy, accent, lit) {
+  const bh = 14, scale = 0.7;
   drawBox(sx, sy, bh, accent, lit, scale);
-  const topY = sy - bh;
-
-  const baseW2 = TW2 * scale * 0.55, baseH2 = TH2 * scale * 0.55, baseBh = 6;
-  isoBox(sx, topY, baseW2, baseH2, baseBh, accent, lit, { fillAlpha: 1.2, strokeAlpha: 1.15 });
-  const mastTop = topY - baseBh, tipY = mastTop - 18;
+  const top = sy - bh;
+  const x0 = sx - TW2 * scale * 0.6, y0 = top + TH2 * scale * 0.6 - 10;
+  const x1 = sx + TW2 * scale * 0.6, y1 = top - TH2 * scale * 0.6 - 10;
 
   ctx.save();
-  ctx.strokeStyle = rgba(accent, lit ? 0.95 : 0.8);
-  ctx.lineWidth = 1.4;
-  if (lit) { ctx.shadowColor = accent; ctx.shadowBlur = 5; }
-  ctx.beginPath(); ctx.moveTo(sx, mastTop); ctx.lineTo(sx, tipY); ctx.stroke();
-  ctx.fillStyle = rgba(accent, lit ? 0.95 : 0.8);
-  ctx.beginPath(); ctx.arc(sx, tipY, 2, 0, Math.PI * 2); ctx.fill();
+  ctx.strokeStyle = rgba(accent, lit ? 0.9 : 0.6);
   ctx.lineWidth = 1.2;
-  for (const r of [6, 11]) {
-    ctx.beginPath(); ctx.arc(sx, tipY, r, -Math.PI / 4, Math.PI / 4); ctx.stroke();
-    ctx.beginPath(); ctx.arc(sx, tipY, r, Math.PI * 0.75, Math.PI * 1.25); ctx.stroke();
-  }
-  ctx.restore();
-}
-
-// Walkie-talkie → tall handset body standing directly on the ground, a
-// tapered antenna, a channel knob, a speaker grille and a status LED.
-function drawWalkieTalkie(sx, sy, accent, lit) {
-  const w2 = TW2 * 0.34, h2 = TH2 * 0.34, bh = 28;
-  isoBox(sx, sy, w2, h2, bh, accent, lit);
-  const topY = sy - bh;
-
-  // Antenna: thick base tapering to a thin tip, angled back off the top
-  const abx = sx - w2 * 0.1, aby = topY - h2 * 0.55;
-  const atx = abx + w2 * 0.5, aty = aby - 22;
-  const mx = abx + (atx - abx) * 0.35, my = aby + (aty - aby) * 0.35;
-  ctx.save();
-  ctx.strokeStyle = rgba(accent, lit ? 0.95 : 0.8);
-  ctx.lineCap = 'round';
-  if (lit) { ctx.shadowColor = accent; ctx.shadowBlur = 4; }
-  ctx.lineWidth = 2.4;
-  ctx.beginPath(); ctx.moveTo(abx, aby); ctx.lineTo(mx, my); ctx.stroke();
-  ctx.lineWidth = 1.1;
-  ctx.beginPath(); ctx.moveTo(mx, my); ctx.lineTo(atx, aty); ctx.stroke();
-  ctx.restore();
-
-  // Channel knob on the top face
-  isoDisc(sx + w2 * 0.15, topY + h2 * 0.05, w2 * 0.28, accent, lit,
-    { fillAlpha: lit ? 0.4 : 0.28, strokeAlpha: lit ? 0.9 : 0.7, lineWidth: 1.1 });
-
-  // Speaker grille on the front-right face
-  ctx.save();
-  ctx.strokeStyle = rgba(accent, lit ? 0.7 : 0.45);
-  ctx.lineWidth = 0.9;
-  for (const f of [0.32, 0.46, 0.6]) {
-    ctx.beginPath();
-    ctx.moveTo(sx + w2 * 0.3, topY + bh * f);
-    ctx.lineTo(sx + w2 * 0.82, topY + bh * f + w2 * 0.12);
-    ctx.stroke();
-  }
-  ctx.restore();
-
-  // Blinking status LED
-  const blink = (Math.sin(animT * 4 + sx) + 1) / 2 > 0.5;
-  ctx.save();
   ctx.beginPath();
-  ctx.arc(sx + w2 * 0.55, topY + bh * 0.16, 1.6, 0, Math.PI * 2);
-  ctx.fillStyle = blink ? '#5fd48a' : 'rgba(95,212,138,0.25)';
-  if (blink) { ctx.shadowColor = '#5fd48a'; ctx.shadowBlur = 4; }
-  ctx.fill();
-  ctx.restore();
-}
-
-// Camera → wall-mounted bullet-style surveillance camera: a short post,
-// a horizontal barrel, a lens with a sun-shield, and a blinking IR light.
-function drawCamera(sx, sy, accent, lit) {
-  const postW2 = TW2 * 0.14, postH2 = TH2 * 0.14, postBh = 15;
-  isoBox(sx, sy, postW2, postH2, postBh, accent, lit);
-  const postTopY = sy - postBh;
-
-  const barrelW2 = TW2 * 0.42, barrelH2 = TH2 * 0.22, barrelBh = 12;
-  const barrelX = sx + TW2 * 0.12, barrelY = postTopY + TH2 * 0.06;
-  isoBox(barrelX, barrelY, barrelW2, barrelH2, barrelBh, accent, lit, { fillAlpha: 1.15, strokeAlpha: 1.1 });
-  const barrelTopY = barrelY - barrelBh;
-
-  // Lens at the barrel's far end
-  const lensCx = barrelX + barrelW2, lensCy = barrelY - barrelBh * 0.5;
-  ctx.save();
-  ctx.strokeStyle = rgba(accent, lit ? 0.95 : 0.8);
-  ctx.lineWidth = 1.3;
-  if (lit) { ctx.shadowColor = accent; ctx.shadowBlur = 4; }
-  ctx.beginPath(); ctx.arc(lensCx, lensCy, 4, 0, Math.PI * 2); ctx.stroke();
-  ctx.beginPath(); ctx.arc(lensCx, lensCy, 1.7, 0, Math.PI * 2);
-  ctx.fillStyle = rgba(accent, lit ? 0.5 : 0.35);
-  ctx.fill();
-
-  // Sun-shield hood above the lens
-  ctx.lineWidth = 1.3;
-  ctx.beginPath(); ctx.moveTo(lensCx - 5, lensCy - 4); ctx.lineTo(lensCx + 3, lensCy - 6.5); ctx.stroke();
-  ctx.restore();
-
-  // Blinking IR/rec status light on top of the barrel
-  const blink = (Math.sin(animT * 5 + sx) + 1) / 2 > 0.5;
-  ctx.save();
-  ctx.beginPath();
-  ctx.arc(barrelX - barrelW2 * 0.5, barrelTopY - 2, 1.6, 0, Math.PI * 2);
-  ctx.fillStyle = blink ? '#e2564f' : 'rgba(226,86,79,0.25)';
-  if (blink) { ctx.shadowColor = '#e2564f'; ctx.shadowBlur = 4; }
-  ctx.fill();
-  ctx.restore();
-}
-
-// Drone → small quadcopter: a hub sitting directly on the ground, four arms
-// reaching out to elevated rotor discs, a camera ball slung underneath.
-function drawDrone(sx, sy, accent, lit) {
-  const hubW2 = TW2 * 0.26, hubH2 = TH2 * 0.26, hubBh = 8;
-  isoBox(sx, sy, hubW2, hubH2, hubBh, accent, lit);
-  const armY = sy - hubBh * 1.15;
-
-  ctx.save();
-  ctx.strokeStyle = rgba(accent, lit ? 0.95 : 0.8);
-  ctx.lineWidth = 1.5;
-  if (lit) { ctx.shadowColor = accent; ctx.shadowBlur = 4; }
-  const arms = [[-1, -0.65], [1, -0.65], [-1, 0.65], [1, 0.65]];
-  const armLen = TW2 * 0.6, armSpread = TH2 * 0.3;
-  for (const [dx, dy] of arms) {
-    const tx = sx + dx * armLen, ty = armY + dy * armSpread;
-    ctx.beginPath(); ctx.moveTo(sx, armY); ctx.lineTo(tx, ty); ctx.stroke();
-    ctx.beginPath(); ctx.moveTo(tx, ty); ctx.lineTo(tx, ty - 4); ctx.stroke();
-    isoDisc(tx, ty - 4, 6, accent, lit, { fillAlpha: lit ? 0.14 : 0.08, strokeAlpha: lit ? 0.85 : 0.6, lineWidth: 1 });
-  }
-  ctx.restore();
-
-  isoDisc(sx, sy + hubH2 * 0.3, hubW2 * 0.32, accent, lit,
-    { fillAlpha: lit ? 0.5 : 0.35, strokeAlpha: lit ? 0.9 : 0.7, lineWidth: 1 });
-}
-
-// Plane → small fixed-wing UAV: a stout fuselage (body) with long, thin
-// wings clearly bigger and flatter than it — not matched bars crossing.
-function drawPlane(sx, sy, accent, lit) {
-  const bh = 12;
-  const fuseW2 = TW2 * 0.24, fuseH2 = TH2 * 0.9;
-  isoBox(sx, sy, fuseW2, fuseH2, bh, accent, lit);
-  const topY = sy - bh;
-
-  const wingW2 = TW2 * 1.35, wingH2 = TH2 * 0.14, wingBh = 3;
-  isoBox(sx, sy - bh * 0.6, wingW2, wingH2, wingBh, accent, lit, { fillAlpha: 0.8, strokeAlpha: 0.9 });
-
-  const tailW2 = TW2 * 0.15, tailH2 = TH2 * 0.15, tailBh = 10;
-  isoBox(sx, topY - fuseH2 * 0.72, tailW2, tailH2, tailBh, accent, lit, { fillAlpha: 1.1, strokeAlpha: 1.1 });
-
-  // Propeller: two thin crossed blades at the nose, no ellipses
-  const noseX = sx, noseY = topY + fuseH2 - 1, pr = 6.5;
-  ctx.save();
-  ctx.strokeStyle = rgba(accent, lit ? 0.95 : 0.8);
-  ctx.lineWidth = 1.3;
-  ctx.lineCap = 'round';
-  if (lit) { ctx.shadowColor = accent; ctx.shadowBlur = 4; }
-  ctx.beginPath(); ctx.moveTo(noseX - pr * 0.3, noseY - pr); ctx.lineTo(noseX + pr * 0.3, noseY + pr); ctx.stroke();
-  ctx.beginPath(); ctx.moveTo(noseX + pr, noseY - pr * 0.25); ctx.lineTo(noseX - pr, noseY + pr * 0.25); ctx.stroke();
-  ctx.restore();
-  ctx.save();
-  ctx.beginPath(); ctx.arc(noseX, noseY, 1.4, 0, Math.PI * 2);
-  ctx.fillStyle = rgba(accent, lit ? 0.9 : 0.6);
-  ctx.fill();
-  ctx.restore();
-}
-
-// Satellite → central bus standing on the ground, two solar-panel wings on
-// thin struts, and a dish mast on top.
-function drawSatellite(sx, sy, accent, lit) {
-  const busW2 = TW2 * 0.22, busH2 = TH2 * 0.22, busBh = 14;
-  isoBox(sx, sy, busW2, busH2, busBh, accent, lit);
-  const busTopY = sy - busBh;
-  const midY = sy - busBh * 0.5;
-
-  const panelW2 = TW2 * 0.32, panelH2 = TH2 * 0.5, panelBh = 2;
-  for (const side of [-1, 1]) {
-    const px = sx + side * (busW2 + panelW2 + 6);
-    isoBox(px, midY, panelW2, panelH2, panelBh, accent, lit, { fillAlpha: 0.75, strokeAlpha: 0.9 });
-    ctx.save();
-    ctx.strokeStyle = rgba(accent, lit ? 0.8 : 0.55);
-    ctx.lineWidth = 1.1;
-    ctx.beginPath();
-    ctx.moveTo(sx + side * busW2, midY - panelBh);
-    ctx.lineTo(px - side * panelW2, midY - panelBh);
-    ctx.stroke();
-    ctx.restore();
-  }
-
-  const dishCx = sx, dishCy = busTopY - busH2 * 0.2;
-  ctx.save();
-  ctx.strokeStyle = rgba(accent, lit ? 0.95 : 0.8);
-  ctx.lineWidth = 1.4;
-  if (lit) { ctx.shadowColor = accent; ctx.shadowBlur = 4; }
-  ctx.beginPath(); ctx.moveTo(dishCx, dishCy); ctx.lineTo(dishCx, dishCy - 8); ctx.stroke();
-  ctx.beginPath(); ctx.arc(dishCx, dishCy - 13, 6, Math.PI * 0.1, Math.PI * 0.9); ctx.stroke();
-  ctx.restore();
-}
-
-// Gateway → docked body block, two antenna prongs, wifi broadcast arcs
-function drawGateway(sx, sy, accent, lit) {
-  const bh = 8, scale = 0.55;
-  const { w2 } = drawBox(sx, sy, bh, accent, lit, scale);
-  const topY = sy - bh;
-
-  const bodyW2 = w2 * 0.9, bodyH2 = TH2 * scale * 0.9, bodyBh = 6;
-  isoBox(sx, topY, bodyW2, bodyH2, bodyBh, accent, lit, { fillAlpha: 1.15, strokeAlpha: 1.1 });
-  const bodyTopY = topY - bodyBh;
-
-  ctx.save();
-  ctx.strokeStyle = rgba(accent, lit ? 0.95 : 0.8);
-  ctx.lineWidth = 1.4;
-  if (lit) { ctx.shadowColor = accent; ctx.shadowBlur = 4; }
-  for (const dx of [-bodyW2 * 0.35, bodyW2 * 0.35]) {
-    ctx.beginPath(); ctx.moveTo(sx + dx, bodyTopY); ctx.lineTo(sx + dx, bodyTopY - 11); ctx.stroke();
-  }
-  ctx.restore();
-
-  const blink = (Math.sin(animT * 6 + sx) + 1) / 2 > 0.5;
-  ctx.save();
-  ctx.lineWidth = 1.2;
-  ctx.strokeStyle = rgba(accent, blink ? 0.95 : 0.45);
-  if (blink) { ctx.shadowColor = accent; ctx.shadowBlur = 5; }
-  for (const r of [5, 9]) {
-    ctx.beginPath(); ctx.arc(sx, bodyTopY - 16, r, Math.PI * 1.2, Math.PI * 1.8); ctx.stroke();
-  }
-  ctx.restore();
-}
-
-// Robot arm → docked base block, two-segment articulated arm, gripper jaws
-function drawRobotArm(sx, sy, accent, lit) {
-  const bh = 8, scale = 0.5;
-  const { w2 } = drawBox(sx, sy, bh, accent, lit, scale);
-  const topY = sy - bh;
-
-  const baseW2 = w2 * 0.6, baseH2 = TH2 * scale * 0.6, baseBh = 7;
-  isoBox(sx, topY, baseW2, baseH2, baseBh, accent, lit, { fillAlpha: 1.2, strokeAlpha: 1.15 });
-
-  const base = { x: sx, y: topY - baseBh };
-  const joint = { x: base.x + 11, y: base.y - 17 };
-  const tip = { x: joint.x - 5, y: joint.y - 15 };
-  ctx.save();
-  ctx.strokeStyle = rgba(accent, lit ? 0.95 : 0.8);
-  ctx.lineWidth = 2.1;
-  ctx.lineCap = 'round';
-  if (lit) { ctx.shadowColor = accent; ctx.shadowBlur = 5; }
-  ctx.beginPath();
-  ctx.moveTo(base.x, base.y); ctx.lineTo(joint.x, joint.y); ctx.lineTo(tip.x, tip.y);
+  ctx.moveTo(x0, y0 + 10);
+  ctx.lineTo(x0, y0);
+  ctx.lineTo(x1, y1);
+  ctx.lineTo(x1, y1 + 10);
   ctx.stroke();
-  ctx.fillStyle = rgba(accent, lit ? 0.9 : 0.7);
-  ctx.beginPath(); ctx.arc(base.x, base.y, 2.6, 0, Math.PI * 2); ctx.fill();
-  ctx.beginPath(); ctx.arc(joint.x, joint.y, 2.2, 0, Math.PI * 2); ctx.fill();
-  ctx.lineWidth = 1.6;
-  const angle = Math.atan2(tip.y - joint.y, tip.x - joint.x);
-  for (const s of [-1, 1]) {
-    const a = angle + s * 0.65;
-    ctx.beginPath();
-    ctx.moveTo(tip.x, tip.y);
-    ctx.lineTo(tip.x + Math.cos(a) * 7, tip.y + Math.sin(a) * 7);
-    ctx.stroke();
-  }
   ctx.restore();
-}
 
-// Pump / valve → docked base block, P&ID-style gate-valve glyph + handle
-function drawPumpValve(sx, sy, accent, lit) {
-  const bh = 8, scale = 0.55;
-  const { w2 } = drawBox(sx, sy, bh, accent, lit, scale);
-  const topY = sy - bh;
-
-  const baseW2 = w2 * 0.5, baseH2 = TH2 * scale * 0.5, baseBh = 6;
-  isoBox(sx, topY, baseW2, baseH2, baseBh, accent, lit, { fillAlpha: 1.2, strokeAlpha: 1.15 });
-  const cy = topY - baseBh - 6;
-
+  const t = (animT * 0.6 + sx * 0.01) % 1;
   ctx.save();
-  ctx.strokeStyle = rgba(accent, lit ? 0.95 : 0.8);
-  ctx.fillStyle = rgba(accent, lit ? 0.26 : 0.18);
-  ctx.lineWidth = 1.5;
-  if (lit) { ctx.shadowColor = accent; ctx.shadowBlur = 5; }
   ctx.beginPath();
-  ctx.moveTo(sx - 9, cy - 5); ctx.lineTo(sx, cy); ctx.lineTo(sx - 9, cy + 5); ctx.closePath();
+  ctx.arc(x0 + (x1 - x0) * t, y0 + (y1 - y0) * t, 1.8, 0, Math.PI * 2);
+  ctx.fillStyle = accent;
+  ctx.shadowColor = accent;
+  ctx.shadowBlur = lit ? 6 : 3;
   ctx.fill();
-  ctx.stroke();
-  ctx.beginPath();
-  ctx.moveTo(sx + 9, cy - 5); ctx.lineTo(sx, cy); ctx.lineTo(sx + 9, cy + 5); ctx.closePath();
-  ctx.fill();
-  ctx.stroke();
-  ctx.lineWidth = 1.6;
-  ctx.beginPath(); ctx.moveTo(sx, cy); ctx.lineTo(sx, cy - 11); ctx.stroke();
-  ctx.beginPath(); ctx.moveTo(sx - 5, cy - 11); ctx.lineTo(sx + 5, cy - 11); ctx.stroke();
   ctx.restore();
 }
 
 // ── Icon registry ──────────────────────────────────────────────────────────
-// One entry per selectable icon shape. The first six keys double as exec-type
-// defaults (drawn when a node has no `icon` override — see iconKey() below);
-// the rest are purely user-selectable, assignable to any node regardless of
-// exec type.
+// One entry per selectable icon shape. The eight below are the exec-type
+// defaults (drawn when a node has no `icon` override — see iconKey() below).
+// Every other built-in icon is purely user-selectable, assignable to any node
+// regardless of exec type, and lives in its group's file under icons/,
+// registering itself through ODF.registerIcon once this script has run.
 //
 // bh/scale    — base box height / footprint scale, matching each draw fn
 // extraTop    — anything drawn above the box (antenna, dish, wings…), added
 //               to derive topExtent for label placement & hit testing
 // draw        — renders the icon at (sx, sy) with the given accent/lit state
 // label       — swatch tooltip / accessible name in the icon picker
+// group       — the icon picker tab the swatch is listed under
 const ICONS = {
-  config:     { draw: drawConfigPlatform, bh: 8,  scale: 1,    extraTop: 0,  label: 'Config platform' },
-  component:  { draw: drawWarehouse,      bh: 34, scale: 1.15, extraTop: 6,  label: '@Component warehouse' },
-  repository: { draw: drawServerRack,     bh: 74, scale: 0.55, extraTop: 0,  label: '@Repository server rack' },
-  service:    { draw: drawAntennaTower,   bh: 56, scale: 0.5,  extraTop: 34, label: '@Service antenna' },
-  task:       { draw: drawFactoryCube,    bh: 30, scale: 0.8,  extraTop: 20, label: '@Task factory cube' },
-  pipeline:   { draw: drawConveyorPad,    bh: 10, scale: 1,    extraTop: 0,  label: '@Pipeline conveyor' },
-
-  controller:   { draw: drawController, bh: 7,  scale: 0.65, extraTop: 10, label: 'Controller' },
-  sensor:       { draw: drawSensor,     bh: 6,  scale: 0.5,  extraTop: 16, label: 'Sensor' },
-  radio:        { draw: drawRadio,      bh: 8,  scale: 0.5,  extraTop: 24, label: 'Radio' },
-  'walkie-talkie': { draw: drawWalkieTalkie, bh: 30, scale: 0.4,  extraTop: 28, label: 'Walkie-talkie' },
-  camera:       { draw: drawCamera,     bh: 16, scale: 0.6,  extraTop: 6,  label: 'Camera' },
-  drone:        { draw: drawDrone,      bh: 8,  scale: 0.8,  extraTop: 4,  label: 'Drone' },
-  plane:        { draw: drawPlane,      bh: 12, scale: 1.4,  extraTop: 6,  label: 'Plane' },
-  satellite:    { draw: drawSatellite,  bh: 14, scale: 1.05, extraTop: 4,  label: 'Satellite' },
-  gateway:      { draw: drawGateway,    bh: 8,  scale: 0.55, extraTop: 22, label: 'Gateway' },
-  'robot-arm':  { draw: drawRobotArm,   bh: 8,  scale: 0.5,  extraTop: 36, label: 'Robot arm' },
-  'pump-valve': { draw: drawPumpValve,  bh: 8,  scale: 0.55, extraTop: 14, label: 'Pump / valve' },
+  config:     { draw: drawConfigPlatform, bh: 8,  scale: 1,    extraTop: 0,  label: 'Config platform',         group: 'Defaults' },
+  component:  { draw: drawWarehouse,      bh: 34, scale: 1.15, extraTop: 6,  label: '@Component warehouse',    group: 'Defaults' },
+  repository: { draw: drawServerRack,     bh: 74, scale: 0.55, extraTop: 0,  label: '@Repository server rack', group: 'Defaults' },
+  service:    { draw: drawAntennaTower,   bh: 56, scale: 0.5,  extraTop: 34, label: '@Service antenna',        group: 'Defaults' },
+  task:       { draw: drawFactoryCube,    bh: 30, scale: 0.8,  extraTop: 20, label: '@Task factory cube',      group: 'Defaults' },
+  pipeline:   { draw: drawConveyorPad,    bh: 10, scale: 1,    extraTop: 0,  label: '@Pipeline conveyor',      group: 'Defaults' },
+  agent:      { draw: drawObservatory,    bh: 24, scale: 0.75, extraTop: 18, label: '@Agent observatory',      group: 'Defaults' },
+  function:   { draw: drawRelayBox,       bh: 14, scale: 0.7,  extraTop: 6,  label: '@Function relay box',     group: 'Defaults' },
 };
 // Derives the label placement/hit-testing extents for one ICONS entry —
 // shared by the built-in postprocessing pass below and by ODF.registerIcon
@@ -1613,7 +752,7 @@ function iconKey(node) {
   return ICONS[key] ? key : node.type;
 }
 
-// Curated swatch palette for the color picker — distinct from the 6 exec-type
+// Curated swatch palette for the color picker — distinct from the 7 exec-type
 // accent hues so a custom color reads as deliberately "custom," and chosen to
 // stay legible against both the dark and light tile/wire backgrounds. Each
 // entry is {hex, label} — built-ins have no meaningful name so their label
@@ -1626,18 +765,26 @@ const COLOR_SWATCHES = [
 ].map(hex => ({ hex, label: hex }));
 
 // ── Icon/color extension hook ───────────────────────────────────────────
-// Populated by loadUiExtensions() (see Init section) from custom .js files
-// registered server-side via odf.ui.extensions.register_icon_script — either
-// by a framework-extension package (Python, import time) or by [ui]
-// icon-scripts in config.toml. Each such file calls ODF.registerIcon(key,
-// draw, meta) at its top level, same signature/shared primitives (drawBox,
-// isoBox, isoDisc, rgba, ctx, animT) as every built-in draw function, so a
-// custom icon renders at the same fidelity — just added into ICONS instead
-// of being one of the literal entries above.
+// Called by the built-in icon group files under icons/ (plain <script> tags
+// after this one) and by custom .js files that loadUiExtensions() (see Init
+// section) loads — those registered server-side via
+// odf.ui.extensions.register_icon_script, either by a framework-extension
+// package (Python, import time) or by [ui] icon-scripts in config.toml. Each
+// file calls ODF.registerIcon(key, draw, meta) at its top level, same
+// signature/shared primitives (drawBox, isoBox, isoDisc, rgba, ctx, animT,
+// plus ODF.iconKit from icons/shared.js) as every draw function above, so a
+// custom icon renders at the same fidelity as a built-in one. `meta.group`
+// names the icon picker tab it's listed under — 'Custom' unless given.
 window.ODF = {
   registerIcon(key, draw, meta = {}) {
-    ICONS[key] = { draw, bh: 0, scale: 1, extraTop: 0, label: key, ...meta };
+    ICONS[key] = { draw, bh: 0, scale: 1, extraTop: 0, label: key, group: 'Custom', ...meta };
     finalizeIconEntry(key);
+  },
+  // Called by a theme's optional theme.js to override THEME_STYLE entries.
+  registerTheme(overrides) {
+    Object.assign(THEME_STYLE, overrides);
+    readTheme();
+    vignetteDirty = true;
   },
 };
 
@@ -2044,55 +1191,59 @@ function selectNode(id) {
   const cVar  = nodeAccentCss(node);
   const repo  = repoSchemas[id];
 
+  // Type always has a value; a component outside any layer, or defined
+  // outside the project, has no Layer or File row.
+  const meta = [
+    ['Type', `<dd>${node.decorator || node.type}</dd>`],
+    ['Layer', node.layer && `<dd>${layerBadgeHtml(node.layer)}</dd>`],
+    ['File', node.file && `<dd class="file" title="${node.file}">${node.file}</dd>`],
+  ].filter(([, dd]) => dd);
+
+  // One full-width row per action, so the rows line up whatever set of
+  // actions the component has: its own first, then the ones every component
+  // has.
+  const actions = [];
+  if (repo && repo.view) {
+    actions.push({ id: 'view-btn', label: 'View', kind: '', run: () => showDataView(id) });
+  }
+  if (repo && repo.streamable) {
+    actions.push({ id: 'stream-toggle-btn', label: `${node.streaming ? 'Stop' : 'Start'} Streaming`, kind: node.streaming ? 'danger' : '', run: () => toggleStream(id) });
+  }
+  if (node.type === 'service') {
+    actions.push({ id: 'lifecycle-btn', label: node.running ? 'Stop' : 'Start', kind: node.running ? 'danger' : '', run: () => toggleService(id) });
+  }
+  if (node.type === 'task' || node.type === 'pipeline') {
+    actions.push({ id: 'execute-btn', label: 'Execute', kind: '', run: () => executeNode(id) });
+  }
+  if (node.verb) {
+    actions.push({ id: 'invoke-btn', label: capitalize(node.verb), kind: '', run: () => openInvokeForm(id) });
+  }
+  if (node.chart) {
+    actions.push({ id: 'show-chart-btn', label: 'View Chart', kind: '', run: () => showChartView(id) });
+  }
+  if (node.details) {
+    actions.push({ id: 'show-details-btn', label: 'Details', kind: '', run: () => showDetailsView(id) });
+  }
+  actions.push(
+    { id: 'show-logs-btn', label: 'Show Logs', kind: '', run: () => showLogsView(id) },
+    { id: 'customize-btn', label: 'Customize', kind: '', run: e => openStylePicker(node, e.currentTarget) },
+  );
+  const actionHtml = a =>
+    `<button class="detail-action ${a.kind}" id="${a.id}"><span>${a.label}</span><span class="detail-action-arrow">&rarr;</span></button>`;
+
   document.getElementById('inspector-popup-body').innerHTML =
     `<div class="detail-title" style="color:${cVar}">${node.label}</div>` +
-    (node.layer || node.decorator || node.file
-      ? `<div class="detail-meta">${layerBadgeHtml(node.layer)}${node.decorator ? `<span class="deco">${node.decorator}</span>` : ''}${node.file ? `<span class="file">${node.file}</span>` : ''}</div>`
-      : '') +
     `<div class="detail-desc">${node.desc}</div>` +
-    '<div class="detail-actions">' +
-      (repo && repo.view
-        ? '<button class="data-btn primary" id="view-btn">View &rarr;</button>'
-        : '') +
-      (repo && repo.streamable
-        ? `<button class="data-btn ${node.streaming ? 'danger' : 'primary'}" id="stream-toggle-btn">${node.streaming ? 'Stop' : 'Start'} Streaming &rarr;</button>`
-        : '') +
-      (node.type === 'service'
-        ? `<button class="data-btn ${node.running ? 'danger' : 'primary'}" id="lifecycle-btn">${node.running ? 'Stop' : 'Start'} &rarr;</button>`
-        : '') +
-      (node.type === 'task' || node.type === 'pipeline'
-        ? '<button class="data-btn primary" id="execute-btn">Execute &rarr;</button>'
-        : '') +
-      (node.details ? '<button class="data-btn" id="show-details-btn">Details &rarr;</button>' : '') +
-      (node.chart ? '<button class="data-btn primary" id="show-chart-btn">View Chart &rarr;</button>' : '') +
-      '<button class="data-btn" id="show-logs-btn">Show Logs &rarr;</button>' +
-      '<button class="data-btn" id="customize-btn">Customize &rarr;</button>' +
-    '</div>';
+    `<dl class="detail-meta">${meta.map(([label, dd]) => `<dt>${label}</dt>${dd}`).join('')}</dl>` +
+    `<div class="detail-actions">${actions.map(actionHtml).join('')}</div>`;
 
   document.querySelectorAll('.node-item').forEach(el => el.classList.remove('selected'));
   const si = document.querySelector(`.node-item[data-id="${id}"]`);
   if (si) si.classList.add('selected');
 
-  if (repo && repo.view) {
-    document.getElementById('view-btn').addEventListener('click', () => showDataView(id));
+  for (const a of actions) {
+    document.getElementById(a.id).addEventListener('click', a.run);
   }
-  if (repo && repo.streamable) {
-    document.getElementById('stream-toggle-btn').addEventListener('click', () => toggleStream(id));
-  }
-  if (node.type === 'service') {
-    document.getElementById('lifecycle-btn').addEventListener('click', () => toggleService(id));
-  }
-  if (node.type === 'task' || node.type === 'pipeline') {
-    document.getElementById('execute-btn').addEventListener('click', () => executeNode(id));
-  }
-  if (node.details) {
-    document.getElementById('show-details-btn').addEventListener('click', () => showDetailsView(id));
-  }
-  if (node.chart) {
-    document.getElementById('show-chart-btn').addEventListener('click', () => showChartView(id));
-  }
-  document.getElementById('show-logs-btn').addEventListener('click', () => showLogsView(id));
-  document.getElementById('customize-btn').addEventListener('click', e => openStylePicker(node, e.currentTarget));
 
   showInspectorPopup(node);
   addLog(node.label, nodeAccent(node));
@@ -2143,13 +1294,36 @@ function renderIconSwatch(canvasEl, key, accent) {
   ctx = saved;
 }
 
-function buildIconPicker(node) {
+// The icon picker's tabs: every group an icon is registered under, in
+// first-registered order, with 'Custom' kept last.
+function iconGroups() {
+  const groups = [...new Set(Object.values(ICONS).map(e => e.group))];
+  return groups.sort((a, b) => (a === 'Custom') - (b === 'Custom'));
+}
+
+// Builds the group tabs and the swatches of `group` — the group of the
+// node's current icon unless a tab click passes another.
+function buildIconPicker(node, group = ICONS[iconKey(node)].group) {
+  const tabs = document.getElementById('icon-picker-tabs');
+  tabs.innerHTML = '';
+  for (const name of iconGroups()) {
+    const tab = document.createElement('button');
+    tab.className = 'icon-picker-tab' + (name === group ? ' active' : '');
+    tab.textContent = name;
+    tab.addEventListener('click', () => {
+      buildIconPicker(node, name);
+      clampStylePicker();
+    });
+    tabs.appendChild(tab);
+  }
+
   const grid = document.getElementById('icon-picker-grid');
   grid.innerHTML = '';
   const accent = nodeAccent(node);
   const current = iconKey(node);
 
   for (const key of Object.keys(ICONS)) {
+    if (ICONS[key].group !== group) continue;
     const btn = document.createElement('button');
     btn.className = 'icon-swatch' + (current === key && node.icon ? ' selected' : '');
     btn.title = ICONS[key].label;
@@ -2214,13 +1388,21 @@ function openStylePicker(node, anchorBtn) {
   const pop = document.getElementById('style-picker-popover');
   pop.classList.add('open');
 
-  const mapEl = document.getElementById('map');
   const r = anchorBtn.getBoundingClientRect();
-  const mapR = mapEl.getBoundingClientRect();
-  const left = clamp(r.left - mapR.left, 8, mapR.width - pop.offsetWidth - 8);
-  const top  = clamp(r.bottom - mapR.top + 6, 8, mapR.height - pop.offsetHeight - 8);
-  pop.style.left = `${left}px`;
-  pop.style.top  = `${top}px`;
+  const mapR = document.getElementById('map').getBoundingClientRect();
+  clampStylePicker(r.left - mapR.left, r.bottom - mapR.top + 6);
+}
+
+// Places the style picker at (left, top) within #map — where it already is
+// by default — pulled back inside the map's edges. Re-run after a group tab
+// changes the popover's size.
+function clampStylePicker(left, top) {
+  const pop = document.getElementById('style-picker-popover');
+  const mapEl = document.getElementById('map');
+  left ??= pop.offsetLeft;
+  top ??= pop.offsetTop;
+  pop.style.left = `${clamp(left, 8, mapEl.clientWidth - pop.offsetWidth - 8)}px`;
+  pop.style.top  = `${clamp(top, 8, mapEl.clientHeight - pop.offsetHeight - 8)}px`;
 }
 
 function closeStylePicker() {
@@ -2295,21 +1477,26 @@ function deselectNode() {
 
 document.getElementById('inspector-popup-close').addEventListener('click', deselectNode);
 
-document.getElementById('activity-toggle').addEventListener('click', () => {
-  document.getElementById('chat-drawer').classList.remove('open');
-  document.getElementById('activity-drawer').classList.toggle('open');
-});
-document.getElementById('activity-drawer-close').addEventListener('click', () => {
-  document.getElementById('activity-drawer').classList.remove('open');
-});
+// The Activity and Chat drawers share the map's right edge, so at most one is
+// open. `name` is 'activity', 'chat' or null (close both); the header button
+// of the open drawer is marked active.
+function setDrawer(name) {
+  for (const key of ['activity', 'chat']) {
+    const open = key === name;
+    const btn = document.getElementById(`${key}-toggle`);
+    document.getElementById(`${key}-drawer`).classList.toggle('open', open);
+    btn.classList.toggle('active', open);
+    btn.setAttribute('aria-pressed', String(open));
+  }
+}
 
-document.getElementById('chat-toggle').addEventListener('click', () => {
-  document.getElementById('activity-drawer').classList.remove('open');
-  document.getElementById('chat-drawer').classList.toggle('open');
-});
-document.getElementById('chat-drawer-close').addEventListener('click', () => {
-  document.getElementById('chat-drawer').classList.remove('open');
-});
+for (const key of ['activity', 'chat']) {
+  document.getElementById(`${key}-toggle`).addEventListener('click', () => {
+    const open = document.getElementById(`${key}-drawer`).classList.contains('open');
+    setDrawer(open ? null : key);
+  });
+  document.getElementById(`${key}-drawer-close`).addEventListener('click', () => setDrawer(null));
+}
 
 // Sidebar clicks always update the Object Inspector (selectNode above). If a
 // data/stream/map/logs view is currently swapped into the map panel, follow
@@ -2336,7 +1523,8 @@ function selectFromSidebar(id) {
 
 // ── Lifecycle actions ────────────────────────────────────────────────────
 // Backs the "Start"/"Stop" action on @Service nodes and the "Execute" action
-// on @Task/@Pipeline nodes. POST /api/components/{id}/{start,stop,execute}
+// on @Task/@Pipeline nodes. POST /api/services/{name}/{start,stop} and
+// /api/{tasks,pipelines}/{name}/execute
 // drives odf.context.Context.start()/stop()/execute() directly — the same
 // calls Project.start()/stop() make, just scoped to one resolved instance.
 
@@ -2346,7 +1534,7 @@ async function toggleService(id) {
   const btn = document.getElementById('lifecycle-btn');
   if (btn) btn.disabled = true;
   try {
-    const res = await fetch(`/api/components/${id}/${action}`, { method: 'POST' });
+    const res = await fetch(`${apiPath(id)}/${action}`, { method: 'POST' });
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
     node.running = !node.running;
     addLog(`${node.label} ${node.running ? 'started' : 'stopped'}`, ACCENT.service);
@@ -2361,7 +1549,7 @@ async function executeNode(id) {
   const btn = document.getElementById('execute-btn');
   if (btn) btn.disabled = true;
   try {
-    const res = await fetch(`/api/components/${id}/execute`, { method: 'POST' });
+    const res = await fetch(`${apiPath(id)}/execute`, { method: 'POST' });
     if (!res.ok) {
       const body = await res.json().catch(() => ({}));
       throw new Error(body.detail || `HTTP ${res.status}`);
@@ -2371,6 +1559,142 @@ async function executeNode(id) {
     addLog(`${node.label} execute failed — ${err.message}`, ACCENT.alert);
   }
   if (btn) btn.disabled = false;
+}
+
+// ── Arguments form ───────────────────────────────────────────────────────
+// Backs the action of every node called with arguments, named by its `verb`:
+// Invoke on an @Agent, Call on an @Function. Unlike execute(), these take
+// arguments: GET {href}/parameters returns their JSON schema, built from the
+// signature (an agent's invoke(), a function's own less what is injected),
+// and the form below is drawn from it inside the inspector popup.
+// POST {href}/{verb} validates the values against the same schema,
+// converting them to the annotated types, and makes the call through
+// Context.call().
+
+function capitalize(text) {
+  return text.charAt(0).toUpperCase() + text.slice(1);
+}
+
+// "invoke" → "invoked", "call" → "called".
+function pastTense(verb) {
+  return verb.endsWith('e') ? `${verb}d` : `${verb}ed`;
+}
+
+// The input a schema property is edited with: a plain input for a string,
+// number or boolean (including one that may also be null), and a JSON
+// textarea for anything else.
+function invokeFieldKind(prop) {
+  const types = prop.anyOf ? prop.anyOf.map(p => p.type).filter(t => t !== 'null') : [prop.type];
+  if (types.length !== 1) return 'json';
+  if (types[0] === 'string') return 'string';
+  if (types[0] === 'integer' || types[0] === 'number') return 'number';
+  if (types[0] === 'boolean') return 'boolean';
+  return 'json';
+}
+
+async function openInvokeForm(id) {
+  const node = nodeMap[id];
+  const body = document.getElementById('inspector-popup-body');
+  const existing = body.querySelector('.invoke-form');
+  if (existing) { existing.querySelector('input,textarea,button')?.focus(); return; }
+  let schema;
+  try {
+    const res = await fetch(`${apiPath(id)}/parameters`);
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    schema = await res.json();
+  } catch (err) {
+    addLog(`${node.label} parameters failed — ${err.message}`, ACCENT.alert);
+    return;
+  }
+  if (selectId !== id) return;
+
+  const props = schema.properties || {};
+  const required = new Set(schema.required || []);
+  const fields = Object.entries(props).map(([name, prop]) => {
+    const kind = invokeFieldKind(prop);
+    const value = prop.default === undefined ? '' : prop.default;
+    const label = `<span>${escapeHtml(name)}${required.has(name) ? ' <span class="invoke-required">*</span>' : ''}</span>`;
+    let input;
+    if (kind === 'boolean') {
+      input = `<input type="checkbox" name="${escapeHtml(name)}"${value === true ? ' checked' : ''}>`;
+    } else if (kind === 'json') {
+      const text = value === '' ? '' : JSON.stringify(value);
+      input = `<textarea name="${escapeHtml(name)}" rows="2" placeholder="JSON">${escapeHtml(text)}</textarea>`;
+    } else {
+      input = `<input type="${kind === 'number' ? 'number' : 'text'}"${kind === 'number' ? ' step="any"' : ''} name="${escapeHtml(name)}" value="${escapeHtml(value === null ? '' : String(value))}">`;
+    }
+    return `<label class="invoke-field invoke-${kind}">${label}${input}</label>`;
+  });
+
+  const form = document.createElement('form');
+  form.className = 'invoke-form';
+  form.style.setProperty('--invoke-accent', nodeAccent(node));
+  form.innerHTML =
+    fields.join('') +
+    `<button type="submit" class="invoke-run">Run</button>` +
+    `<pre class="invoke-result" hidden></pre>`;
+  form.addEventListener('submit', e => {
+    e.preventDefault();
+    submitArguments(id, form, props, required);
+  });
+  body.appendChild(form);
+  showInspectorPopup(node);
+  form.querySelector('input,textarea,button').focus();
+}
+
+// Reads the form back into the call's arguments. An empty optional field is
+// left out, so the parameter's own default applies.
+function readInvokeForm(form, props, required) {
+  const args = {};
+  for (const [name, prop] of Object.entries(props)) {
+    const el = form.elements[name];
+    const kind = invokeFieldKind(prop);
+    if (kind === 'boolean') { args[name] = el.checked; continue; }
+    const text = el.value;
+    if (text.trim() === '' && !(kind === 'string' && required.has(name))) continue;
+    if (kind === 'json') {
+      try { args[name] = JSON.parse(text); }
+      catch { throw new Error(`${name}: not valid JSON`); }
+    } else {
+      args[name] = text;
+    }
+  }
+  return args;
+}
+
+function invokeErrorMessage(detail, status) {
+  if (Array.isArray(detail)) {
+    return detail.map(d => `${(d.loc || []).join('.') || 'arguments'}: ${d.msg}`).join('; ');
+  }
+  return detail || `HTTP ${status}`;
+}
+
+async function submitArguments(id, form, props, required) {
+  const node = nodeMap[id];
+  const btn = form.querySelector('.invoke-run');
+  const out = form.querySelector('.invoke-result');
+  btn.disabled = true;
+  out.classList.remove('error');
+  try {
+    const args = readInvokeForm(form, props, required);
+    const res = await fetch(`${apiPath(id)}/${node.verb}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(args),
+    });
+    const body = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error(invokeErrorMessage(body.detail, res.status));
+    const result = body.result;
+    out.textContent = typeof result === 'string' ? result : JSON.stringify(result, null, 2);
+    addLog(`${node.label} ${pastTense(node.verb)}`, nodeAccent(node));
+  } catch (err) {
+    out.textContent = err.message;
+    out.classList.add('error');
+    addLog(`${node.label} ${node.verb} failed — ${err.message}`, ACCENT.alert);
+  }
+  out.hidden = false;
+  btn.disabled = false;
+  if (selectId === id) showInspectorPopup(node);
 }
 
 // ── Sidebar tabs ───────────────────────────────────────────────────────────
@@ -2493,7 +1817,7 @@ function buildNodeItem(node) {
   item.dataset.id = node.id;
   item.style.setProperty('--row-accent', cVar);
   item.innerHTML  =
-    `<span class="node-tag" style="background:color-mix(in srgb, ${cVar} 14%, transparent);color:${cVar};border:1px solid color-mix(in srgb, ${cVar} 40%, transparent);box-shadow:1px 0 0 color-mix(in srgb, var(--split-a) 50%, transparent),-1px 0 0 color-mix(in srgb, var(--split-b) 50%, transparent)">${lbl.replace('@','')}</span>` +
+    `<span class="node-tag" style="background:color-mix(in srgb, ${cVar} 14%, transparent);color:${cVar};border:var(--tag-border-width,1px) solid color-mix(in srgb, ${cVar} 40%, transparent);box-shadow:var(--tag-shadow,none)">${lbl.replace('@','')}</span>` +
     `<span class="node-lbl">${node.label}</span>`;
   item.addEventListener('click', () => selectFromSidebar(node.id));
   return item;
@@ -2656,8 +1980,9 @@ async function sendChatMessage() {
 }
 
 // ── Chat @mention autocomplete ──────────────────────────────────────────
-// Suggests component ids from the topology (`nodes`/`nodeMap`, already
-// fetched for the graph view) while typing an `@handle` in chat-input.
+// Suggests component keys from the topology (`nodes`/`nodeMap`, already
+// fetched for the graph view) while typing an `@<namespace>.<name>` mention in
+// chat-input. Typing just the name or the class name finds the key too.
 
 let mentionMatches = [];
 let mentionActive = -1;
@@ -2665,7 +1990,7 @@ let mentionStart = -1;
 
 function currentMentionQuery(input) {
   const upToCaret = input.value.slice(0, input.selectionStart);
-  const match = upToCaret.match(/(?:^|\s)@([A-Za-z0-9-]*)$/);
+  const match = upToCaret.match(/(?:^|\s)@([A-Za-z0-9.-]*)$/);
   if (!match) return null;
   return { query: match[1].toLowerCase(), start: input.selectionStart - match[1].length - 1 };
 }
@@ -2678,7 +2003,7 @@ function updateMentionActive() {
 function renderMentionMenu(query) {
   const menu = document.getElementById('chat-mention-menu');
   mentionMatches = nodes
-    .filter(n => n.id.startsWith(query) || n.label.toLowerCase().startsWith(query))
+    .filter(n => n.name && (n.id.startsWith(query) || n.name.startsWith(query) || n.label.toLowerCase().startsWith(query)))
     .slice(0, 8);
   if (!mentionMatches.length) {
     menu.hidden = true;
@@ -2781,6 +2106,8 @@ function renderStats(data) {
   document.getElementById('stat-services').textContent  = String(types.service || 0);
   document.getElementById('stat-tasks').textContent     = String(types.task || 0);
   document.getElementById('stat-pipelines').textContent = String(types.pipeline || 0);
+  document.getElementById('stat-agents').textContent    = String(types.agent || 0);
+  document.getElementById('stat-functions').textContent = String(types.function || 0);
   document.getElementById('hdr-subtitle').textContent   = `Topology · ${data.project}`;
   document.getElementById('node-count').textContent     = String(data.stats.objects).padStart(2, '0');
   document.title = `${BRAND} — ${data.project}`;
@@ -2814,6 +2141,11 @@ function setMapMode(mode) {
     }
   }
   if (mapMode === 'geo' && mode !== 'geo') destroyGeoMap();
+  if ((mapMode === 'image' || mapMode === 'media' || mapMode === 'document') && mode !== mapMode) closeLightbox();
+  if (annotatesRepository() && mode !== mapMode) {
+    closeImageLabelForm(); // out of the chart or the map before the next view replaces it
+    selectedBox = -1;
+  }
   if (mapMode === 'chart' && mode !== 'chart') {
     const frame = document.getElementById('chart-frame');
     if (frame) frame.src = 'about:blank';
@@ -2966,7 +2298,7 @@ async function showTableView(repoId) {
   setMapMode('data');
   document.getElementById('map-panel-title').textContent = `${schema.label} · ${schema.entity}`;
   renderModeSwitcher(schema, 'table');
-  await refreshDataTable();
+  await Promise.all([refreshDataTable(), loadRecordClasses()]);
 }
 
 async function refreshDataTable() {
@@ -2974,7 +2306,7 @@ async function refreshDataTable() {
   const body = document.getElementById('map-panel-body');
   let records;
   try {
-    const res = await fetch(`/api/repositories/${activeRepoId}/records?${recordsQuery()}`);
+    const res = await fetch(`${apiPath(activeRepoId)}/records?${recordsQuery()}`);
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
     records = await res.json();
     tableTotal = Number(res.headers.get('X-Total-Count') ?? records.length);
@@ -2999,21 +2331,26 @@ function renderDataTable(schema, records) {
 
   let html = '<table class="data-table"><thead><tr>';
   for (const f of cols) html += `<th>${f.name}</th>`;
+  // The class given to each record, see "Record classes".
+  const classCol = annotationsEnabled ? 1 : 0;
+  html += classCol ? '<th>class</th>' : '';
   html += schema.writable ? '<th></th>' : '';
   html += '</tr><tr class="filter-row">';
   for (const f of cols) {
     const value = escapeHtml(tableFilters[f.name] || '');
     html += `<th><input class="col-filter" data-field="${f.name}" placeholder="Filter…" value="${value}"></th>`;
   }
+  html += classCol ? '<th></th>' : '';
   html += schema.writable ? '<th></th>' : '';
   html += '</tr></thead><tbody>';
 
   if (!records.length) {
-    html += `<tr class="empty-row"><td colspan="${cols.length + 1}">// no records</td></tr>`;
+    html += `<tr class="empty-row"><td colspan="${cols.length + 1 + classCol}">// no records</td></tr>`;
   }
   for (const record of records) {
     html += `<tr data-key="${escapeHtml(record[schema.key])}">`;
     for (const f of cols) html += `<td data-field="${f.name}">${escapeHtml(record[f.name] ?? '')}</td>`;
+    if (classCol) html += '<td class="record-class"></td>';
     if (schema.writable) {
       html += '<td class="actions">' +
         '<button class="data-btn edit-row">Edit</button>' +
@@ -3025,6 +2362,7 @@ function renderDataTable(schema, records) {
   html += renderPaginationBar();
   if (schema.writable) html += '<button class="data-btn primary block" id="add-row-btn">+ Add</button>';
   body.innerHTML = html;
+  renderTableClasses();
   wirePaginationBar(refreshDataTable);
   wireColumnFilters(body);
 
@@ -3209,7 +2547,7 @@ async function enterReplayMode(schema) {
   if (!field) return;
   let all;
   try {
-    const res = await fetch(`/api/repositories/${schema.id}/records`);
+    const res = await fetch(`${apiPath(schema.id)}/records`);
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
     all = await res.json();
   } catch (err) {
@@ -3269,7 +2607,7 @@ async function saveEditRow(tr, schema, key) {
     body[f.name] = tr.querySelector(`td[data-field="${f.name}"] input`).value;
   }
   try {
-    const res = await fetch(`/api/repositories/${activeRepoId}/records/${encodeURIComponent(key)}`, {
+    const res = await fetch(`${apiPath(activeRepoId)}/records/${encodeURIComponent(key)}`, {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(body),
@@ -3292,6 +2630,7 @@ function startAddRow(schema) {
       ? '<td class="detail-empty">auto</td>'
       : `<td><input placeholder="${f.name}"></td>`;
   }
+  if (annotationsEnabled) html += '<td></td>'; // a record takes its class once it is saved
   html += '<td class="actions">' +
     '<button class="data-btn primary save-new">Save</button>' +
     '<button class="data-btn cancel-new">Cancel</button></td>';
@@ -3307,7 +2646,7 @@ function startAddRow(schema) {
       body[f.name] = inputs[i++].value;
     }
     try {
-      const res = await fetch(`/api/repositories/${activeRepoId}/records`, {
+      const res = await fetch(`${apiPath(activeRepoId)}/records`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(body),
@@ -3326,7 +2665,7 @@ async function deleteRow(tr, schema) {
   const key = tr.dataset.key;
   if (!confirm(`Delete ${schema.entity} ${key}?`)) return;
   try {
-    const res = await fetch(`/api/repositories/${activeRepoId}/records/${encodeURIComponent(key)}`, { method: 'DELETE' });
+    const res = await fetch(`${apiPath(activeRepoId)}/records/${encodeURIComponent(key)}`, { method: 'DELETE' });
     if (!res.ok && res.status !== 204) throw new Error(`HTTP ${res.status}`);
     addLog(`Deleted ${schema.entity} ${key}`, ACCENT.repository);
   } catch (err) {
@@ -3336,6 +2675,35 @@ async function deleteRow(tr, schema) {
 }
 
 window.addEventListener('keydown', e => {
+  if (lightboxIndex >= 0) {
+    // An open image, clip or document takes the keys first, so Esc returns
+    // to the grid rather than all the way to the topology.
+    if (e.key === 'Escape') { if (!cancelImageAnnotationStep()) closeLightbox(); }
+    else if (e.target.closest('input, textarea, select')) return;
+    else if (/^[1-9]$/.test(e.key) && !e.metaKey && !e.ctrlKey && !e.altKey) {
+      const name = recordClasses.classes[Number(e.key) - 1];
+      if (name) toggleRecordClass(imageRecordKey(), name);
+    }
+    else if ((e.key === 'Delete' || e.key === 'Backspace') && selectedBox >= 0) deleteImageBox(selectedBox);
+    else if (LIGHTBOX_TOOL_KEYS[e.key.toLowerCase()] && !e.metaKey && !e.ctrlKey && !e.altKey) setLightboxTool(LIGHTBOX_TOOL_KEYS[e.key.toLowerCase()]);
+    else if (e.key.toLowerCase() === 'm' && !e.metaKey && !e.ctrlKey && !e.altKey && lightboxSurfaceKind() === 'clip') {
+      e.preventDefault();
+      markAtPlayhead();
+    }
+    else if (mapMode !== 'image' && mapMode !== 'document') return; // the arrow keys seek within an open clip's own player
+    else if (e.key === 'ArrowLeft') stepLightbox(-1);
+    else if (e.key === 'ArrowRight') stepLightbox(1);
+    return;
+  }
+  if (annotatesRepository() && viewAnnotating()) {
+    // Esc backs out of a label input or a selection before leaving the chart or the map.
+    const [toolKeys, setTool] = mapMode === 'geo' ? [GEO_TOOL_KEYS, setGeoTool] : [TS_TOOL_KEYS, setTsTool];
+    if (e.key === 'Escape') { if (!cancelImageAnnotationStep()) backToTopology(); }
+    else if (e.target.closest('input, textarea, select')) return;
+    else if ((e.key === 'Delete' || e.key === 'Backspace') && selectedBox >= 0) deleteImageBox(selectedBox);
+    else if (toolKeys[e.key.toLowerCase()] && !e.metaKey && !e.ctrlKey && !e.altKey) setTool(toolKeys[e.key.toLowerCase()]);
+    return;
+  }
   if (e.key !== 'Escape') return;
   if (mapMode !== 'topology') backToTopology();
   else if (selectId) deselectNode();
@@ -3367,7 +2735,7 @@ async function startStreaming(id) {
   const btn = document.getElementById('stream-toggle-btn');
   if (btn) btn.disabled = true;
   try {
-    const res = await fetch(`/api/repositories/${id}/start-stream`, { method: 'POST' });
+    const res = await fetch(`${apiPath(id)}/start-stream`, { method: 'POST' });
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
     node.streaming = true;
     addLog(`${repoSchemas[id].label} streaming started`, ACCENT.repository);
@@ -3383,7 +2751,7 @@ async function stopStreaming(id) {
   const btn = document.getElementById('stream-toggle-btn');
   if (btn) btn.disabled = true;
   try {
-    const res = await fetch(`/api/repositories/${id}/stop-stream`, { method: 'POST' });
+    const res = await fetch(`${apiPath(id)}/stop-stream`, { method: 'POST' });
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
     node.streaming = false;
     addLog(`${repoSchemas[id].label} streaming stopped`, ACCENT.repository);
@@ -3424,7 +2792,7 @@ function showStreamView(repoId) {
          <audio id="stream-audio"></audio>
          <button id="stream-audio-toggle" class="data-btn" type="button">Pause</button>
        </div>`
-    : `<img id="stream-img" src="/api/repositories/${repoId}/stream" alt="${schema.label} stream">`;
+    : `<img id="stream-img" src="${apiPath(repoId)}/stream" alt="${schema.label} stream">`;
   if (isAudio) {
     playAudioStream(repoId);
     document.getElementById('stream-audio-toggle').addEventListener('click', (e) => {
@@ -3468,7 +2836,7 @@ function showStreamView(repoId) {
 async function playAudioStream(repoId) {
   audioStreamActive = true;
   const audio = document.getElementById('stream-audio');
-  const fetchChunk = () => fetch(`/api/repositories/${repoId}/stream`).then((res) => {
+  const fetchChunk = () => fetch(`${apiPath(repoId)}/stream`).then((res) => {
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
     return res.blob();
   });
@@ -3513,9 +2881,10 @@ async function playAudioStream(repoId) {
 
 let geoMap = null;
 let geoMarkers = null;
+let geoRegions = null; // the layer of labelled regions, see "Map annotations"
 
 function destroyGeoMap() {
-  if (geoMap) { geoMap.remove(); geoMap = null; geoMarkers = null; }
+  if (geoMap) { geoMap.remove(); geoMap = null; geoMarkers = null; geoRegions = null; }
 }
 
 async function showMapView(repoId) {
@@ -3526,9 +2895,15 @@ async function showMapView(repoId) {
   document.getElementById('map-panel-title').textContent = `${schema.label} · map`;
   renderModeSwitcher(schema, 'location');
   renderReplayToggle(schema);
-  document.getElementById('map-panel-body').innerHTML =
-    '<div id="geo-map"></div><div id="geo-pagination" class="floating-pagination"></div>';
-  await refreshGeoMap();
+  const body = document.getElementById('map-panel-body');
+  if (body.contains(imageLabelForm)) closeImageLabelForm(); // out of the map before it is replaced
+  selectedBox = -1;
+  pendingBox = null;
+  relabelBox = -1;
+  geoDrag = null;
+  body.innerHTML = '<div id="geo-map"></div>' + (viewAnnotating() ? GEO_TOOLS_HTML : '') +
+    '<div id="geo-pagination" class="floating-pagination"></div>';
+  await Promise.all([refreshGeoMap(), loadImageAnnotations()]);
 }
 
 // Fetches one page of records at a time (same tableOffset/tablePageSize as
@@ -3545,13 +2920,17 @@ async function refreshGeoMap() {
   }
   let records;
   try {
-    const res = await fetch(`/api/repositories/${activeRepoId}/records?${recordsQuery()}`);
+    const res = await fetch(`${apiPath(activeRepoId)}/records?${recordsQuery()}`);
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
     records = await res.json();
     tableTotal = Number(res.headers.get('X-Total-Count') ?? records.length);
   } catch (err) {
     const body = document.getElementById('map-panel-body');
-    if (mapMode === 'geo') { destroyGeoMap(); body.innerHTML = '<span class="detail-empty">// failed to load records</span>'; }
+    if (mapMode === 'geo') {
+      if (body.contains(imageLabelForm)) closeImageLabelForm();
+      destroyGeoMap();
+      body.innerHTML = '<span class="detail-empty">// failed to load records</span>';
+    }
     return;
   }
   if (!records.length && tableOffset > 0) {
@@ -3614,6 +2993,9 @@ function renderGeoMap(schema, records, opts = {}) {
       attribution: '&copy; <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">OpenStreetMap</a> contributors',
     }).addTo(geoMap);
     geoMarkers = L.layerGroup().addTo(geoMap);
+    geoRegions = L.layerGroup().addTo(geoMap);
+    wireGeoDrawing(geoMap);
+    renderGeoTools();
   } else {
     geoMarkers.clearLayers();
   }
@@ -3649,50 +3031,1186 @@ function renderGeoMap(schema, records, opts = {}) {
   }
 
   geoMap.invalidateSize();
+  renderGeoRegions();
 }
+
+// ── Map annotations ───────────────────────────────────────────────────────
+// Labelled regions drawn on the map, for "everything inside this area": a
+// region of interest, a geofence, a split by area. A region is a box between
+// two latitudes and two longitudes. Like the marks of a timeseries, regions
+// belong to the repository rather than to one record, so they are saved as
+// one list through PUT /api/repositories/{id}/annotations (see
+// odf.ui.annotations), and they share the state and the label input of "Image
+// annotations" below. There is no move or resize, and no other shape.
+//
+// With the "box" tool a drag draws a region instead of moving the map, which
+// the "select" tool leaves as it was: there a region is selected by a click,
+// and relabelled or deleted from the label at its corner.
+
+const GEO_TOOL_KEY = 'odf-ui-geo-tool';
+const GEO_TOOL_KEYS = { v: 'select', b: 'box' };
+const GEO_TOOL_HINTS = { select: 'Pick the tool to add a region', box: 'Drag on the map to add a region' };
+const GEO_TOOLS_HTML = '<div class="geo-tools" role="toolbar" aria-label="Tools"><span class="geo-hint"></span>' +
+  '<button class="lightbox-tool" data-tool="select" title="Select and move the map (V)" aria-label="Select"><svg viewBox="0 0 16 16"><path d="M3.5 2.5 7.6 13l1.5-4.4 4.4-1.5z"/></svg></button>' +
+  '<button class="lightbox-tool" data-tool="box" title="Draw a region (B)" aria-label="Draw a region"><svg viewBox="0 0 16 16"><path d="M2.5 3.5h11v9h-11z"/></svg></button>' +
+  '</div>';
+
+let geoTool = 'select'; // a per-browser preference, like lightboxTools
+let geoDrag = null;     // the press in progress on the map with the "box" tool
+let geoDrew = false;    // whether that press drew a region, so the click that ends it isn't taken for one on the map
+
+function loadGeoTool() {
+  try {
+    const tool = localStorage.getItem(GEO_TOOL_KEY);
+    if (tool in GEO_TOOL_HINTS) geoTool = tool;
+  } catch {}
+}
+
+function setGeoTool(tool) {
+  closeImageLabelForm();
+  geoTool = tool;
+  try { localStorage.setItem(GEO_TOOL_KEY, tool); } catch {}
+  renderGeoTools();
+  renderGeoRegions();
+}
+
+// Shows the active tool pressed, says beside it how it is used, and has a
+// drag on the map draw with the "box" tool rather than move it.
+function renderGeoTools() {
+  if (!geoMap) return;
+  const drawing = viewAnnotating() && geoTool === 'box';
+  geoMap.dragging[drawing ? 'disable' : 'enable']();
+  geoMap.getContainer().classList.toggle('geo-drawing', drawing);
+  const tools = document.querySelector('#map-panel-body .geo-tools');
+  if (!tools) return;
+  for (const button of tools.querySelectorAll('[data-tool]')) {
+    button.setAttribute('aria-pressed', button.dataset.tool === geoTool);
+  }
+  tools.querySelector('.geo-hint').textContent = GEO_TOOL_HINTS[geoTool];
+}
+
+// The region between two corners, to six decimal places of a degree. Null
+// when it has no area.
+function geoBox(a, b) {
+  const within = (value, limit) => Math.round(Math.min(Math.max(value, -limit), limit) * 1e6) / 1e6;
+  const box = {
+    south: within(Math.min(a.lat, b.lat), 90), west: within(Math.min(a.lng, b.lng), 180),
+    north: within(Math.max(a.lat, b.lat), 90), east: within(Math.max(a.lng, b.lng), 180),
+  };
+  return box.south < box.north && box.west < box.east ? box : null;
+}
+
+// Redraws the regions under the record markers, smallest on top, so a region
+// inside another stays selectable, each with its label at its top-left
+// corner.
+function renderGeoRegions() {
+  if (!geoMap || !geoRegions) return;
+  geoRegions.clearLayers();
+  const annotating = viewAnnotating();
+  const bounds = region => [[region.south, region.west], [region.north, region.east]];
+  const area = region => (region.north - region.south) * (region.east - region.west);
+  const smallestFirst = imageBoxes().map((region, index) => ({ region, index })).sort((a, b) => area(a.region) - area(b.region));
+  for (const { region, index } of smallestFirst) {
+    const selected = index === selectedBox;
+    const color = boxColor(region.label);
+    L.rectangle(bounds(region), { color, weight: selected ? 3 : 2, fillOpacity: selected ? 0.28 : 0.12, interactive: annotating && geoTool === 'select' })
+      .on('click', e => {
+        L.DomEvent.stopPropagation(e);
+        closeImageLabelForm();
+        selectedBox = index;
+        renderGeoRegions();
+      })
+      .addTo(geoRegions)
+      .bringToBack();
+    const head = `<span class="ts-mark-head" style="--box-color:${color}">` +
+      `<span class="ts-mark-label"${annotating ? ' title="Change label"' : ''}>${escapeHtml(region.label)}</span>` +
+      (selected ? '<button type="button" class="ts-mark-delete" title="Delete (Del)">&times;</button>' : '') + '</span>';
+    L.marker([region.north, region.west], {
+      icon: L.divIcon({ className: 'geo-region-head', html: head, iconSize: null, iconAnchor: [0, 0] }),
+      interactive: annotating,
+      keyboard: false,
+    })
+      .on('click', e => {
+        L.DomEvent.stopPropagation(e);
+        if (e.originalEvent.target.closest('.ts-mark-delete')) return deleteImageBox(index);
+        closeImageLabelForm();
+        selectedBox = index;
+        relabelBox = index;
+        renderGeoRegions();
+        openImageLabelForm();
+      })
+      .addTo(geoRegions);
+  }
+  if (pendingBox) {
+    L.rectangle(bounds(pendingBox), { color: boxColor(lastBoxLabel), weight: 2, dashArray: '5 4', fillOpacity: 0.12, interactive: false })
+      .addTo(geoRegions);
+  }
+}
+
+function openGeoLabelForm(region, value) {
+  const corner = geoMap.latLngToContainerPoint([region.south, region.west]);
+  openLabelFormIn(document.getElementById('map-panel-body'), corner.x, corner.y + 4, value);
+}
+
+// A press on the map with the "box" tool becomes a new region once the
+// pointer travels BOX_MIN_DRAG. The release is taken from the window, since
+// it can come outside the map. A click on the map itself drops the selection.
+function wireGeoDrawing(map) {
+  map.on('mousedown', e => {
+    geoDrew = false;
+    if (geoTool !== 'box' || !viewAnnotating() || e.originalEvent.button !== 0) return;
+    if (e.originalEvent.target.closest('.geo-region-head')) return;
+    e.originalEvent.preventDefault();
+    closeImageLabelForm();
+    geoDrag = { from: e.latlng, point: e.containerPoint, drawing: false };
+  });
+  map.on('mousemove', e => {
+    if (!geoDrag) return;
+    if (!geoDrag.drawing && e.containerPoint.distanceTo(geoDrag.point) < BOX_MIN_DRAG) return;
+    geoDrag.drawing = true;
+    selectedBox = -1;
+    pendingBox = geoBox(geoDrag.from, e.latlng);
+    renderGeoRegions();
+  });
+  map.on('click', () => {
+    if (geoDrew) { geoDrew = false; return; }
+    if (!viewAnnotating()) return;
+    if (!closeImageLabelForm() && selectedBox < 0) return;
+    selectedBox = -1;
+    renderGeoRegions();
+  });
+}
+
+window.addEventListener('mouseup', () => {
+  const drag = geoDrag;
+  if (!drag) return;
+  geoDrag = null;
+  geoDrew = drag.drawing;
+  if (drag.drawing && pendingBox && mapMode === 'geo') openImageLabelForm();
+});
+document.getElementById('map-panel-body').addEventListener('click', e => {
+  const button = e.target.closest('.geo-tools [data-tool]');
+  if (button) setGeoTool(button.dataset.tool);
+});
+loadGeoTool();
 
 // ── Image view ────────────────────────────────────────────────────────────
 // Backs the "View Images" action on repository nodes whose DataView is an
 // ImageView — a grid of thumbnails, one per record, each sourced from
 // GET /api/repositories/{id}/records/{key}/media (see UiServer.record_media).
+// Selecting a thumbnail opens that image in #media-lightbox, which covers
+// the panel body (not the panel header) until closed, and where boxes can be
+// drawn on it (see "Image annotations" below). The Video/Audio "Media view"
+// and the "Document view" further down share the grid and the lightbox.
+
+let lightboxRecords = []; // the grid's records, in display order
+let lightboxIndex = -1;   // index into lightboxRecords of the record open in the lightbox, -1 when closed
+
+// The lightbox element that shows each media view kind.
+const LIGHTBOX_PLAYERS = {
+  image: document.getElementById('media-lightbox-img'),
+  video: document.getElementById('media-lightbox-video'),
+  audio: document.getElementById('media-lightbox-audio'),
+};
+
+function mediaUrl(repoId, key) {
+  return `${apiPath(repoId)}/records/${encodeURIComponent(key)}/media`;
+}
+
+// The file name the repository's content_metadata() declares for a record's
+// content, sent under the records payload's reserved `$content` key, or ''.
+function contentName(record) {
+  return (record['$content'] && record['$content'].filename) || '';
+}
+
+// Whether a record's declared content is Markdown: true for a Markdown type or
+// a .md/.markdown name, false for any other declaration, and undefined when
+// nothing is declared, leaving it to looksLikeMarkdown().
+function declaredMarkdown(record) {
+  const content = record['$content'];
+  if (!content || !(content.content_type || content.filename)) return undefined;
+  const type = (content.content_type || '').split(';')[0].trim().toLowerCase();
+  return type === 'text/markdown' || type === 'text/x-markdown' ||
+    /\.(md|markdown)$/i.test(content.filename || '');
+}
+
+// A record's content, labelled by its file name, or by its key without one.
+function contentLabel(record) {
+  return contentName(record) || String(record[repoSchemas[activeRepoId].key]);
+}
+
+// The type the server detected for a record's media, to name a format this
+// browser can't decode (HEIC outside Safari, say). Only the response headers
+// are needed, so the body is dropped unread.
+async function mediaContentType(url) {
+  try {
+    const res = await fetch(url);
+    if (res.body) res.body.cancel();
+    return res.ok ? (res.headers.get('Content-Type') || '') : `HTTP ${res.status}`;
+  } catch (err) {
+    return '';
+  }
+}
+
+function mediaFallbackHtml(detail) {
+  const kind = repoSchemas[activeRepoId].view.kind;
+  return `<span>Can't ${kind === 'video' || kind === 'audio' ? 'play' : 'display'} this ${kind}</span>` +
+    (detail ? `<span class="media-fallback-detail">${escapeHtml(detail)}</span>` : '');
+}
+
+// Swaps a card's preview for a note naming the media type it failed on. The
+// card stays a button, so media that won't preview can still be opened.
+async function showTileFallback(preview, url) {
+  const fallback = document.createElement('div');
+  fallback.className = 'media-fallback';
+  fallback.innerHTML = mediaFallbackHtml('');
+  preview.replaceWith(fallback);
+  const detail = await mediaContentType(url);
+  if (fallback.isConnected) fallback.innerHTML = mediaFallbackHtml(detail);
+}
+
+// Fetches the active repository's records and renders them as a grid of
+// cards, each opening its record in the lightbox. `previewHtml(url, label)`
+// gives a card's preview, with both arguments already HTML-escaped. Returns
+// the grid element, or null when there was nothing to render.
+async function renderMediaGrid(previewHtml) {
+  const schema = repoSchemas[activeRepoId];
+  const body = document.getElementById('map-panel-body');
+  lightboxRecords = [];
+  let records;
+  try {
+    const res = await fetch(`${apiPath(activeRepoId)}/records`);
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    records = await res.json();
+  } catch (err) {
+    body.innerHTML = '<span class="detail-empty">// failed to load records</span>';
+    return null;
+  }
+  if (!records.length) {
+    body.innerHTML = '<span class="detail-empty">// no records</span>';
+    return null;
+  }
+  lightboxRecords = records;
+  body.innerHTML = '<div class="media-grid">' + records.map((r, i) => {
+    const label = escapeHtml(contentLabel(r));
+    return `<button class="media-tile" data-index="${i}" title="Open ${label}">` +
+      previewHtml(escapeHtml(mediaUrl(activeRepoId, r[schema.key])), label) +
+      `<span class="media-class"></span><span class="media-duration"></span><div class="media-caption">${label}</div></button>`;
+  }).join('') + '</div>';
+  renderTileClasses();
+  const grid = body.querySelector('.media-grid');
+  grid.addEventListener('click', e => {
+    const tile = e.target.closest('.media-tile');
+    if (tile) openLightbox(Number(tile.dataset.index));
+  });
+  // `error` doesn't bubble, hence the capturing listener.
+  grid.addEventListener('error', e => {
+    if (e.target.tagName === 'IMG' || e.target.tagName === 'VIDEO') showTileFallback(e.target, e.target.src);
+  }, true);
+  return grid;
+}
 
 async function showImageView(repoId) {
   activeRepoId = repoId;
   const schema = repoSchemas[repoId];
   setMapMode('image');
+  closeLightbox();
   document.getElementById('map-panel-title').textContent = `${schema.label} · images`;
-  await refreshImageView();
+  await Promise.all([refreshImageView(), loadImageAnnotations(), loadRecordClasses()]);
 }
 
 async function refreshImageView() {
-  const schema = repoSchemas[activeRepoId];
-  const body = document.getElementById('map-panel-body');
-  let records;
-  try {
-    const res = await fetch(`/api/repositories/${activeRepoId}/records`);
-    if (!res.ok) throw new Error(`HTTP ${res.status}`);
-    records = await res.json();
-  } catch (err) {
-    body.innerHTML = '<span class="detail-empty">// failed to load records</span>';
-    return;
-  }
-  if (!records.length) {
-    body.innerHTML = '<span class="detail-empty">// no records</span>';
-    return;
-  }
-  body.innerHTML = '<div class="media-grid">' + records.map(r => {
-    const key = escapeHtml(r[schema.key]);
-    return `<div class="media-tile"><img src="/api/repositories/${activeRepoId}/records/${key}/media" alt="${key}">` +
-      `<div class="media-caption">${key}</div></div>`;
-  }).join('') + '</div>';
+  await renderMediaGrid((url, label) => `<img loading="lazy" src="${url}" alt="${label}">`);
 }
+
+// Empties every lightbox element. A <video>/<audio> keeps downloading and
+// playing its old source until it is reloaded without one.
+function unloadLightboxPlayers() {
+  unloadDocumentReader();
+  for (const player of Object.values(LIGHTBOX_PLAYERS)) {
+    player.hidden = true;
+    if (!player.hasAttribute('src')) continue;
+    player.removeAttribute('src');
+    if (player.load) player.load();
+  }
+}
+
+function openLightbox(index) {
+  const record = lightboxRecords[index];
+  if (!record) return;
+  const schema = repoSchemas[activeRepoId];
+  const url = mediaUrl(activeRepoId, record[schema.key]);
+  lightboxIndex = index;
+  resetImageAnnotationState();
+  unloadLightboxPlayers();
+
+  const player = LIGHTBOX_PLAYERS[schema.view.kind];
+  const name = contentName(record);
+  const download = document.getElementById('media-lightbox-download');
+  document.getElementById('media-lightbox-error').hidden = true;
+  document.getElementById('media-lightbox-open').hidden = false;
+  download.hidden = false;
+  download.href = url;
+  download.download = name; // without one, the browser names the file itself
+  download.title = name ? `Download ${name}` : 'Download';
+  if (player) {
+    player.hidden = false;
+    if (player.tagName === 'IMG') player.alt = contentLabel(record);
+    player.src = url;
+    if (player.play) player.play().catch(() => {}); // blocked autoplay leaves the controls to start it
+  } else {
+    openDocument(record, url);
+  }
+  document.getElementById('media-lightbox-open').href = url;
+  document.getElementById('media-lightbox-caption').innerHTML =
+    `<span>${index + 1} / ${lightboxRecords.length}</span>` +
+    (name ? `<span><b>${escapeHtml(name)}</b></span>` : '') +
+    Object.entries(record)
+      .filter(([k]) => k !== schema.view.field && k !== '$content')
+      .map(([k, v]) => `<span><b>${escapeHtml(k)}</b>: ${escapeHtml(v ?? '')}</span>`)
+      .join('');
+  document.getElementById('media-lightbox-prev').disabled = index === 0;
+  document.getElementById('media-lightbox-next').disabled = index === lightboxRecords.length - 1;
+
+  const lightbox = document.getElementById('media-lightbox');
+  lightbox.style.top = document.getElementById('map-panel-body').offsetTop + 'px';
+  lightbox.hidden = false;
+  renderLightboxRail();
+  renderLightboxClasses();
+}
+
+function closeLightbox() {
+  if (lightboxIndex < 0) return;
+  const tile = document.querySelector(`.media-tile[data-index="${lightboxIndex}"]`);
+  lightboxIndex = -1;
+  resetImageAnnotationState();
+  document.getElementById('media-lightbox').hidden = true;
+  renderLightboxClasses();
+  unloadLightboxPlayers();
+  if (tile) tile.focus();
+}
+
+function stepLightbox(delta) {
+  openLightbox(lightboxIndex + delta);
+}
+
+document.getElementById('media-lightbox-prev').addEventListener('click', () => stepLightbox(-1));
+document.getElementById('media-lightbox-next').addEventListener('click', () => stepLightbox(1));
+document.getElementById('media-lightbox-close').addEventListener('click', closeLightbox);
+document.getElementById('media-lightbox-stage').addEventListener('click', e => {
+  if (e.target === e.currentTarget) closeLightbox();
+});
+for (const player of Object.values(LIGHTBOX_PLAYERS)) {
+  player.addEventListener('error', async e => {
+    const index = lightboxIndex;
+    if (index < 0 || !e.target.hasAttribute('src')) return;
+    const error = document.getElementById('media-lightbox-error');
+    e.target.hidden = true;
+    error.innerHTML = mediaFallbackHtml('');
+    error.hidden = false;
+    const detail = await mediaContentType(e.target.src);
+    if (lightboxIndex === index) error.innerHTML = mediaFallbackHtml(detail); // still on the same record
+  });
+}
+
+// ── Image annotations ─────────────────────────────────────────────────────
+// Labelled boxes drawn over the image open in the lightbox, saved per record
+// through PUT /api/repositories/{id}/records/{key}/annotations into the
+// project's annotations file (see odf.ui.annotations for its format). Boxes
+// are held in image pixels and drawn in percent of the image, so they follow
+// the lightbox as it resizes. They are painted largest first, so a box inside
+// another stays clickable whichever was drawn first. There is no move or
+// resize: a wrong box is deleted and drawn again. The pages of a PDF take
+// boxes the same way, and text takes labelled spans, through the state and
+// the label input here (see "Document annotations" below), as do the time
+// ranges and points of a clip (see "Clip annotations") and of a timeseries
+// (see "Timeseries annotations").
+//
+// What a press does is set by the tool picked in the rail over the view
+// (#media-lightbox-rail): "select" only selects, relabels and deletes what is
+// there, "box" drags a box out free-form, "fixed" places one at a set size in
+// image pixels (see boxSize), "span" labels selected text, and "range" and
+// "point" mark a clip's timeline. The rail also
+// holds the actions of the open record, its source toggle and original.
+
+const BOX_COLORS = ['#ff6b6b', '#4dabf7', '#51cf66', '#fcc419', '#cc5de8', '#ff922b', '#22b8cf', '#f06595'];
+const BOX_MIN_DRAG = 4; // px a pointer must travel before a press counts as drawing rather than a click
+const BOX_SIZE_KEY = 'odf-ui-box-size';
+const LIGHTBOX_TOOL_KEY = 'odf-ui-lightbox-tool';
+// The tools each kind of annotated surface takes (see lightboxSurfaceKind),
+// and the keys that pick them.
+const LIGHTBOX_TOOLS = { image: ['select', 'box', 'fixed'], pdf: ['select', 'box'], text: ['select', 'span'], clip: ['select', 'range', 'point'] };
+const LIGHTBOX_TOOL_KEYS = { v: 'select', b: 'box', f: 'fixed', t: 'span', r: 'range', p: 'point' };
+
+let annotationsEnabled = false; // whether the server keeps an annotations file (see loadUiExtensions)
+let imageAnnotations = { labels: [], records: {} }; // the active repository's labels and boxes, or a timeseries' labels and `annotations`
+let imageLoaded = false; // whether the lightbox image has decoded, so its natural size is known
+let selectedBox = -1;    // index of the open image's selected box, -1 for none
+let boxDrag = null;      // the press in progress on an overlay, see wireBoxOverlay
+let boxSurface = null;   // what that press, and the box it draws or relabels, is on, see surfaceOf
+let pendingBox = null;   // a box being drawn, or drawn and waiting for its label
+let relabelBox = -1;     // index of the box whose label is being edited, -1 for none
+let lastBoxLabel = '';
+let labelOption = -1;    // index of the label option picked with the arrow keys, -1 for none
+let boxSaves = Promise.resolve(); // chains saves, so they reach the server in the order they were made
+let boxSaveCount = 0;    // saves made so far, so only the latest one's response sets the labels
+// The size, in image pixels, of the boxes the "fixed" tool places, and the
+// tool last picked for each kind of surface. Per-browser preferences, so they
+// live in localStorage rather than the annotations file.
+let boxSize = { width: 16, height: 16 };
+let lightboxTools = { image: 'select', pdf: 'select', text: 'select', clip: 'select' };
+
+const imageOverlay = document.getElementById('image-annotations');
+const imageLabelForm = document.getElementById('image-label-form');
+const imageLabelInput = document.getElementById('image-label-input');
+const imageLabelOptions = document.getElementById('image-label-options');
+const lightboxRail = document.getElementById('media-lightbox-rail');
+const imageBoxWidth = document.getElementById('image-box-width');
+const imageBoxHeight = document.getElementById('image-box-height');
+
+// What boxes are drawn on, the open image or one page of the open PDF:
+// `overlay` takes the pointer, `boxes` holds the drawn boxes, and `width` and
+// `height` are its size in the units boxes are saved in. `page` is the PDF
+// page's number, undefined for an image.
+function surfaceOf(overlay) {
+  if (overlay !== imageOverlay) return pageSurface(overlay.parentElement);
+  const img = document.getElementById('media-lightbox-img');
+  return { overlay, boxes: document.getElementById('image-boxes'), width: img.naturalWidth, height: img.naturalHeight };
+}
+
+function loadBoxSize() {
+  try {
+    const s = JSON.parse(localStorage.getItem(BOX_SIZE_KEY) || '{}');
+    if (Number.isInteger(s.width) && s.width > 0) boxSize.width = s.width;
+    if (Number.isInteger(s.height) && s.height > 0) boxSize.height = s.height;
+  } catch {}
+}
+
+function saveBoxSize() {
+  try { localStorage.setItem(BOX_SIZE_KEY, JSON.stringify(boxSize)); } catch {}
+}
+
+function loadLightboxTools() {
+  try {
+    const s = JSON.parse(localStorage.getItem(LIGHTBOX_TOOL_KEY) || '{}');
+    for (const [kind, tools] of Object.entries(LIGHTBOX_TOOLS)) {
+      if (tools.includes(s[kind])) lightboxTools[kind] = s[kind];
+    }
+  } catch {}
+}
+
+function saveLightboxTools() {
+  try { localStorage.setItem(LIGHTBOX_TOOL_KEY, JSON.stringify(lightboxTools)); } catch {}
+}
+
+// What the open record can be annotated as: 'image', 'pdf', 'text' or
+// 'clip'. Null when it can't be, or isn't loaded yet.
+function lightboxSurfaceKind() {
+  if (!annotationsEnabled || lightboxIndex < 0) return null;
+  if (mapMode === 'image') return imageLoaded ? 'image' : null;
+  if (mapMode === 'media') return clipDuration ? 'clip' : null;
+  return openPdf ? 'pdf' : openText ? 'text' : null;
+}
+
+// The tool presses on the open record go to, null when it takes none. Spans
+// are only made on text shown as written, see "Document annotations".
+function activeTool() {
+  const kind = lightboxSurfaceKind();
+  if (!kind) return null;
+  return kind === 'text' && openText.rendered ? 'select' : lightboxTools[kind];
+}
+
+function setLightboxTool(tool) {
+  const kind = lightboxSurfaceKind();
+  if (!kind || !LIGHTBOX_TOOLS[kind].includes(tool)) return;
+  closeImageLabelForm();
+  lightboxTools[kind] = tool;
+  saveLightboxTools();
+  if (tool === 'span' && openText.rendered) {
+    selectedBox = -1;
+    openText.rendered = false;
+    renderDocumentText();
+    return;
+  }
+  renderLightboxRail();
+  if (kind === 'clip') {
+    clipRangeStart = null;
+    renderClipMarks();
+  }
+  // Text selected before the tool was picked is labelled as it would be after.
+  const selected = tool === 'span' && sourceSelection();
+  if (selected) startSpanFromSelection(selected.pre, selected.range);
+}
+
+// Whether the open image has room for a box of the set size.
+function fixedBoxFits() {
+  const img = document.getElementById('media-lightbox-img');
+  return boxSize.width <= img.naturalWidth && boxSize.height <= img.naturalHeight;
+}
+
+// Shows the rail's tools for the open record, the active one pressed, and
+// says in the bar under it how that tool is used.
+function renderLightboxRail() {
+  const kind = lightboxSurfaceKind();
+  const tool = activeTool();
+  const tools = kind ? LIGHTBOX_TOOLS[kind] : [];
+  for (const button of lightboxRail.querySelectorAll('[data-tool]')) {
+    button.hidden = !tools.includes(button.dataset.tool);
+    button.setAttribute('aria-pressed', button.dataset.tool === tool);
+  }
+  const actions = ['media-lightbox-source', 'media-lightbox-open', 'media-lightbox-download'].some(id => !document.getElementById(id).hidden);
+  document.getElementById('media-lightbox-rail-sep').hidden = !tools.length || !actions;
+  lightboxRail.hidden = !tools.length && !actions;
+  document.getElementById('media-lightbox').dataset.tool = tool || '';
+
+  const sizeControl = document.getElementById('image-box-size');
+  sizeControl.hidden = tool !== 'fixed';
+  if (tool === 'fixed') {
+    imageBoxWidth.value = boxSize.width;
+    imageBoxHeight.value = boxSize.height;
+    sizeControl.style.top = lightboxRail.querySelector('[data-tool="fixed"]').offsetTop + 'px';
+  }
+  const size = `${boxSize.width} × ${boxSize.height}`;
+  const hint = document.getElementById('media-lightbox-hint');
+  hint.textContent = tool === 'box' ? `Drag on ${kind === 'pdf' ? 'a page' : 'the image'} to add a box`
+    : tool === 'fixed' ? (fixedBoxFits() ? `Click the image to add a ${size} box` : `Image is smaller than the ${size} box`)
+      : tool === 'span' ? 'Select text to add a label'
+      : tool === 'range' ? 'Drag on the timeline, or press M at each end, to add a range'
+      : tool === 'point' ? 'Click the timeline, or press M, to add a point'
+        : tool ? 'Pick a tool to add a label' : '';
+  hint.hidden = !tool;
+}
+
+// A box of the set size centred on `point` (0..1 fractions of the image),
+// slid back inside the image where it would cross an edge. Null when the
+// image is smaller than the box.
+function fixedBoxAt(point) {
+  const img = document.getElementById('media-lightbox-img');
+  if (!fixedBoxFits()) return null;
+  const start = (at, size, total) => Math.min(Math.max(Math.round(at * total - size / 2), 0), total - size);
+  return {
+    x: start(point.x, boxSize.width, img.naturalWidth),
+    y: start(point.y, boxSize.height, img.naturalHeight),
+    width: boxSize.width,
+    height: boxSize.height,
+  };
+}
+
+async function loadImageAnnotations() {
+  imageAnnotations = { labels: [], records: {} };
+  if (!annotationsEnabled) return;
+  const repoId = activeRepoId;
+  try {
+    const res = await fetch(`${apiPath(repoId)}/annotations`);
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    const block = await res.json();
+    if (repoId === activeRepoId) imageAnnotations = block;
+  } catch (err) {
+    addLog('Failed to load annotations', ACCENT.alert);
+  }
+  renderImageBoxes();
+}
+
+function resetImageAnnotationState() {
+  imageLoaded = false;
+  selectedBox = -1;
+  boxDrag = null;
+  pendingBox = null;
+  relabelBox = -1;
+  boxSurface = null;
+  imageLabelForm.hidden = true;
+  imageOverlay.appendChild(imageLabelForm); // back from the document it was opened in
+  imageOverlay.hidden = true;
+  clipDuration = null;
+  clipRangeStart = null;
+  clipStrip.hidden = true;
+  clipWave.innerHTML = '';
+}
+
+function imageRecordKey() {
+  return String(lightboxRecords[lightboxIndex][repoSchemas[activeRepoId].key]);
+}
+
+// Whether the view in front keeps one list of annotations for its repository,
+// a chart's or a map's, rather than a list for each record.
+function annotatesRepository() {
+  return mapMode === 'timeseries' || mapMode === 'geo';
+}
+
+function imageBoxes() {
+  if (annotatesRepository()) return imageAnnotations.annotations || [];
+  const record = imageAnnotations.records[imageRecordKey()];
+  return record ? record.annotations : [];
+}
+
+// Fits the overlay to the image as painted, which object-fit can letterbox
+// inside the <img> element's own box.
+function layoutImageAnnotations() {
+  const img = document.getElementById('media-lightbox-img');
+  if (!annotationsEnabled || lightboxIndex < 0 || !imageLoaded) return;
+  const scale = Math.min(img.clientWidth / img.naturalWidth, img.clientHeight / img.naturalHeight);
+  const width = img.naturalWidth * scale;
+  const height = img.naturalHeight * scale;
+  imageOverlay.style.left = img.offsetLeft + (img.clientWidth - width) / 2 + 'px';
+  imageOverlay.style.top = img.offsetTop + (img.clientHeight - height) / 2 + 'px';
+  imageOverlay.style.width = width + 'px';
+  imageOverlay.style.height = height + 'px';
+  imageOverlay.hidden = false;
+  renderLightboxRail();
+}
+
+function boxColor(label) {
+  const index = imageAnnotations.labels.indexOf(label);
+  return BOX_COLORS[(index < 0 ? imageAnnotations.labels.length : index) % BOX_COLORS.length];
+}
+
+function boxStyle(box, label, surface) {
+  const pct = (value, total) => value / total * 100 + '%';
+  return `left:${pct(box.x, surface.width)};top:${pct(box.y, surface.height)};` +
+    `width:${pct(box.width, surface.width)};height:${pct(box.height, surface.height)};` +
+    `--box-color:${boxColor(label)}`;
+}
+
+// Redraws the open record's annotations: an image's boxes, or a document's
+// (see renderDocumentAnnotations). A timeseries' are drawn over its chart
+// (see renderTsAnnotations).
+function renderImageBoxes() {
+  if (mapMode === 'timeseries') return renderTsAnnotations();
+  if (mapMode === 'geo') return renderGeoRegions();
+  if (mapMode === 'media') return renderClipMarks();
+  if (lightboxIndex < 0) return;
+  if (mapMode === 'document') renderDocumentAnnotations();
+  else if (imageLoaded) renderSurfaceBoxes(surfaceOf(imageOverlay));
+}
+
+function renderSurfaceBoxes(surface) {
+  const largestFirst = imageBoxes().map((box, i) => ({ box, i }))
+    .filter(({ box }) => box.type === 'box' && box.page === surface.page)
+    .sort((a, b) => b.box.width * b.box.height - a.box.width * a.box.height);
+  const draft = pendingBox && pendingBox.type !== 'span' && pendingBox.page === surface.page;
+  surface.boxes.innerHTML = largestFirst.map(({ box, i }) =>
+    `<div class="image-box${i === selectedBox ? ' selected' : ''}" data-index="${i}" style="${boxStyle(box, box.label, surface)}">` +
+    `<span class="image-box-label" title="Change label">${escapeHtml(box.label)}</span>` +
+    (i === selectedBox ? '<button type="button" class="image-box-delete" title="Delete (Del)">&times;</button>' : '') +
+    '</div>').join('') +
+    (draft ? `<div class="image-box draft" style="${boxStyle(pendingBox, lastBoxLabel, surface)}"></div>` : '');
+}
+
+// A pointer position as 0..1 fractions of the overlay, clamped to it.
+function overlayPoint(e, overlay) {
+  const rect = overlay.getBoundingClientRect();
+  const clamp = v => Math.min(Math.max(v, 0), 1);
+  return { x: clamp((e.clientX - rect.left) / rect.width), y: clamp((e.clientY - rect.top) / rect.height) };
+}
+
+// The box between two points of a surface, in whole pixels of an image or
+// hundredths of a point of a PDF page, which it then also names.
+function dragToBox(from, to, surface) {
+  const onPage = surface.page !== undefined;
+  const steps = onPage ? 100 : 1;
+  const unit = 1 / steps;
+  const snap = value => Math.round(value * steps) / steps;
+  const span = (a, b, total) => {
+    const start = Math.min(snap(Math.min(a, b) * total), total - unit);
+    return [start, Math.max(snap(Math.max(a, b) * total) - start, unit)];
+  };
+  const [x, width] = span(from.x, to.x, surface.width);
+  const [y, height] = span(from.y, to.y, surface.height);
+  const box = { x, y, width, height };
+  return onPage ? { ...box, page: surface.page, page_width: surface.width, page_height: surface.height } : box;
+}
+
+// Lists the repository's labels, as the server returned them, under the label
+// input: the ones containing `filter`, or all of them when it is empty.
+function renderImageLabelOptions(filter) {
+  const text = filter.trim().toLowerCase();
+  const labels = imageAnnotations.labels.filter(label => label.toLowerCase().includes(text));
+  labelOption = -1;
+  imageLabelOptions.innerHTML = labels.map(label =>
+    `<button type="button" class="image-label-option" data-label="${escapeHtml(label)}" style="--box-color:${boxColor(label)}">` +
+    `<span class="image-label-swatch"></span>${escapeHtml(label)}</button>`).join('');
+  imageLabelOptions.hidden = !labels.length;
+}
+
+function stepImageLabelOption(step) {
+  const options = [...imageLabelOptions.children];
+  if (!options.length) return;
+  labelOption = (labelOption + step + options.length + (labelOption < 0 && step < 0 ? 1 : 0)) % options.length;
+  options.forEach((option, i) => option.classList.toggle('active', i === labelOption));
+  options[labelOption].scrollIntoView({ block: 'nearest' });
+}
+
+// Opens the label input under the box or span it is for: the one just drawn
+// (pendingBox), or an existing one being relabelled (relabelBox).
+function openImageLabelForm() {
+  const box = pendingBox || imageBoxes()[relabelBox];
+  const value = pendingBox ? lastBoxLabel : box.label;
+  if (box.type === 'span') return openSpanLabelForm(value);
+  if (mapMode === 'timeseries') return openTsLabelForm(box, value);
+  if (mapMode === 'geo') return openGeoLabelForm(box, value);
+  if (mapMode === 'media') return openClipLabelForm(box, value);
+  const { overlay, width, height } = boxSurface;
+  openLabelFormIn(overlay, box.x / width * overlay.clientWidth, (box.y + box.height) / height * overlay.clientHeight + 4, value);
+}
+
+// Moves the label input into `host`, as near (left, top) as fits inside it.
+function openLabelFormIn(host, left, top, value) {
+  host.appendChild(imageLabelForm);
+  imageLabelInput.value = value;
+  renderImageLabelOptions(''); // every label, whatever the input is prefilled with
+  imageLabelForm.hidden = false;
+  imageLabelForm.style.left = Math.max(Math.min(left, host.clientWidth - imageLabelForm.offsetWidth), 0) + 'px';
+  imageLabelForm.style.top = Math.max(Math.min(top, host.clientHeight - imageLabelForm.offsetHeight), 0) + 'px';
+  imageLabelInput.focus();
+  imageLabelInput.select();
+}
+
+function closeImageLabelForm() {
+  if (imageLabelForm.hidden) return false;
+  imageLabelForm.hidden = true;
+  imageOverlay.appendChild(imageLabelForm); // out of a document that may be redrawn under it
+  pendingBox = null;
+  relabelBox = -1;
+  renderImageBoxes();
+  return true;
+}
+
+// Esc backs out one step at a time: the label input, a range started on a
+// clip, then the selection. Returns false when there was nothing to back out
+// of.
+function cancelImageAnnotationStep() {
+  if (closeImageLabelForm()) return true;
+  if (clipRangeStart !== null) {
+    clipRangeStart = null;
+    renderClipMarks();
+    return true;
+  }
+  if (selectedBox < 0) return false;
+  selectedBox = -1;
+  renderImageBoxes();
+  return true;
+}
+
+function deleteImageBox(index) {
+  selectedBox = -1;
+  saveImageBoxes(imageBoxes().filter((_, i) => i !== index));
+}
+
+// Replaces the open record's annotations, or the open chart's or map's,
+// showing the change at once and reloading from the server if it could not be saved.
+function saveImageBoxes(boxes) {
+  const repoId = activeRepoId;
+  let url = `${apiPath(repoId)}/annotations`;
+  let body, saved, name = '';
+  if (annotatesRepository()) {
+    // A chart's in time order, as the server keeps them.
+    body = { annotations: mapMode === 'geo' ? boxes : [...boxes].sort((a, b) => tsMarkStart(a) - tsMarkStart(b)) };
+    imageAnnotations.annotations = saved = body.annotations;
+  } else {
+    const img = document.getElementById('media-lightbox-img');
+    const key = imageRecordKey();
+    url = `${apiPath(repoId)}/records/${encodeURIComponent(key)}/annotations`;
+    name = ` for ${key}`;
+    // A clip's in time order, as the server keeps them.
+    if (mapMode === 'media') boxes = [...boxes].sort((a, b) => tsMarkStart(a) - tsMarkStart(b));
+    body = mapMode === 'document' ? { annotations: boxes }
+      : mapMode === 'media' ? { duration: clipDuration, annotations: boxes }
+        : { width: img.naturalWidth, height: img.naturalHeight, annotations: boxes };
+    if (boxes.length) imageAnnotations.records[key] = body;
+    else delete imageAnnotations.records[key];
+    saved = Object.values(imageAnnotations.records).flatMap(record => record.annotations);
+  }
+  // As the server will: drop the labels no box uses any more, then add the new ones.
+  const used = new Set(saved.map(box => box.label));
+  imageAnnotations.labels = imageAnnotations.labels.filter(label => used.has(label));
+  for (const box of boxes) {
+    if (!imageAnnotations.labels.includes(box.label)) imageAnnotations.labels.push(box.label);
+  }
+  if (!imageAnnotations.labels.includes(lastBoxLabel)) lastBoxLabel = '';
+  renderImageBoxes();
+  const save = ++boxSaveCount;
+  boxSaves = boxSaves.then(async () => {
+    try {
+      const res = await fetch(url, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body),
+      });
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      const { labels } = await res.json();
+      if (repoId !== activeRepoId || save !== boxSaveCount) return; // a later save's labels are on their way
+      imageAnnotations.labels = labels;
+      if (!imageLabelForm.hidden) renderImageLabelOptions(imageLabelInput.value);
+    } catch (err) {
+      addLog(`Failed to save annotations${name}`, ACCENT.alert);
+      if (repoId === activeRepoId) await loadImageAnnotations();
+    }
+  });
+}
+
+document.getElementById('media-lightbox-img').addEventListener('load', () => {
+  if (lightboxIndex < 0) return;
+  imageLoaded = true;
+  layoutImageAnnotations();
+  renderImageBoxes();
+});
+new ResizeObserver(layoutImageAnnotations).observe(document.getElementById('media-lightbox-stage'));
+
+// A press on an overlay is a click (select a box, or act on its label or
+// delete button) until the pointer travels BOX_MIN_DRAG, when it becomes a
+// new box, unless the tool is "select". The overlay captures the pointer, so
+// a box can be drawn starting inside another one and finished outside the
+// image. A fixed-size box follows the drag, centred on the pointer, and a
+// click on a spot with no box places one too, unless that click was closing
+// the label input. Only an image takes fixed-size boxes.
+function wireBoxOverlay(overlay) {
+  const fixed = () => activeTool() === 'fixed';
+  overlay.addEventListener('pointerdown', e => {
+    if (e.button !== 0 || e.target.closest('.image-label-form')) return;
+    e.preventDefault();
+    const dismissed = closeImageLabelForm();
+    boxSurface = surfaceOf(overlay);
+    boxDrag = { from: overlayPoint(e, overlay), clientX: e.clientX, clientY: e.clientY, target: e.target, drawing: false, dismissed };
+    overlay.setPointerCapture(e.pointerId);
+  });
+  overlay.addEventListener('pointermove', e => {
+    if (!boxDrag || activeTool() === 'select') return;
+    if (!boxDrag.drawing && Math.hypot(e.clientX - boxDrag.clientX, e.clientY - boxDrag.clientY) < BOX_MIN_DRAG) return;
+    boxDrag.drawing = true;
+    selectedBox = -1;
+    const point = overlayPoint(e, overlay);
+    pendingBox = fixed() ? fixedBoxAt(point) : dragToBox(boxDrag.from, point, boxSurface);
+    renderImageBoxes();
+  });
+  overlay.addEventListener('pointerup', () => {
+    const drag = boxDrag;
+    if (!drag) return;
+    boxDrag = null;
+    if (drag.drawing) {
+      if (pendingBox) openImageLabelForm();
+      return;
+    }
+    const box = drag.target.closest('.image-box[data-index]');
+    const index = box ? Number(box.dataset.index) : -1;
+    if (index >= 0 && drag.target.closest('.image-box-delete')) return deleteImageBox(index);
+    selectedBox = index;
+    if (index < 0 && fixed() && !drag.dismissed) pendingBox = fixedBoxAt(drag.from);
+    renderImageBoxes();
+    if (pendingBox) return openImageLabelForm();
+    if (index >= 0 && drag.target.closest('.image-box-label')) {
+      relabelBox = index;
+      openImageLabelForm();
+    }
+  });
+  overlay.addEventListener('pointercancel', () => {
+    boxDrag = null;
+    pendingBox = null;
+    renderImageBoxes();
+  });
+}
+wireBoxOverlay(imageOverlay);
+
+function submitImageLabel(value) {
+  const label = value.trim();
+  if (!label) return;
+  const boxes = imageBoxes().map(box => ({ ...box }));
+  if (pendingBox) boxes.push({ type: 'box', label, ...pendingBox });
+  else if (boxes[relabelBox]) boxes[relabelBox].label = label;
+  lastBoxLabel = label;
+  closeImageLabelForm();
+  saveImageBoxes(boxes);
+}
+
+imageLabelForm.addEventListener('submit', e => {
+  e.preventDefault();
+  const picked = imageLabelOptions.children[labelOption];
+  submitImageLabel(picked ? picked.dataset.label : imageLabelInput.value);
+});
+imageLabelInput.addEventListener('input', () => renderImageLabelOptions(imageLabelInput.value));
+imageLabelInput.addEventListener('keydown', e => {
+  if (e.key !== 'ArrowDown' && e.key !== 'ArrowUp') return;
+  e.preventDefault();
+  stepImageLabelOption(e.key === 'ArrowDown' ? 1 : -1);
+});
+imageLabelOptions.addEventListener('click', e => {
+  const option = e.target.closest('.image-label-option');
+  if (option) submitImageLabel(option.dataset.label);
+});
+
+// A size that isn't a whole number of pixels, one or more, is dropped for the
+// one it replaced. A box still waiting for its label keeps the size it was
+// drawn at.
+function updateBoxSize() {
+  const side = (input, previous) => {
+    const value = Number(input.value);
+    return Number.isInteger(value) && value > 0 ? value : previous;
+  };
+  boxSize = {
+    width: side(imageBoxWidth, boxSize.width),
+    height: side(imageBoxHeight, boxSize.height),
+  };
+  saveBoxSize();
+  renderLightboxRail();
+}
+
+for (const control of [imageBoxWidth, imageBoxHeight]) {
+  control.addEventListener('change', updateBoxSize);
+}
+lightboxRail.addEventListener('click', e => {
+  const button = e.target.closest('[data-tool]');
+  if (button) setLightboxTool(button.dataset.tool);
+});
+loadBoxSize();
+loadLightboxTools();
+
+// ── Record classes ────────────────────────────────────────────────────────
+// One class per record, for classification: good or bad, relevant or not.
+// It is set from the row of chips under a record open in the lightbox (an
+// image, a document, a clip), where the keys 1 to 9 pick one of the first
+// nine, or from the class column of the table view. Picking a record's own
+// class takes it away. Saved through
+// PUT /api/repositories/{id}/records/{key}/class into the project's
+// annotations file (see odf.ui.annotations), apart from the labels of boxes,
+// spans and ranges.
+
+let recordClasses = { classes: [], records: {} }; // the active repository's classes, and each record's by key
+
+const lightboxClasses = document.getElementById('media-lightbox-classes');
+
+async function loadRecordClasses() {
+  recordClasses = { classes: [], records: {} };
+  if (!annotationsEnabled) return;
+  const repoId = activeRepoId;
+  try {
+    const res = await fetch(`${apiPath(repoId)}/classes`);
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    const block = await res.json();
+    if (repoId === activeRepoId) recordClasses = block;
+  } catch (err) {
+    addLog('Failed to load classes', ACCENT.alert);
+  }
+  renderRecordClasses();
+}
+
+function classColor(name) {
+  const index = recordClasses.classes.indexOf(name);
+  return BOX_COLORS[(index < 0 ? recordClasses.classes.length : index) % BOX_COLORS.length];
+}
+
+// Shows each record's class wherever it is on screen.
+function renderRecordClasses() {
+  renderLightboxClasses();
+  renderTileClasses();
+  renderTableClasses();
+}
+
+function renderLightboxClasses() {
+  lightboxClasses.hidden = !annotationsEnabled || lightboxIndex < 0;
+  if (lightboxClasses.hidden) return;
+  const current = recordClasses.records[imageRecordKey()];
+  lightboxClasses.innerHTML = '<span>Class</span>' + recordClasses.classes.map((name, i) =>
+    `<button type="button" class="class-chip" data-class="${escapeHtml(name)}" aria-pressed="${name === current}" style="--box-color:${classColor(name)}">` +
+    (i < 9 ? `<kbd>${i + 1}</kbd>` : '') + `${escapeHtml(name)}</button>`).join('') +
+    '<button type="button" class="class-chip class-add" title="Add a class" aria-label="Add a class">+</button>';
+}
+
+function renderTileClasses() {
+  for (const tile of document.querySelectorAll('#map-panel-body .media-tile')) {
+    const badge = tile.querySelector('.media-class');
+    const record = lightboxRecords[tile.dataset.index];
+    if (!badge || !record) continue;
+    const name = recordClasses.records[String(record[repoSchemas[activeRepoId].key])] || '';
+    badge.textContent = name;
+    badge.style.setProperty('--box-color', classColor(name));
+  }
+}
+
+function renderTableClasses() {
+  for (const cell of document.querySelectorAll('#map-panel-body td.record-class')) {
+    const current = recordClasses.records[cell.parentElement.dataset.key] || '';
+    cell.innerHTML = `<select class="class-select" aria-label="Class" style="--box-color:${current ? classColor(current) : 'transparent'}">` +
+      '<option value=""></option>' +
+      recordClasses.classes.map(name => `<option${name === current ? ' selected' : ''}>${escapeHtml(name)}</option>`).join('') +
+      '<option data-new>New…</option></select>';
+  }
+}
+
+// Gives a record `value` as its class, or none when it is null, showing the
+// change at once and reloading from the server if it could not be saved.
+function setRecordClass(key, value) {
+  const repoId = activeRepoId;
+  if (value) recordClasses.records[key] = value;
+  else delete recordClasses.records[key];
+  // As the server will: drop the classes no record has any more, then add the new one.
+  const used = new Set(Object.values(recordClasses.records));
+  recordClasses.classes = recordClasses.classes.filter(name => used.has(name));
+  if (value && !recordClasses.classes.includes(value)) recordClasses.classes.push(value);
+  renderRecordClasses();
+  boxSaves = boxSaves.then(async () => {
+    try {
+      const res = await fetch(`${apiPath(repoId)}/records/${encodeURIComponent(key)}/class`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ class: value }),
+      });
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    } catch (err) {
+      addLog(`Failed to save the class of ${key}`, ACCENT.alert);
+      if (repoId === activeRepoId) await loadRecordClasses();
+    }
+  });
+}
+
+function toggleRecordClass(key, name) {
+  setRecordClass(key, recordClasses.records[key] === name ? null : name);
+}
+
+// Swaps `control` for an input taking a new class for the record `key`:
+// Enter gives it, Esc or leaving the input puts the control back.
+function openClassInput(control, key) {
+  const input = document.createElement('input');
+  input.className = 'class-input';
+  input.placeholder = 'Class, then Enter';
+  input.setAttribute('aria-label', 'New class');
+  control.replaceWith(input);
+  input.addEventListener('keydown', e => {
+    if (e.key !== 'Enter' && e.key !== 'Escape') return;
+    e.stopPropagation(); // Esc closes the input, not the record
+    const value = input.value.trim();
+    if (e.key === 'Enter' && value) setRecordClass(key, value);
+    else renderRecordClasses();
+  });
+  input.addEventListener('blur', renderRecordClasses);
+  input.focus();
+}
+
+lightboxClasses.addEventListener('click', e => {
+  const chip = e.target.closest('.class-chip');
+  if (!chip) return;
+  if (chip.classList.contains('class-add')) openClassInput(chip, imageRecordKey());
+  else toggleRecordClass(imageRecordKey(), chip.dataset.class);
+});
+document.getElementById('map-panel-body').addEventListener('change', e => {
+  const select = e.target.closest('.class-select');
+  if (!select) return;
+  const key = select.closest('tr').dataset.key;
+  if (select.selectedOptions[0].dataset.new !== undefined) openClassInput(select, key);
+  else setRecordClass(key, select.value || null);
+});
+
+// ── Clip annotations ──────────────────────────────────────────────────────
+// Labelled time ranges and points on the video or audio clip open in the
+// lightbox, for marking its segments and events: speech, an action, an onset.
+// They are the marks of "Timeseries annotations" below, drawn and made the
+// same way on the timeline strip under the player (#media-lightbox-strip),
+// which spans the whole clip, shows where it is playing and, for audio, its
+// waveform. M marks at the playhead instead, which is finer than the strip on
+// a long clip: a point with the "point" tool, and with "range" one end of a
+// range, then the other. A click on the strip that makes or selects nothing
+// seeks the clip there. Saved per record with the clip's length, in seconds
+// to the millisecond, through the endpoint of "Image annotations" above.
+
+const CLIP_WAVE_BARS = 240; // bars in the strip's waveform
+
+let clipDuration = null;   // the open clip's length in whole milliseconds, as seconds; null until it is known
+let clipRangeStart = null; // where M began a range that it has yet to end, null for none
+
+const clipStrip = document.getElementById('media-lightbox-strip');
+const clipWave = document.getElementById('clip-wave');
+clipWave.setAttribute('viewBox', `0 0 ${CLIP_WAVE_BARS} 100`);
+
+function clipPlayer() {
+  return LIGHTBOX_PLAYERS[repoSchemas[activeRepoId].view.kind];
+}
+
+// The player's position, to the millisecond and within the clip.
+function clipTime() {
+  return Math.min(Math.round(clipPlayer().currentTime * 1000) / 1000, clipDuration);
+}
+
+function renderClipPlayhead() {
+  if (!clipDuration) return;
+  document.getElementById('clip-playhead').style.left = clipTime() / clipDuration * 100 + '%';
+}
+
+function renderClipMarks() {
+  if (!clipDuration) return;
+  const layer = document.getElementById('clip-marks');
+  renderTimeMarks(layer, 0, clipDuration, time => time / clipDuration * 100);
+  if (clipRangeStart !== null) {
+    layer.insertAdjacentHTML('beforeend', '<div class="ts-mark ts-point draft" ' +
+      `style="left:${clipRangeStart / clipDuration * 100}%;--box-color:${boxColor(lastBoxLabel)}"></div>`);
+  }
+}
+
+// The label input goes above the strip, which is too low to hold it.
+function openClipLabelForm(mark, value) {
+  openLabelFormIn(clipStrip, tsMarkStart(mark) / clipDuration * clipStrip.clientWidth, 0, value);
+  imageLabelForm.style.top = -(imageLabelForm.offsetHeight + 4) + 'px';
+}
+
+function markAtPlayhead() {
+  const tool = activeTool();
+  if (tool !== 'range' && tool !== 'point') return;
+  closeImageLabelForm();
+  selectedBox = -1;
+  const at = clipTime();
+  if (tool === 'point') {
+    pendingBox = { type: 'point', at };
+  } else if (clipRangeStart === null) {
+    clipRangeStart = at;
+  } else {
+    if (at !== clipRangeStart) pendingBox = { type: 'range', start: Math.min(clipRangeStart, at), end: Math.max(clipRangeStart, at) };
+    clipRangeStart = null;
+  }
+  renderClipMarks();
+  if (pendingBox) openImageLabelForm();
+}
+
+// A clip takes marks once its length is known, which a stream without one
+// never is.
+for (const player of [LIGHTBOX_PLAYERS.video, LIGHTBOX_PLAYERS.audio]) {
+  player.addEventListener('loadedmetadata', () => {
+    const duration = Math.floor(player.duration * 1000) / 1000;
+    if (!annotationsEnabled || lightboxIndex < 0 || !Number.isFinite(duration) || duration <= 0) return;
+    clipDuration = duration;
+    clipStrip.hidden = false;
+    renderLightboxRail();
+    renderClipMarks();
+    renderClipPlayhead();
+    if (player !== LIGHTBOX_PLAYERS.audio) return;
+    const url = player.src;
+    decodeAudioClip(url).then(clip => {
+      if (clip && clipDuration && player.src === url) clipWave.innerHTML = waveBarsSvg(clip, CLIP_WAVE_BARS);
+    });
+  });
+  player.addEventListener('timeupdate', renderClipPlayhead);
+  player.addEventListener('seeked', renderClipPlayhead);
+}
+
+wireTimeMarks(clipStrip, {
+  timeAt: e => {
+    const rect = clipStrip.getBoundingClientRect();
+    const part = Math.min(Math.max((e.clientX - rect.left) / rect.width, 0), 1);
+    return Math.round(part * clipDuration * 1000) / 1000;
+  },
+  pointAt: at => ({ type: 'point', at }),
+  tool: activeTool,
+  onEmptyClick: at => { clipPlayer().currentTime = at; },
+});
 
 // ── Media view (bounded Video/Audio) ────────────────────────────────────
 // Backs the "View Video"/"View Audio" action on repository nodes whose
-// DataView is a VideoView/AudioView — a list of seekable clips, one per
-// record. Distinct from the live "Stream view" above: this repo is
-// ReadableProtocol, not StreamableProtocol, so there's no Start/Stop toggle
-// and no shared background feed, just ordinary bounded records.
+// DataView is a VideoView/AudioView — a grid of cards, one per record, as in
+// the image view above: a video card previews a frame of its clip, an audio
+// card its waveform, both with the clip's length. Selecting a card opens the
+// clip in #media-lightbox and plays it. Distinct from the live "Stream view"
+// above: this repo is ReadableProtocol, not StreamableProtocol, so there's
+// no Start/Stop toggle and no shared background feed, just ordinary bounded
+// records.
+
+const WAVE_BARS = 48;                     // bars in an audio card's waveform
+const WAVE_MAX_BYTES = 10 * 1024 * 1024;  // a larger clip isn't downloaded just to draw one
 
 async function showMediaView(repoId) {
   enterRepoView(repoId);
@@ -3700,35 +4218,102 @@ async function showMediaView(repoId) {
   setMapMode('media');
   document.getElementById('map-panel-title').textContent = `${schema.label} · ${schema.view.kind}`;
   renderReplayToggle(schema);
-  await refreshMediaView();
+  await Promise.all([refreshMediaView(), loadImageAnnotations(), loadRecordClasses()]);
 }
 
 async function refreshMediaView() {
   const schema = repoSchemas[activeRepoId];
-  const body = document.getElementById('map-panel-body');
+  closeLightbox();
   if (replayMode && replayRepoId === activeRepoId) {
     renderMediaReplay(schema);
     return;
   }
-  let records;
+  if (schema.view.kind === 'video') {
+    // The #t fragment has the browser paint that frame as the card's
+    // preview, rather than leaving an unplayed <video> blank.
+    const grid = await renderMediaGrid(url =>
+      `<video muted playsinline preload="metadata" tabindex="-1" src="${url}#t=0.1"></video>`);
+    if (!grid) return;
+    // `loadedmetadata` doesn't bubble, hence the capturing listener.
+    grid.addEventListener('loadedmetadata', e => {
+      setTileDuration(e.target.closest('.media-tile'), e.target.duration);
+    }, true);
+    return;
+  }
+  const grid = await renderMediaGrid(() =>
+    `<svg class="media-wave" viewBox="0 0 ${WAVE_BARS} 100" preserveAspectRatio="none" aria-hidden="true"></svg>`);
+  if (grid) loadAudioPreviews(grid);
+}
+
+function setTileDuration(tile, seconds) {
+  if (Number.isFinite(seconds)) tile.querySelector('.media-duration').textContent = formatClock(seconds);
+}
+
+// Fills in the audio cards one clip at a time, stopping once the grid has
+// been replaced (another repository, a refresh, replay mode).
+async function loadAudioPreviews(grid) {
+  const repoId = activeRepoId;
+  const key = repoSchemas[repoId].key;
+  for (const tile of grid.querySelectorAll('.media-tile')) {
+    const url = mediaUrl(repoId, lightboxRecords[tile.dataset.index][key]);
+    const clip = await decodeAudioClip(url);
+    const duration = clip ? clip.duration : await audioDuration(url);
+    if (!grid.isConnected) return;
+    const wave = tile.querySelector('.media-wave');
+    if (clip) wave.innerHTML = waveBarsSvg(clip);
+    else if (!Number.isFinite(duration)) showTileFallback(wave, url);
+    setTileDuration(tile, duration);
+  }
+}
+
+// Downloads and decodes a whole clip for its waveform, or returns null for
+// one that is too large to fetch for a preview or that this browser can't
+// decode. The one-byte range request only asks the server for the clip's
+// size, which comes back in Content-Range.
+async function decodeAudioClip(url) {
   try {
-    const res = await fetch(`/api/repositories/${activeRepoId}/records`);
-    if (!res.ok) throw new Error(`HTTP ${res.status}`);
-    records = await res.json();
+    const probe = await fetch(url, { headers: { Range: 'bytes=0-0' } });
+    if (probe.body) probe.body.cancel();
+    const size = Number((probe.headers.get('Content-Range') || '').split('/')[1]);
+    if (!probe.ok || !(size <= WAVE_MAX_BYTES)) return null;
+    const res = await fetch(url);
+    if (!res.ok) return null;
+    // An offline context decodes without the user gesture a live one needs.
+    return await new OfflineAudioContext(1, 1, 44100).decodeAudioData(await res.arrayBuffer());
   } catch (err) {
-    body.innerHTML = '<span class="detail-empty">// failed to load records</span>';
-    return;
+    return null;
   }
-  if (!records.length) {
-    body.innerHTML = '<span class="detail-empty">// no records</span>';
-    return;
+}
+
+// A clip's length read from its metadata alone, NaN if it can't be played.
+function audioDuration(url) {
+  return new Promise(resolve => {
+    const audio = new Audio();
+    audio.preload = 'metadata';
+    audio.addEventListener('loadedmetadata', () => resolve(audio.duration));
+    audio.addEventListener('error', () => resolve(NaN));
+    audio.src = url;
+  });
+}
+
+// One bar per slice of the clip, as tall as that slice's loudest sample
+// relative to the clip's loudest. Filled with currentColor, so a theme
+// colors the waveform through .media-wave.
+function waveBarsSvg(clip, bars = WAVE_BARS) {
+  const samples = clip.getChannelData(0);
+  const step = Math.max(1, Math.floor(samples.length / bars));
+  const peaks = [];
+  for (let bar = 0; bar < bars; bar++) {
+    let peak = 0;
+    const end = Math.min((bar + 1) * step, samples.length);
+    for (let i = bar * step; i < end; i++) peak = Math.max(peak, Math.abs(samples[i]));
+    peaks.push(peak);
   }
-  const tag = schema.view.kind === 'video' ? 'video' : 'audio';
-  body.innerHTML = '<div class="media-list">' + records.map(r => {
-    const key = escapeHtml(r[schema.key]);
-    return `<div class="media-item"><div class="media-caption">${key}</div>` +
-      `<${tag} controls src="/api/repositories/${activeRepoId}/records/${key}/media"></${tag}></div>`;
-  }).join('') + '</div>';
+  const loudest = Math.max(...peaks) || 1;
+  return peaks.map((peak, bar) => {
+    const height = Math.max(2, peak / loudest * 100);
+    return `<rect x="${bar + 0.15}" y="${50 - height / 2}" width="0.7" height="${height}" fill="currentColor"/>`;
+  }).join('');
 }
 
 // Replay mode renders a single active clip (the common case is one clip per
@@ -3741,11 +4326,10 @@ function renderMediaReplay(schema) {
   const body = document.getElementById('map-panel-body');
   const tag = schema.view.kind === 'video' ? 'video' : 'audio';
   const clip = activeClipFor(replayPos);
-  const key = escapeHtml(String(clip[schema.key]));
   body.innerHTML =
     '<div class="media-list"><div class="media-item">' +
-    `<div class="media-caption">${key}</div>` +
-    `<${tag} controls id="replay-media-el" src="/api/repositories/${activeRepoId}/records/${key}/media"></${tag}>` +
+    `<div class="media-caption">${escapeHtml(contentLabel(clip))}</div>` +
+    `<${tag} controls id="replay-media-el" src="${escapeHtml(mediaUrl(activeRepoId, clip[schema.key]))}"></${tag}>` +
     '</div></div>' +
     `<div class="floating-pagination">${renderTimelineBar()}</div>`;
   wireMediaReplay(schema);
@@ -3796,7 +4380,7 @@ function wireMediaReplay(schema) {
       const clip = activeClipFor(pos);
       if (String(clip[schema.key]) !== String(currentClip[schema.key])) {
         currentClip = clip;
-        el.src = `/api/repositories/${activeRepoId}/records/${String(clip[schema.key])}/media`;
+        el.src = mediaUrl(activeRepoId, clip[schema.key]);
         // el.currentTime is set once `loadedmetadata` fires for the new src.
       } else {
         el.currentTime = Math.min(Math.max(0, pos - clip[replayField]), el.duration || 0);
@@ -3809,43 +4393,305 @@ function wireMediaReplay(schema) {
 
 // ── Document view ─────────────────────────────────────────────────────────
 // Backs the "View Document" action on repository nodes whose DataView is a
-// DocumentView — one record per block, the declared JSON-shaped field
-// rendered as a collapsible tree (Postman-style) instead of a stringified
-// table cell; the record's other fields show as a small header above it.
+// DocumentView — a grid of cards, one per record, each previewing the start
+// of its document and opening it in #media-lightbox (see "Image view" above).
+// What a document is follows from the declared field's value: a JSON-shaped
+// one (a dict, say) is a collapsible tree, a string is text, and bytes are a
+// file, a PDF or plain text, fetched from the same .../media endpoint as an
+// image. Bytes arrive as null in the records themselves (see
+// odf.ui.data.to_json_safe_dict), which is how a file is told apart. Text
+// that parses as JSON is a tree too, and text that reads as Markdown is
+// rendered, see looksLikeMarkdown().
+
+// pdf.js draws PDFs. It is only fetched once a PDF is on screen.
+const PDFJS_URL = 'https://unpkg.com/pdfjs-dist@4.10.38/build/';
+// marked renders Markdown and DOMPurify strips what it lets through that
+// could run, since Markdown may carry raw HTML. Fetched with the first
+// Markdown document.
+const MARKED_URL = 'https://unpkg.com/marked@16.4.1/lib/marked.esm.js';
+const DOMPURIFY_URL = 'https://unpkg.com/dompurify@3.2.6/dist/purify.es.mjs';
+const DOC_SNIPPET_BYTES = 2048;             // how much of a text file a card's preview fetches
+const DOC_SNIPPET_LINES = 14;               // lines of a document that fit on a card
+const DOC_TEXT_MAX_BYTES = 2 * 1024 * 1024; // the reader shows this much of a text file, the rest through "Open original"
+
+let pdfJs = null;       // the pdf.js module, or the promise loading it
+let docLoadToken = 0;   // bumped whenever the reader is emptied, so a slow load can tell it was superseded
+let openPdf = null;     // the pdf.js document open in the reader
+let pdfPageObserver = null; // draws the open PDF's pages as they scroll into view
+let markdownRenderer = null; // text => safe HTML, or the promise loading it
+let openText = null;    // the text document open in the reader: { text, note, json, rendered, astral }
+
+function loadPdfJs() {
+  if (!pdfJs) {
+    pdfJs = import(PDFJS_URL + 'pdf.min.mjs').then(lib => {
+      lib.GlobalWorkerOptions.workerSrc = PDFJS_URL + 'pdf.worker.min.mjs';
+      return lib;
+    });
+    pdfJs.catch(() => { pdfJs = null; }); // offline, say: try again on the next PDF
+  }
+  return pdfJs;
+}
+
+function loadMarkdownRenderer() {
+  if (!markdownRenderer) {
+    markdownRenderer = Promise.all([import(MARKED_URL), import(DOMPURIFY_URL)]).then(([{ marked }, { default: purify }]) => {
+      // A link leaves the UI in place, and can't reach back into it.
+      purify.addHook('afterSanitizeAttributes', node => {
+        if (node.tagName !== 'A') return;
+        node.setAttribute('target', '_blank');
+        node.setAttribute('rel', 'noopener noreferrer');
+      });
+      return text => purify.sanitize(marked.parse(text, { gfm: true }), { FORBID_TAGS: ['style', 'form'] });
+    });
+    markdownRenderer.catch(() => { markdownRenderer = null; }); // offline, say: try again on the next document
+  }
+  return markdownRenderer;
+}
+
+// Whether text reads as Markdown, for a document whose repository declares no
+// name or type for it (see declaredMarkdown()). This weighs the syntax on its
+// lines: a heading, a code fence, a link or a table rule counts for more than
+// a list item or bold text, which plain text has too. The reader's source toggle is there for a wrong guess.
+function looksLikeMarkdown(text) {
+  if (text.startsWith('#!')) return false; // a script, whose comments would pass for headings
+  let score = 0;
+  for (const line of text.split('\n', 200)) {
+    if (/^#{1,6} \S/.test(line) || /^(```|~~~)/.test(line) || /^\|?\s*:?-{3,}:?\s*\|/.test(line)) score += 2;
+    else if (/\[[^\]]+\]\([^)\s]+\)/.test(line)) score += 2;
+    else if (/^\s*([-*+]|\d+\.) \S/.test(line) || /^> /.test(line) || /\*\*[^*\s][^*]*\*\*/.test(line)) score += 1;
+    if (score >= 4) return true;
+  }
+  return false;
+}
 
 async function showDocumentView(repoId) {
   activeRepoId = repoId;
   const schema = repoSchemas[repoId];
   setMapMode('document');
+  closeLightbox();
   document.getElementById('map-panel-title').textContent = `${schema.label} · documents`;
-  await refreshDocumentView();
+  await Promise.all([refreshDocumentView(), loadImageAnnotations(), loadRecordClasses()]);
 }
 
 async function refreshDocumentView() {
-  const schema = repoSchemas[activeRepoId];
-  const body = document.getElementById('map-panel-body');
-  let records;
+  const grid = await renderMediaGrid(() => '<div class="doc-preview"></div>');
+  if (grid) loadDocumentPreviews(grid);
+}
+
+function docSnippet(text) {
+  return text.replace(/\uFFFD+$/, '').split('\n', DOC_SNIPPET_LINES).join('\n');
+}
+
+// Fills in the cards: the inline documents at once, then the files one at a
+// time, stopping once the grid has been replaced.
+async function loadDocumentPreviews(grid) {
+  const repoId = activeRepoId;
+  const schema = repoSchemas[repoId];
+  const files = [];
+  for (const tile of grid.querySelectorAll('.media-tile')) {
+    const value = lightboxRecords[tile.dataset.index][schema.view.field];
+    if (value === null || value === undefined) files.push(tile);
+    else tile.querySelector('.doc-preview').textContent =
+      docSnippet(typeof value === 'string' ? value : JSON.stringify(value, null, 2));
+  }
+  for (const tile of files) {
+    await loadFilePreview(tile, mediaUrl(repoId, lightboxRecords[tile.dataset.index][schema.key]));
+    if (!grid.isConnected) return;
+  }
+}
+
+async function loadFilePreview(tile, url) {
+  const preview = tile.querySelector('.doc-preview');
   try {
-    const res = await fetch(`/api/repositories/${activeRepoId}/records`);
-    if (!res.ok) throw new Error(`HTTP ${res.status}`);
-    records = await res.json();
+    const res = await fetch(url, { headers: { Range: `bytes=0-${DOC_SNIPPET_BYTES - 1}` } });
+    const type = res.headers.get('Content-Type') || '';
+    if (res.ok && type.startsWith('text/')) {
+      preview.textContent = docSnippet(await res.text());
+      return;
+    }
+    if (res.body) res.body.cancel();
+    if (!res.ok || !type.startsWith('application/pdf')) throw new Error(type);
+    const pdf = await (await loadPdfJs()).getDocument({ url }).promise;
+    try {
+      const canvas = document.createElement('canvas');
+      await drawPdfPage(await pdf.getPage(1), canvas, 280 * (window.devicePixelRatio || 1));
+      preview.classList.add('doc-preview-page');
+      preview.replaceChildren(canvas);
+      tile.querySelector('.media-duration').textContent = pdf.numPages === 1 ? '1 page' : `${pdf.numPages} pages`;
+    } finally {
+      pdf.destroy();
+    }
   } catch (err) {
-    body.innerHTML = '<span class="detail-empty">// failed to load records</span>';
+    showTileFallback(preview, url);
+  }
+}
+
+// Draws a PDF page onto `canvas`, `width` device pixels wide.
+async function drawPdfPage(page, canvas, width) {
+  const viewport = page.getViewport({ scale: width / page.getViewport({ scale: 1 }).width });
+  canvas.width = Math.round(viewport.width);
+  canvas.height = Math.round(viewport.height);
+  await page.render({ canvasContext: canvas.getContext('2d'), viewport }).promise;
+}
+
+function unloadDocumentReader() {
+  docLoadToken++;
+  if (pdfPageObserver) pdfPageObserver.disconnect();
+  pdfPageObserver = null;
+  if (openPdf) openPdf.destroy();
+  openPdf = null;
+  openText = null;
+  document.getElementById('media-lightbox-source').hidden = true;
+  const reader = document.getElementById('media-lightbox-doc');
+  reader.hidden = true;
+  reader.innerHTML = '';
+}
+
+// The value of text that is a JSON object or array, undefined for any other.
+function parseJsonDocument(text) {
+  if (!/^\s*[{[]/.test(text)) return undefined;
+  try {
+    return JSON.parse(text);
+  } catch (err) {
+    return undefined;
+  }
+}
+
+// Shows a text document in the reader: as a tree if it is JSON, rendered if
+// it is Markdown, or as its source either way while the tool last picked for
+// text is the one that labels it. `note` is HTML to put under it, and
+// `markdown` whether it is declared Markdown (see declaredMarkdown()).
+function showDocumentText(text, note, markdown) {
+  const json = parseJsonDocument(text);
+  const labelling = annotationsEnabled && lightboxTools.text === 'span';
+  // `astral`: whether it has characters that take two UTF-16 units, see unitsToPoints().
+  openText = { text, note, json, rendered: !labelling && (json !== undefined || (markdown ?? looksLikeMarkdown(text))), astral: /[\uD800-\uDFFF]/.test(text) };
+  renderDocumentText();
+}
+
+async function renderDocumentText() {
+  const token = docLoadToken;
+  const doc = openText;
+  const reader = document.getElementById('media-lightbox-doc');
+  const toggle = document.getElementById('media-lightbox-source');
+  let html = null;
+  if (doc.rendered && doc.json !== undefined) {
+    html = `<div class="doc-tree">${renderJsonTree(doc.json)}</div>`;
+  } else if (doc.rendered) {
+    try {
+      html = `<div class="doc-markdown">${(await loadMarkdownRenderer())(doc.text)}</div>`;
+    } catch (err) {
+      doc.rendered = false; // the renderer couldn't be fetched: the source is still readable
+    }
+    if (token !== docLoadToken) return;
+  }
+  reader.innerHTML = (html === null ? '<div class="doc-source"><pre class="doc-text"></pre></div>' : html) + doc.note;
+  if (html === null) renderDocumentSource();
+  const label = doc.rendered ? 'View source' : (doc.json !== undefined ? 'View as tree' : 'View as Markdown');
+  toggle.title = label;
+  toggle.setAttribute('aria-label', label);
+  toggle.setAttribute('aria-pressed', !doc.rendered);
+  toggle.hidden = false;
+  renderLightboxRail();
+}
+
+document.getElementById('media-lightbox-source').addEventListener('click', () => {
+  if (!openText) return;
+  closeImageLabelForm();
+  selectedBox = -1;
+  openText.rendered = !openText.rendered;
+  if (openText.rendered && lightboxTools.text === 'span') {
+    // Leaving the source puts the tool that needs it down.
+    lightboxTools.text = 'select';
+    saveLightboxTools();
+  }
+  renderDocumentText();
+});
+
+function showDocumentError(detail) {
+  const error = document.getElementById('media-lightbox-error');
+  document.getElementById('media-lightbox-doc').hidden = true;
+  error.innerHTML = mediaFallbackHtml(detail);
+  error.hidden = false;
+}
+
+// Shows a record's document in the lightbox, see openLightbox().
+async function openDocument(record, url) {
+  const token = docLoadToken;
+  const reader = document.getElementById('media-lightbox-doc');
+  const value = record[repoSchemas[activeRepoId].view.field];
+  reader.hidden = false;
+  reader.scrollTop = 0;
+  if (value !== null && value !== undefined) {
+    // Held in the record itself, so there is no file to open or download.
+    document.getElementById('media-lightbox-open').hidden = true;
+    document.getElementById('media-lightbox-download').hidden = true;
+    if (typeof value === 'string') showDocumentText(value, '', declaredMarkdown(record));
+    else reader.innerHTML = `<div class="doc-tree">${renderJsonTree(value)}</div>`;
     return;
   }
-  if (!records.length) {
-    body.innerHTML = '<span class="detail-empty">// no records</span>';
-    return;
+  reader.innerHTML = '<span class="detail-empty">// loading</span>';
+  let type = '';
+  try {
+    const res = await fetch(url, { headers: { Range: `bytes=0-${DOC_TEXT_MAX_BYTES - 1}` } });
+    type = res.ok ? (res.headers.get('Content-Type') || '') : `HTTP ${res.status}`;
+    if (res.ok && type.startsWith('text/')) {
+      const text = await res.text();
+      if (token !== docLoadToken) return;
+      const size = Number((res.headers.get('Content-Range') || '').split('/')[1]);
+      showDocumentText(text.replace(/\uFFFD+$/, ''),
+        size > DOC_TEXT_MAX_BYTES ? '<div class="doc-note">Only the start of this document is shown. Open the original for the rest.</div>' : '',
+        declaredMarkdown(record));
+      return;
+    }
+    if (res.body) res.body.cancel();
+    if (!res.ok || !type.startsWith('application/pdf')) throw new Error(type);
+    type = '';
+    await openPdfDocument(reader, url, token);
+  } catch (err) {
+    if (token === docLoadToken) showDocumentError(type);
   }
-  const field = schema.view.field;
-  body.innerHTML = '<div class="doc-list">' + records.map(r => {
-    const header = Object.entries(r)
-      .filter(([k]) => k !== field)
-      .map(([k, v]) => `<span><b>${escapeHtml(k)}</b>: ${escapeHtml(v ?? '')}</span>`)
-      .join('');
-    return `<div class="doc-record"><div class="doc-header">${header}</div>` +
-      `<div class="doc-tree">${renderJsonTree(r[field])}</div></div>`;
-  }).join('') + '</div>';
+}
+
+// Lays out one canvas per page, each drawn when it scrolls into view, so a
+// long PDF opens as fast as a short one.
+async function openPdfDocument(reader, url, token) {
+  const lib = await loadPdfJs();
+  const pdf = await lib.getDocument({ url }).promise;
+  if (token !== docLoadToken) { pdf.destroy(); return; }
+  openPdf = pdf;
+  renderLightboxRail();
+  const first = (await pdf.getPage(1)).getViewport({ scale: 1 });
+  if (token !== docLoadToken) return;
+  pdfPageObserver = new IntersectionObserver(entries => {
+    for (const entry of entries) {
+      if (!entry.isIntersecting) continue;
+      pdfPageObserver.unobserve(entry.target);
+      const canvas = entry.target;
+      pdf.getPage(Number(canvas.dataset.page))
+        .then(page => {
+          if (token !== docLoadToken) return;
+          addPageOverlay(canvas.parentElement, page);
+          return drawPdfPage(page, canvas, canvas.clientWidth * (window.devicePixelRatio || 1));
+        })
+        .catch(() => {}); // the document was closed mid-draw
+    }
+  }, { root: reader, rootMargin: '600px 0px' });
+  reader.innerHTML = '';
+  for (let number = 1; number <= pdf.numPages; number++) {
+    const canvas = document.createElement('canvas');
+    canvas.className = 'doc-page';
+    canvas.dataset.page = number;
+    // Until it is drawn, a page takes the first page's shape.
+    canvas.width = first.width;
+    canvas.height = first.height;
+    const wrap = document.createElement('div');
+    wrap.className = 'doc-page-wrap';
+    wrap.dataset.page = number;
+    wrap.appendChild(canvas);
+    reader.appendChild(wrap);
+    pdfPageObserver.observe(canvas);
+  }
 }
 
 function renderJsonTree(value) {
@@ -3867,12 +4713,208 @@ function renderJsonTree(value) {
   return `<span class="doc-scalar">${escapeHtml(String(value))}</span>`;
 }
 
+// ── Document annotations ──────────────────────────────────────────────────
+// Labels on the document open in the lightbox, held in the same state and
+// saved through the same endpoint as the boxes of "Image annotations" above.
+// A PDF takes boxes, drawn on a page as they are on an image and held in PDF
+// points. Text takes spans: with the "span" tool picked, selecting some of it
+// opens the label input. A span is held as offsets into the text, so it is drawn, and can only be
+// made, where the text is shown as written, which for a Markdown or JSON
+// document is its source. A document held in the record as a JSON value (a
+// dict, say) has no text to count into, and takes none.
+
+function renderDocumentAnnotations() {
+  if (openPdf) {
+    for (const wrap of document.querySelectorAll('#media-lightbox-doc .doc-page-wrap[data-width]')) {
+      renderSurfaceBoxes(pageSurface(wrap));
+    }
+  } else if (openText && !openText.rendered) {
+    renderDocumentSource();
+  }
+}
+
+// The surface (see surfaceOf) of a PDF page that has been given its overlay.
+function pageSurface(wrap) {
+  const overlay = wrap.querySelector('.image-annotations');
+  return {
+    overlay,
+    boxes: overlay.firstElementChild,
+    width: Number(wrap.dataset.width),
+    height: Number(wrap.dataset.height),
+    page: Number(wrap.dataset.page),
+  };
+}
+
+// Lays the overlay boxes are drawn on over a PDF page, once the page's own
+// size is known, which is when it is about to be drawn.
+function addPageOverlay(wrap, page) {
+  if (!annotationsEnabled || wrap.dataset.width) return;
+  const size = page.getViewport({ scale: 1 });
+  wrap.dataset.width = Math.round(size.width * 100) / 100;
+  wrap.dataset.height = Math.round(size.height * 100) / 100;
+  const overlay = document.createElement('div');
+  overlay.className = 'image-annotations';
+  overlay.appendChild(document.createElement('div'));
+  wrap.appendChild(overlay);
+  wireBoxOverlay(overlay);
+  renderSurfaceBoxes(pageSurface(wrap));
+}
+
+// Offsets in the annotations file count code points, as a Python str is
+// indexed, where a JS string counts UTF-16 units. The two only differ in text
+// with characters outside the BMP (openText.astral).
+function unitsToPoints(units) {
+  return openText.astral ? [...openText.text.slice(0, units)].length : units;
+}
+
+function pointsToUnits(points) {
+  if (!openText.astral) return points;
+  let units = 0;
+  for (const ch of openText.text) {
+    if (points-- <= 0) break;
+    units += ch.length;
+  }
+  return units;
+}
+
+// Fills the reader's source <pre> with the open text, its spans as <mark>s.
+// It is built from nodes rather than HTML, which would drop a leading newline
+// and fold each CRLF into one character, moving every offset after it.
+function renderDocumentSource() {
+  const pre = document.querySelector('#media-lightbox-doc .doc-text');
+  if (!pre) return;
+  const text = openText.text;
+  const spans = imageBoxes().map((span, i) => ({ span, i }));
+  if (pendingBox && pendingBox.type === 'span') spans.push({ span: pendingBox, i: -1 });
+  const nodes = [];
+  let at = 0;
+  for (const { span, i } of spans.filter(({ span }) => span.type === 'span').sort((a, b) => a.span.start - b.span.start)) {
+    const start = pointsToUnits(span.start);
+    const end = pointsToUnits(span.end);
+    if (start < at || end > text.length) continue; // the text is no longer the one this was drawn on
+    const mark = document.createElement('mark');
+    mark.className = 'doc-span' + (i < 0 ? ' draft' : i === selectedBox ? ' selected' : '');
+    mark.style.setProperty('--box-color', boxColor(i < 0 ? lastBoxLabel : span.label));
+    mark.append(text.slice(start, end));
+    if (i >= 0) {
+      mark.dataset.index = i;
+      const label = document.createElement('span');
+      label.className = 'doc-span-label';
+      label.title = 'Change label';
+      label.textContent = span.label;
+      mark.append(label);
+    }
+    if (i >= 0 && i === selectedBox) {
+      const remove = document.createElement('button');
+      remove.type = 'button';
+      remove.className = 'doc-span-delete';
+      remove.title = 'Delete (Del)';
+      remove.textContent = '\u00d7';
+      mark.append(remove);
+    }
+    nodes.push(text.slice(at, start), mark);
+    at = end;
+  }
+  nodes.push(text.slice(at));
+  pre.replaceChildren(...nodes);
+}
+
+// The offset into the open text of a position in the source <pre>, as a
+// selection gives it. The labels drawn on the spans are not part of the text.
+function sourceOffset(pre, node, offset) {
+  const before = document.createRange();
+  before.setStart(pre, 0);
+  before.setEnd(node, offset);
+  const walker = document.createTreeWalker(pre, NodeFilter.SHOW_TEXT, {
+    acceptNode: text => text.parentElement.closest('.doc-span-label, .doc-span-delete')
+      ? NodeFilter.FILTER_REJECT : NodeFilter.FILTER_ACCEPT,
+  });
+  let total = 0;
+  for (let text = walker.nextNode(); text; text = walker.nextNode()) {
+    if (text === node) return total + offset;
+    if (!before.intersectsNode(text)) break;
+    total += text.length;
+  }
+  return total;
+}
+
+function openSpanLabelForm(value) {
+  const host = document.querySelector('#media-lightbox-doc .doc-source');
+  const mark = host.querySelector(pendingBox ? '.doc-span.draft' : `.doc-span[data-index="${relabelBox}"]`);
+  if (!mark) return closeImageLabelForm();
+  const rect = mark.getBoundingClientRect();
+  const origin = host.getBoundingClientRect();
+  openLabelFormIn(host, rect.left - origin.left, rect.bottom - origin.top + 4, value);
+}
+
+// Turns the selection into a span waiting for its label, less the white
+// space at its ends. Spans don't overlap, so one that would is refused.
+function startSpanFromSelection(pre, range) {
+  const text = openText.text;
+  let start = sourceOffset(pre, range.startContainer, range.startOffset);
+  let end = sourceOffset(pre, range.endContainer, range.endOffset);
+  while (start < end && /\s/.test(text[start])) start++;
+  while (end > start && /\s/.test(text[end - 1])) end--;
+  getSelection().removeAllRanges();
+  closeImageLabelForm();
+  if (start === end) return;
+  const span = { type: 'span', start: unitsToPoints(start), end: unitsToPoints(end), text: text.slice(start, end) };
+  if (imageBoxes().some(other => other.type === 'span' && span.start < other.end && other.start < span.end)) {
+    addLog('That text already has a label on part of it', ACCENT.alert);
+    return;
+  }
+  selectedBox = -1;
+  pendingBox = span;
+  renderDocumentSource();
+  openImageLabelForm();
+}
+
+// The source <pre> and the range selected in it, null when nothing in it is.
+function sourceSelection() {
+  const pre = document.querySelector('#media-lightbox-doc .doc-text');
+  const selection = getSelection();
+  if (!pre || selection.isCollapsed || !selection.rangeCount) return null;
+  const range = selection.getRangeAt(0);
+  return pre.contains(range.commonAncestorContainer) ? { pre, range } : null;
+}
+
+// With the "span" tool, a selection made in the source becomes a span
+// wherever the pointer is let go; with "select" it is left as it is, to be
+// copied. Short of one, a click selects the span it is on, or acts on that
+// span's label or delete button.
+document.addEventListener('mouseup', e => {
+  if (!annotationsEnabled || lightboxIndex < 0 || !openText || openText.rendered) return;
+  const pre = document.querySelector('#media-lightbox-doc .doc-text');
+  if (!pre || !(e.target instanceof Element) || e.target.closest('.image-label-form')) return;
+  const selected = sourceSelection();
+  if (selected) {
+    if (activeTool() === 'span') startSpanFromSelection(pre, selected.range);
+    return;
+  }
+  if (!pre.contains(e.target)) return;
+  const dismissed = closeImageLabelForm();
+  const mark = e.target.closest('.doc-span[data-index]');
+  const index = mark ? Number(mark.dataset.index) : -1;
+  if (index >= 0 && e.target.closest('.doc-span-delete')) return deleteImageBox(index);
+  const onLabel = index >= 0 && e.target.closest('.doc-span-label');
+  if (index === selectedBox && !dismissed && !onLabel) return;
+  selectedBox = index;
+  renderDocumentSource();
+  if (onLabel) {
+    relabelBox = index;
+    openImageLabelForm();
+  }
+});
+
 // ── Timeseries view ───────────────────────────────────────────────────────
 // Backs the "View Timeline" action on repository nodes whose DataView is a
 // TimeseriesView — a line chart plotting every other numeric entity field
 // against the declared timestamp field. Plain inline SVG, no charting
 // dependency (see ChartProtocol/showChartView above for anything fancier —
-// that's a component-authored, server-rendered alternative).
+// that's a component-authored, server-rendered alternative). Time ranges and
+// points can be labelled on it (see "Timeseries annotations" below).
+
+let tsPlot = null; // the drawn chart's time axis, see renderTimeseriesChart; null when no chart is drawn
 
 async function showTimeseriesView(repoId) {
   enterRepoView(repoId);
@@ -3881,7 +4923,11 @@ async function showTimeseriesView(repoId) {
   document.getElementById('map-panel-title').textContent = `${schema.label} · timeline`;
   renderModeSwitcher(schema, 'timeseries');
   renderReplayToggle(schema);
-  await refreshTimeseriesView();
+  selectedBox = -1;
+  pendingBox = null;
+  relabelBox = -1;
+  boxDrag = null;
+  await Promise.all([refreshTimeseriesView(), loadImageAnnotations()]);
 }
 
 async function refreshTimeseriesView() {
@@ -3893,7 +4939,7 @@ async function refreshTimeseriesView() {
   }
   let records;
   try {
-    const res = await fetch(`/api/repositories/${activeRepoId}/records?${recordsQuery()}`);
+    const res = await fetch(`${apiPath(activeRepoId)}/records?${recordsQuery()}`);
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
     records = await res.json();
     tableTotal = Number(res.headers.get('X-Total-Count') ?? records.length);
@@ -3933,6 +4979,8 @@ function renderTsBottomBar(schema) {
 // and persists across page/mode switches for the same repository.
 function renderTimeseriesChart(schema, records) {
   const body = document.getElementById('map-panel-body');
+  if (body.contains(imageLabelForm)) closeImageLabelForm(); // out of the chart before it is redrawn
+  tsPlot = null;
   if (tsHiddenFieldsRepoId !== activeRepoId) {
     tsHiddenFields = new Set();
     tsHiddenFieldsRepoId = activeRepoId;
@@ -3976,11 +5024,26 @@ function renderTimeseriesChart(schema, records) {
     return `<label class="ts-legend-item${hidden ? ' hidden' : ''}" data-field="${escapeHtml(name)}" title="Click to ${hidden ? 'show' : 'hide'}">` +
       `<span class="ts-swatch" style="background:${colors[i % colors.length]}"></span>${escapeHtml(name)}</label>`;
   }).join('');
+  const annotating = viewAnnotating() && visibleFields.length > 0;
   const chart = visibleFields.length
-    ? `<svg class="timeseries-chart" viewBox="0 0 ${w} ${h}" preserveAspectRatio="none">${series}</svg>`
+    ? '<div class="ts-plot">' +
+      `<svg class="timeseries-chart" viewBox="0 0 ${w} ${h}" preserveAspectRatio="none">${series}</svg>` +
+      '<div class="ts-annotations"><div class="ts-marks"></div></div></div>'
     : '<span class="detail-empty">// select a column to plot</span>';
-  body.innerHTML = `<div class="ts-legend">${legend}</div>` + chart +
+  body.innerHTML = `<div class="ts-legend">${legend}${annotating ? TS_TOOLS_HTML : ''}</div>` + chart +
     `<div class="floating-pagination">${bottomBar.html}</div>`;
+  if (visibleFields.length) {
+    tsPlot = {
+      xMin, xMax, w, pad, x: xScale,
+      points: sorted.map((r, idx) => ({ at: xs[idx], key: String(r[schema.key]) })),
+    };
+    if (annotating) {
+      const overlay = body.querySelector('.ts-annotations');
+      wireTimeMarks(overlay, { timeAt: e => tsTimeAt(e, overlay), pointAt: tsPointAt, tool: () => tsTool });
+    }
+    renderTsTools();
+    renderTsAnnotations();
+  }
 
   body.querySelectorAll('.ts-legend-item').forEach(el => {
     el.addEventListener('click', () => {
@@ -3993,9 +5056,189 @@ function renderTimeseriesChart(schema, records) {
   bottomBar.wire();
 }
 
+// ── Timeseries annotations ────────────────────────────────────────────────
+// Labelled time ranges and points marked on the chart, for the simple cases a
+// one-off script would otherwise be written for: a stretch to train on or to
+// leave out, an event, a bad reading. They belong to the repository's time
+// axis rather than to one record, so they are saved as one list through
+// PUT /api/repositories/{id}/annotations (see odf.ui.annotations), a range as
+// its start and end in the timestamp field's own units and a point as the
+// timestamp and key of the record nearest the click. A mark covers every
+// series, and shows on each page of records whose time span it falls in.
+// They share the state and the label input of "Image annotations" above, and
+// like boxes are not moved or resized: a wrong one is deleted and made again.
+
+const TS_TOOL_KEY = 'odf-ui-ts-tool';
+const TS_TOOL_KEYS = { v: 'select', r: 'range', p: 'point' };
+const TS_TOOL_HINTS = {
+  select: 'Pick a tool to add a label',
+  range: 'Drag across the chart to label a range',
+  point: 'Click the chart to label the nearest record',
+};
+const TS_TOOLS_HTML = '<span class="ts-tools" role="toolbar" aria-label="Tools"><span class="ts-hint"></span>' +
+  '<button class="lightbox-tool" data-tool="select" title="Select (V)" aria-label="Select"><svg viewBox="0 0 16 16"><path d="M3.5 2.5 7.6 13l1.5-4.4 4.4-1.5z"/></svg></button>' +
+  '<button class="lightbox-tool" data-tool="range" title="Label a range (R)" aria-label="Label a range"><svg viewBox="0 0 16 16"><path d="M4 2.5v11M12 2.5v11M4 8h8"/></svg></button>' +
+  '<button class="lightbox-tool" data-tool="point" title="Label a point (P)" aria-label="Label a point"><svg viewBox="0 0 16 16"><path d="M8 2.5v3.5M8 10v3.5"/><circle cx="8" cy="8" r="2"/></svg></button>' +
+  '</span>';
+
+let tsTool = 'select'; // a per-browser preference, like lightboxTools
+
+function loadTsTool() {
+  try {
+    const tool = localStorage.getItem(TS_TOOL_KEY);
+    if (tool in TS_TOOL_HINTS) tsTool = tool;
+  } catch {}
+}
+
+// Whether the chart, or the map, takes new labels. A replay redraws it frame
+// by frame, so it only shows the ones already made.
+function viewAnnotating() {
+  return annotationsEnabled && !(replayMode && replayRepoId === activeRepoId);
+}
+
+function setTsTool(tool) {
+  closeImageLabelForm();
+  tsTool = tool;
+  try { localStorage.setItem(TS_TOOL_KEY, tool); } catch {}
+  renderTsTools();
+}
+
+// Shows the active tool pressed, says beside it how it is used, and hands
+// the chart's presses to it.
+function renderTsTools() {
+  const tools = document.querySelector('#map-panel-body .ts-tools');
+  if (!tools) return;
+  for (const button of tools.querySelectorAll('[data-tool]')) {
+    button.setAttribute('aria-pressed', button.dataset.tool === tsTool);
+  }
+  tools.querySelector('.ts-hint').textContent = TS_TOOL_HINTS[tsTool];
+  document.querySelector('#map-panel-body .ts-annotations').dataset.tool = tsTool;
+}
+
+// Where a mark starts on the time axis, which is what the list is ordered by.
+function tsMarkStart(mark) {
+  return mark.type === 'range' ? mark.start : mark.at;
+}
+
+function renderTsAnnotations() {
+  const layer = document.querySelector('#map-panel-body .ts-marks');
+  if (!layer || !tsPlot) return;
+  renderTimeMarks(layer, tsPlot.xMin, tsPlot.xMax, time => tsPlot.x(time) / tsPlot.w * 100);
+}
+
+// Draws the open marks into `layer`, over a chart or a clip's strip, in
+// percent of its width so they follow it as it resizes: the part of each that
+// falls between the times `xMin` and `xMax` it shows, with `pctAt` placing a
+// time. Ranges are painted widest first and points last, so a mark inside a
+// range stays selectable.
+function renderTimeMarks(layer, xMin, xMax, pctAt) {
+  const pct = t => pctAt(Math.min(Math.max(t, xMin), xMax));
+  const span = mark => mark.type === 'range' ? mark.end - mark.start : 0;
+  const markHtml = (mark, index) => {
+    const draft = index < 0;
+    const from = tsMarkStart(mark);
+    const to = from + span(mark);
+    if (to < xMin || from > xMax) return '';
+    const style = `left:${pct(from)}%;` + (mark.type === 'range' ? `width:${pct(to) - pct(from)}%;` : '') +
+      `--box-color:${boxColor(draft ? lastBoxLabel : mark.label)}`;
+    const state = draft ? ' draft' : index === selectedBox ? ' selected' : '';
+    const head = draft ? '' : '<span class="ts-mark-head">' +
+      `<span class="ts-mark-label" title="Change label">${escapeHtml(mark.label)}</span>` +
+      (index === selectedBox ? '<button type="button" class="ts-mark-delete" title="Delete (Del)">&times;</button>' : '') +
+      '</span>';
+    return `<div class="ts-mark ts-${mark.type}${state}"${draft ? '' : ` data-index="${index}"`} style="${style}">${head}</div>`;
+  };
+  const widestFirst = imageBoxes().map((mark, index) => ({ mark, index })).sort((a, b) => span(b.mark) - span(a.mark));
+  layer.innerHTML = widestFirst.map(({ mark, index }) => markHtml(mark, index)).join('') +
+    (pendingBox ? markHtml(pendingBox, -1) : '');
+}
+
+// The time under a pointer, kept within the time span of the records shown.
+function tsTimeAt(e, overlay) {
+  const rect = overlay.getBoundingClientRect();
+  const { xMin, xMax, w, pad } = tsPlot;
+  const x = (e.clientX - rect.left) / rect.width * w;
+  return Math.min(Math.max(xMin + (x - pad) / (w - 2 * pad) * (xMax - xMin), xMin), xMax);
+}
+
+// A point on the record shown whose timestamp is nearest `time`.
+function tsPointAt(time) {
+  const nearest = tsPlot.points.reduce((a, b) => Math.abs(b.at - time) < Math.abs(a.at - time) ? b : a);
+  return { type: 'point', at: nearest.at, key: nearest.key };
+}
+
+function openTsLabelForm(mark, value) {
+  const overlay = document.querySelector('#map-panel-body .ts-annotations');
+  const at = Math.min(Math.max(tsMarkStart(mark), tsPlot.xMin), tsPlot.xMax);
+  openLabelFormIn(overlay, tsPlot.x(at) / tsPlot.w * overlay.clientWidth, 24, value);
+}
+
+// Takes the presses on `overlay`, a chart's or a clip's strip. `surface` says
+// what time a pointer is over (`timeAt`), what point a click at a time makes
+// (`pointAt`) and the tool in use (`tool`). A press is a click until the
+// pointer travels BOX_MIN_DRAG sideways, when with the "range" tool it becomes
+// a new range. A click selects the mark under it, or acts on its label or
+// delete button. With the "point" tool a click anywhere but on a point or a
+// mark's label places a point, so one can be put inside a range. A click that
+// does none of these goes to `onEmptyClick`, if the surface has one.
+function wireTimeMarks(overlay, surface) {
+  overlay.addEventListener('pointerdown', e => {
+    if (e.button !== 0 || e.target.closest('.image-label-form')) return;
+    e.preventDefault();
+    const dismissed = closeImageLabelForm();
+    boxDrag = { from: surface.timeAt(e), clientX: e.clientX, target: e.target, drawing: false, dismissed };
+    overlay.setPointerCapture(e.pointerId);
+  });
+  overlay.addEventListener('pointermove', e => {
+    if (!boxDrag || surface.tool() !== 'range') return;
+    if (!boxDrag.drawing && Math.abs(e.clientX - boxDrag.clientX) < BOX_MIN_DRAG) return;
+    boxDrag.drawing = true;
+    selectedBox = -1;
+    const to = surface.timeAt(e);
+    pendingBox = to === boxDrag.from ? null
+      : { type: 'range', start: Math.min(boxDrag.from, to), end: Math.max(boxDrag.from, to) };
+    renderImageBoxes();
+  });
+  overlay.addEventListener('pointerup', () => {
+    const drag = boxDrag;
+    if (!drag) return;
+    boxDrag = null;
+    if (drag.drawing) {
+      if (pendingBox) openImageLabelForm();
+      return;
+    }
+    const mark = drag.target.closest('.ts-mark[data-index]');
+    const tool = surface.tool();
+    const onMark = mark && (tool !== 'point' || mark.classList.contains('ts-point') || drag.target.closest('.ts-mark-head'));
+    const index = onMark ? Number(mark.dataset.index) : -1;
+    if (index >= 0 && drag.target.closest('.ts-mark-delete')) return deleteImageBox(index);
+    selectedBox = index;
+    if (index < 0 && tool === 'point' && !drag.dismissed) pendingBox = surface.pointAt(drag.from);
+    renderImageBoxes();
+    if (pendingBox) return openImageLabelForm();
+    if (index >= 0 && drag.target.closest('.ts-mark-label')) {
+      relabelBox = index;
+      openImageLabelForm();
+    } else if (index < 0 && !drag.dismissed && surface.onEmptyClick) {
+      surface.onEmptyClick(drag.from);
+    }
+  });
+  overlay.addEventListener('pointercancel', () => {
+    boxDrag = null;
+    pendingBox = null;
+    renderImageBoxes();
+  });
+}
+
+document.getElementById('map-panel-body').addEventListener('click', e => {
+  const button = e.target.closest('.ts-tools [data-tool]');
+  if (button) setTsTool(button.dataset.tool);
+});
+loadTsTool();
+
 // ── Logs view ─────────────────────────────────────────────────────────────
 // Backs the "Show Logs" action, present on every node. Reads
-// GET /api/components/{id}/logs, which tails that component's own log file
+// GET /api/{collection}/{name}/logs, which tails that component's own log file
 // (see odf.logger.LogManager — every component gets one automatically).
 // Polls while active so a running Service's logs update live.
 
@@ -4021,7 +5264,7 @@ async function refreshLogs() {
   const body = document.getElementById('map-panel-body');
   let entries;
   try {
-    const res = await fetch(`/api/components/${activeLogComponentId}/logs`);
+    const res = await fetch(`${apiPath(activeLogComponentId)}/logs`);
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
     entries = await res.json();
   } catch (err) {
@@ -4054,7 +5297,7 @@ function renderLogs(entries) {
 // ── Details view ─────────────────────────────────────────────────────────
 // Backs the "Details" action, present on nodes whose node.details flag came
 // back true from GET /api/topology (i.e. isinstance(instance,
-// DetailsProtocol) server-side). Reads GET /api/components/{id}/details —
+// DetailsProtocol) server-side). Reads GET /api/{collection}/{name}/details —
 // a plain key/value dict the component itself returns from details(). A
 // value that looks like a URL is rendered as a clickable link; the
 // framework itself makes no such distinction, this is UI-only sugar.
@@ -4073,7 +5316,7 @@ async function refreshDetails() {
   const body = document.getElementById('map-panel-body');
   let entries;
   try {
-    const res = await fetch(`/api/components/${activeDetailsComponentId}/details`);
+    const res = await fetch(`${apiPath(activeDetailsComponentId)}/details`);
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
     entries = await res.json();
   } catch (err) {
@@ -4106,7 +5349,7 @@ function renderDetails(entries) {
 // Backs the "View Chart" action, present on nodes whose node.chart flag came
 // back true from GET /api/topology (i.e. isinstance(instance, ChartProtocol)
 // server-side). Points an iframe straight at GET
-// /api/components/{id}/chart — the component builds its own self-contained
+// /api/{collection}/{name}/chart — the component builds its own self-contained
 // HTML there (inline image/JS, no external refs) using whatever Python
 // charting library it likes, so the framework itself never needs a JS
 // charting dependency.
@@ -4116,7 +5359,7 @@ function showChartView(id) {
   setMapMode('chart');
   document.getElementById('map-panel-title').textContent = `${node.label} · chart`;
   document.getElementById('map-panel-body').innerHTML =
-    `<iframe id="chart-frame" src="/api/components/${id}/chart"></iframe>`;
+    `<iframe id="chart-frame" src="${apiPath(id)}/chart"></iframe>`;
 }
 
 // ── Init ──────────────────────────────────────────────────────────────────
@@ -4143,6 +5386,7 @@ async function loadUiExtensions() {
   } catch (err) {
     console.error('Failed to load UI extensions', err);
   }
+  annotationsEnabled = Boolean(ext.annotations);
 
   if (ext.logo) {
     const mark = document.getElementById('brand-mark');
@@ -4261,7 +5505,6 @@ async function init() {
   });
 }
 
-init();
-</script>
-</body>
-</html>
+// Deferred until the scripts after this one — the icon group files and
+// theme.js — have run, so the first paint already has every built-in icon.
+document.addEventListener('DOMContentLoaded', init);

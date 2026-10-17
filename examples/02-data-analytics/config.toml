@@ -1,8 +1,8 @@
 [project]
 name = "data-analytics-example"
 
-[sqlite]
+[component.sqlite]
 path = "app.db"
 
-[summarize-readings]
+[task.summarize-readings]
 report-path = "reports/summary.json"

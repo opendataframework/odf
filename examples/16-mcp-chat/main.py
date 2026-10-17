@@ -53,14 +53,14 @@ async def drive_via_mcp() -> None:
             tools = await session.list_tools()
             print(f"Tools exposed over MCP: {[t.name for t in tools.tools]}\n")
 
-            result = await session.call_tool("execute_task", {"name": "TriageTickets"})
-            print(f"execute_task(TriageTickets) -> {result.content[0].text}")
+            result = await session.call_tool("execute_task", {"key": "task.triage-tickets"})
+            print(f"execute_task(task.triage-tickets) -> {result.content[0].text}")
 
-            result = await session.call_tool("stop_component", {"name": "Watchdog"})
-            print(f"stop_component(Watchdog)    -> {result.content[0].text}")
+            result = await session.call_tool("stop_component", {"key": "service.watchdog"})
+            print(f"stop_component(service.watchdog)    -> {result.content[0].text}")
 
-            result = await session.call_tool("start_component", {"name": "Watchdog"})
-            print(f"start_component(Watchdog)   -> {result.content[0].text}")
+            result = await session.call_tool("start_component", {"key": "service.watchdog"})
+            print(f"start_component(service.watchdog)   -> {result.content[0].text}")
 
 
 print("Driving the project over MCP, the same way an MCP client would:")

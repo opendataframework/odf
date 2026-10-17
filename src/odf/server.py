@@ -117,7 +117,12 @@ class Server:
                 extra (``pip install odf[ui]``). Grid positions moved by
                 dragging a node persist to the file named by ``[project]
                 layout-file`` in config (default ``"layout.json"``, relative
-                to the current working directory). The icon/color pickers can
+                to the current working directory). Annotations drawn in the
+                image, document, video, audio, timeseries and location views,
+                and the classes given to records, persist to the file named by
+                ``[project] annotations-file`` (default ``"annotations.json"``, see
+                ``odf.ui.annotations``), unless ``[ui] annotations = false``
+                turns annotating off. The icon/color pickers can
                 be extended beyond the built-in set via ``[ui] icon-scripts``
                 (paths to ``.js`` files, see ``odf.ui.extensions``) and
                 ``[ui.colors]`` (name → hex) in config, merged with anything
@@ -137,7 +142,7 @@ class Server:
                 components).
             ui_host: Interface for the UI server to bind to.
             ui_port: Port for the UI server to bind to.
-            theme: Which UI theme (visual/layout file-set) to serve —
+            theme: Which UI theme (visual file-set) to serve —
                 orthogonal to the UI's own client-side light/dark
                 color-mode toggle. An explicit value here wins; otherwise
                 falls back to ``[ui] theme`` in config, then ``"default"``.
@@ -242,6 +247,12 @@ class Server:
             favicon = ui_cfg.get("favicon")
             logo = ui_cfg.get("logo")
             resolved_theme = theme if theme is not None else ui_cfg.get("theme", "default")
+            annotate = ui_cfg.get("annotations", True)
+            if not isinstance(annotate, bool):
+                raise ValueError(f"[ui] annotations must be true or false, got {annotate!r}.")
+            annotations_file = self.config.get("project", {}).get(
+                "annotations-file", "annotations.json"
+            )
             topology = TopologyView.from_config(ui_cfg.get("topology", {}))
             for key, name in topology.unmatched(self.context):
                 warnings.warn(
@@ -254,6 +265,7 @@ class Server:
                 host=ui_host,
                 port=ui_port,
                 layout_file=self.config.get("project", {}).get("layout-file", "layout.json"),
+                annotations_file=annotations_file if annotate else None,
                 chat_engine=chat_engine,
                 icon_scripts=icon_scripts,
                 colors=colors,

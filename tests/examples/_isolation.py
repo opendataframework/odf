@@ -39,10 +39,12 @@ _original_app_modules: dict[str, object] | None = None
 _original_namespaces: dict[type, dict[str, type]] | None = None
 
 
+def _is_app_module(name: str) -> bool:
+    return name == "app" or name.startswith("app.")
+
+
 def _app_modules() -> dict[str, object]:
-    return {
-        name: mod for name, mod in sys.modules.items() if name == "app" or name.startswith("app.")
-    }
+    return {name: mod for name, mod in sys.modules.items() if _is_app_module(name)}
 
 
 def _namespace_classes() -> list[type]:
@@ -83,11 +85,18 @@ def restore() -> None:
         sys.modules.update(_original_app_modules)
     _original_app_modules = None
 
+    # Only the examples' own registrations are dropped: a test module collected
+    # after the last example has registered its module-level fixtures (e.g. an
+    # `@Entity` a later `@Repository(...)` requires) by now, and those must
+    # survive into execution.
     for cls in _namespace_classes():
+        kept = {
+            name: obj for name, obj in cls._namespace.items() if not _is_app_module(obj.__module__)
+        }
         cls._namespace.clear()
-    if _original_namespaces:
-        for cls, namespace in _original_namespaces.items():
-            cls._namespace.update(namespace)
+        if _original_namespaces:
+            cls._namespace.update(_original_namespaces.get(cls, {}))
+        cls._namespace.update(kept)
     _original_namespaces = None
 
     examples_dir = Path(__file__).resolve().parents[2] / "examples"

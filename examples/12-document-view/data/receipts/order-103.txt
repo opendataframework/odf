@@ -1,0 +1,15 @@
+ORDER RECEIPT #103
+==================
+
+Order ID:   103
+Issued to:  Contoso Café
+
+SKU        Qty    Price
+SKU-0103     2    18.40
+SKU-0412     1     9.50
+
+Subtotal:         46.30
+Tax:               3.70
+Total:            50.00 €
+
+Thank you for your order.

@@ -1,5 +1,7 @@
+import pytest
+from app import repositories
 from app.entities import SecurityClip
-from app.repositories import SecurityClips, synth_clip_mp4
+from app.repositories import SecurityClips, synth_clip
 from opendataframework import VideoView
 
 # Deliberately builds SecurityClips directly rather than going through
@@ -47,10 +49,23 @@ def test_security_clips_data_view_is_video():
     assert clips.data_view() == VideoView(field="clip")
 
 
-def test_synth_clip_mp4_returns_distinct_nonempty_bytes():
-    first = synth_clip_mp4(1)
-    second = synth_clip_mp4(2)
+def test_synth_clip_returns_distinct_nonempty_bytes():
+    first = synth_clip(1)
+    second = synth_clip(2)
 
     assert isinstance(first, bytes) and len(first) > 0
     assert isinstance(second, bytes) and len(second) > 0
     assert first != second
+
+
+def test_synth_clip_falls_back_to_a_codec_opencv_can_write(monkeypatch):
+    monkeypatch.setattr(repositories, "_CLIP_CODECS", (("XXXX", ".mp4"), ("mp4v", ".mp4")))
+
+    assert len(synth_clip(1)) > 0
+
+
+def test_synth_clip_raises_when_opencv_can_write_no_codec(monkeypatch):
+    monkeypatch.setattr(repositories, "_CLIP_CODECS", (("XXXX", ".mp4"),))
+
+    with pytest.raises(RuntimeError, match="XXXX"):
+        synth_clip(1)

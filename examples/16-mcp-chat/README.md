@@ -45,10 +45,10 @@ for `TriageTickets`, the MCP tools, and the chat model to act on.
 
 ## Dependencies
 
-Needs the `mcp` extra (`pip install odf[mcp]`) for the MCP server and its
+Needs the `mcp` extra (`pip install "odf[mcp]"`) for the MCP server and its
 client, already in the repo's `dev` dependency group, so a plain
 `poetry install` covers it (see [`CLAUDE.md`](../../CLAUDE.md)). Trying the
-chat window additionally needs the `chat` extra (`pip install odf[chat]`,
+chat window additionally needs the `chat` extra (`pip install "odf[chat]"`,
 also already in `dev`) plus a running [Ollama](https://ollama.com) daemon —
 see below.
 
@@ -71,13 +71,13 @@ Chat window: open the topology UI above — needs `ollama serve` running locally
 Driving the project over MCP, the same way an MCP client would:
 Tools exposed over MCP: ['list_components', 'start_component', 'stop_component', 'execute_task', 'component_logs']
 
-execute_task(TriageTickets) -> {
+execute_task(task.triage-tickets) -> {
   "total": 3,
   "open": 2,
   "closed": 1
 }
-stop_component(Watchdog)    -> Watchdog stopped
-start_component(Watchdog)   -> Watchdog started
+stop_component(service.watchdog)    -> service.watchdog stopped
+start_component(service.watchdog)   -> service.watchdog started
 ```
 
 Or start the dev UI, which starts both the MCP server and the chat window:

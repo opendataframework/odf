@@ -1,7 +1,7 @@
 [project]
 name = "mcp-chat-example"
 
-[watchdog]
+[service.watchdog]
 interval = 1.0
 
 [project.chat]

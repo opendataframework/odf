@@ -1,8 +1,8 @@
 """View: AudioView, a bounded, seekable clip per record — not a live feed.
 
 VoiceMemos implements data_view() -> AudioView instead of the default table.
-The topology UI renders a list of seekable audio clips, one per record,
-instead of a grid of columns. Unlike 09-streaming-audio-view's
+The topology UI renders a grid of cards, one per record, each opening its
+clip in a player, instead of a grid of columns. Unlike 09-streaming-audio-view's
 StreamingAudioView, this repository is ReadableProtocol (all()/save()), not
 StreamableProtocol — there is a genuine "every record" here.
 

@@ -1,11 +1,13 @@
 import importlib
 import sys
+import textwrap
 from pathlib import Path
 
 import pytest
 from typer.testing import CliRunner
 
 from odf import cli
+from odf.ui.themes import theme_dir
 
 runner = CliRunner()
 
@@ -135,15 +137,121 @@ def test_run_reports_unknown_theme_as_clean_error(tmp_path, monkeypatch):
             return cls()
 
         def start(self, **kwargs):
-            raise ValueError(f"Unknown UI theme {kwargs['theme']!r} — available themes: default")
+            theme_dir(kwargs["theme"])
 
     monkeypatch.setattr(cli, "Server", RejectingServer)
 
     result = runner.invoke(cli.app, ["run", "--theme", "bogus"])
 
-    assert result.exit_code != 0
+    assert result.exit_code == 1
     assert "Unknown UI theme 'bogus'" in result.output
     assert "available themes: default" in result.output
+    assert "Traceback" not in result.output
+    assert RejectingServer.instances[-1].stopped is True
+
+
+def make_app(tmp_path, monkeypatch, source):
+    (tmp_path / "app.py").write_text(textwrap.dedent(source))
+    (tmp_path / "config.toml").write_text('[project]\nname = "test"\n')
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.syspath_prepend(str(tmp_path))
+
+
+def test_run_reports_a_decoration_error_with_its_location(tmp_path, monkeypatch):
+    make_app(
+        tmp_path,
+        monkeypatch,
+        """
+        from opendataframework import Repository, Storage
+
+
+        class Book:
+            pass
+
+
+        @Storage
+        @Repository(Book)
+        class Books:
+            pass
+        """,
+    )
+
+    result = runner.invoke(cli.app, ["run", "--no-ui"])
+
+    assert result.exit_code == 1, result.output
+    assert "@Entity" in result.output
+    assert "(app.py:" in result.output
+    assert "Traceback" not in result.output
+
+
+def test_run_reports_an_async_execute_as_a_startup_error(tmp_path, monkeypatch):
+    make_app(
+        tmp_path,
+        monkeypatch,
+        """
+        from opendataframework import Task
+
+
+        @Task
+        class Refresh:
+            async def execute(self) -> None:
+                pass
+        """,
+    )
+
+    result = runner.invoke(cli.app, ["run", "--no-ui"])
+
+    assert result.exit_code == 1, result.output
+    assert "execute()" in result.output
+    assert "Traceback" not in result.output
+
+
+def test_run_reports_a_dependency_declared_twice_as_a_startup_error(tmp_path, monkeypatch):
+    make_app(
+        tmp_path,
+        monkeypatch,
+        """
+        from opendataframework import Component
+
+
+        @Component
+        class Db:
+            pass
+
+
+        @Component
+        class Sync:
+            def __init__(self, source: Db, target: Db) -> None:
+                pass
+        """,
+    )
+
+    result = runner.invoke(cli.app, ["run", "--no-ui"])
+
+    assert result.exit_code == 1, result.output
+    assert "Sync asks for Db more than once" in result.output
+    assert "Traceback" not in result.output
+
+
+def test_run_keeps_the_traceback_of_an_error_in_project_code(tmp_path, monkeypatch):
+    make_app(
+        tmp_path,
+        monkeypatch,
+        """
+        from opendataframework import Component
+
+
+        @Component
+        class Broken:
+            def __init__(self) -> None:
+                raise TypeError("a bug in the project")
+        """,
+    )
+
+    result = runner.invoke(cli.app, ["run", "--no-ui"])
+
+    assert isinstance(result.exception, TypeError)
+    assert str(result.exception) == "a bug in the project"
 
 
 def test_run_calls_wait_which_stops_the_server(tmp_path, monkeypatch, fake_project):

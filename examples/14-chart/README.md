@@ -2,7 +2,7 @@
 
 A single `SalesByStore` component implementing `chart() -> str` — a
 self-contained HTML document (an inline base64 PNG here) that the dev UI
-serves verbatim from `GET /api/components/{id}/chart` and renders inside a
+serves verbatim from `GET /api/components/{name}/chart` and renders inside a
 same-origin `<iframe>` behind a **View Chart** button.
 
 This isolates the concept covered in [`docs/component.md`](../../docs/component.md)'s
@@ -41,7 +41,7 @@ look at with something already in it.
 
 ## Dependencies
 
-Needs the `examples` extra (`pip install odf[examples]`) for `matplotlib` to
+Needs the `examples` extra (`pip install "odf[examples]"`) for `matplotlib` to
 render the bar chart — already in the repo's `dev` dependency group, so a
 plain `poetry install` covers it (see [`CLAUDE.md`](../../CLAUDE.md)).
 

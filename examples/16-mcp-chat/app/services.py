@@ -15,9 +15,9 @@ class Watchdog:
         """Read the configured tick interval; leave the service stopped.
 
         Args:
-            config: Project config; reads ``watchdog.interval`` (default ``1.0`` seconds).
+            config: Project config; reads ``service.watchdog.interval`` (default ``1.0`` seconds).
         """
-        self.interval = config.get("watchdog").get("interval", 1.0)
+        self.interval = config.get("service").get("watchdog").get("interval", 1.0)
         self.count = 0
         self._running = False
 

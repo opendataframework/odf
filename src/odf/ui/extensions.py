@@ -8,7 +8,7 @@ Mirrors the side-effecting registration pattern already used by
 in ``config.toml``) is merged in on top at that point — this module only
 holds the package-registered half.
 
-Icons are procedural canvas vector art (see ``index.html``'s ``ICONS``
+Icons are procedural canvas vector art (see ``app.js``'s ``ICONS``
 registry and shared ``drawBox``/``isoBox``/``isoDisc`` primitives), so a
 "custom icon" is a plain ``.js`` file defining draw function(s) with the same
 ``(sx, sy, accent, lit)`` signature as the built-ins, registered into the

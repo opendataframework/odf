@@ -1,9 +1,16 @@
 from dataclasses import dataclass
 
 from opendataframework.context import Context
+from opendataframework.entity import Entity
 from opendataframework.namespace import Namespace
 from opendataframework.repository import Repository
-from opendataframework.view import LocationView, TableView, TimeseriesView
+from opendataframework.view import (
+    ContentMetadata,
+    ImageView,
+    LocationView,
+    TableView,
+    TimeseriesView,
+)
 
 from odf.ui.data import (
     build_entity,
@@ -29,6 +36,7 @@ def make_ns():
     return NS
 
 
+@Entity
 @dataclass
 class Widget:
     id: int | None
@@ -55,7 +63,9 @@ def test_build_repositories_includes_dataclass_entity_repo():
 
     assert len(schemas) == 1
     schema = schemas[0]
-    assert schema["id"] == "widgets"
+    assert schema["id"] == "n-s.widgets"
+    assert schema["name"] == "widgets"
+    assert schema["href"] == "/api/repositories/widgets"
     assert schema["entity"] == "Widget"
     assert schema["key"] == "id"
     assert schema["readable"] is True
@@ -68,6 +78,7 @@ def test_build_repositories_includes_dataclass_entity_repo():
 def test_build_repositories_excludes_non_dataclass_entity():
     NS = make_ns()
 
+    @Entity
     class PlainEntity: ...
 
     @NS
@@ -111,11 +122,11 @@ def test_build_repositories_reports_streaming_state():
         assert schema["streamable"] is True
         assert schema["streaming"] is False
 
-        ctx.start_stream("Feed")
+        ctx.start_stream(ctx.key(Feed))
         schema = build_repositories(ctx)[0]
         assert schema["streaming"] is True
 
-        ctx.stop_stream("Feed")
+        ctx.stop_stream(ctx.key(Feed))
 
 
 # --- find_repository --------------------------------------------------------
@@ -202,6 +213,28 @@ def test_list_records_filters_numeric_field_by_stringified_substring():
     assert {r["id"] for r in records} == {1, 12}
 
 
+class DescribedRepo:
+    def all(self):
+        return [Widget(id=1, name="a.png"), Widget(id=2, name="")]
+
+    def content_metadata(self, widget):
+        return ContentMetadata(filename=widget.name or None, content_type=None)
+
+
+def test_list_records_carries_declared_content_metadata_for_a_content_view():
+    records, _ = list_records(DescribedRepo(), Widget, view=ImageView(field="name"))
+    assert records == [
+        {"id": 1, "name": "a.png", "$content": {"filename": "a.png", "content_type": None}},
+        {"id": 2, "name": ""},
+    ]
+
+
+def test_list_records_adds_no_content_metadata_without_a_content_view():
+    without_view, _ = list_records(DescribedRepo(), Widget)
+    table, _ = list_records(DescribedRepo(), Widget, view=TableView())
+    assert without_view == table == [{"id": 1, "name": "a.png"}, {"id": 2, "name": ""}]
+
+
 def test_parse_filters_keeps_only_known_non_empty_fields():
     params = [("name", "al"), ("id", ""), ("limit", "10"), ("bogus", "x")]
     assert parse_filters(Widget, params) == {"name": "al"}
@@ -214,6 +247,7 @@ def test_key_field_name_is_first_field():
 # --- resolve_view -------------------------------------------------------------
 
 
+@Entity
 @dataclass
 class Store:
     id: int | None

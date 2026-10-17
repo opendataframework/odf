@@ -6,14 +6,18 @@ import pytest
 from mcp.server.fastmcp.exceptions import ToolError
 from opendataframework.component import Component, McpTool
 from opendataframework.context import Context
+from opendataframework.entity import Entity
+from opendataframework.function import Function
 from opendataframework.namespace import Namespace
 from opendataframework.repository import Repository
 from opendataframework.service import Service
 from opendataframework.task import Task
+from opendataframework.view import ContentMetadata, ImageView
 
 from odf.mcp.server import McpServer
 
 
+@Entity(name="mcp-widget")
 @dataclass
 class Widget:
     id: int
@@ -66,6 +70,22 @@ def test_list_components_returns_resolved_graph():
     assert any(node["label"] == "Thing" and node["type"] == "component" for node in nodes)
 
 
+def test_list_components_lists_functions():
+    NS = make_ns()
+
+    @NS
+    @Function
+    def double(value: int) -> int:
+        return value * 2
+
+    with Context(namespaces={NS}) as ctx:
+        nodes = structured(call(McpServer(ctx, "proj")._mcp, "list_components"))
+
+    node = next(node for node in nodes if node["label"] == "double")
+    assert node["id"] == "n-s.double"
+    assert node["type"] == "function"
+
+
 def test_list_components_reports_service_running_state():
     NS = make_ns()
 
@@ -101,11 +121,12 @@ def test_start_stop_component_toggle_a_service():
     with Context(namespaces={NS}) as ctx:
         mcp = McpServer(ctx, "proj")._mcp
 
-        assert structured(call(mcp, "stop_component", {"name": "Svc"})) == "Svc stopped"
-        assert ctx.is_running("Svc") is False
+        key = ctx.key(Svc)
+        assert structured(call(mcp, "stop_component", {"key": key})) == f"{key} stopped"
+        assert ctx.is_running(key) is False
 
-        assert structured(call(mcp, "start_component", {"name": "Svc"})) == "Svc started"
-        assert ctx.is_running("Svc") is True
+        assert structured(call(mcp, "start_component", {"key": key})) == f"{key} started"
+        assert ctx.is_running(key) is True
 
 
 def test_start_component_rejects_non_service():
@@ -118,14 +139,58 @@ def test_start_component_rejects_non_service():
     with Context(namespaces={NS}) as ctx:
         mcp = McpServer(ctx, "proj")._mcp
         with pytest.raises(ToolError, match="is not a Service"):
-            call(mcp, "start_component", {"name": "Thing"})
+            call(mcp, "start_component", {"key": ctx.key(Thing)})
 
 
-def test_start_component_unknown_name_raises():
+def test_lifecycle_tools_reject_a_function_by_type():
+    NS = make_ns()
+
+    @NS
+    @Function
+    def double(value: int) -> int:
+        return value * 2
+
+    with Context(namespaces={NS}) as ctx:
+        mcp = McpServer(ctx, "proj")._mcp
+        with pytest.raises(ToolError, match="n-s.double is not a Service"):
+            call(mcp, "start_component", {"key": "n-s.double"})
+        with pytest.raises(ToolError, match="n-s.double is not a Service"):
+            call(mcp, "stop_component", {"key": "n-s.double"})
+        with pytest.raises(ToolError, match="n-s.double is not a Task or Pipeline"):
+            call(mcp, "execute_task", {"key": "n-s.double"})
+        with pytest.raises(ToolError, match="is not a repository"):
+            call(mcp, "query_repository", {"key": "n-s.double"})
+
+
+def test_component_logs_reads_a_function_s_calls(tmp_path):
+    NS = make_ns()
+
+    @NS
+    @Function
+    def double(value: int) -> int:
+        return value * 2
+
+    with Context(namespaces={NS}, log_dir=tmp_path) as ctx:
+        ctx.call("n-s.double", value=2)
+        result = call(McpServer(ctx, "proj")._mcp, "component_logs", {"key": "n-s.double"})
+
+    assert any("completed" in entry["message"] for entry in structured(result))
+
+
+def test_start_component_unknown_key_raises():
     with Context(namespaces=set()) as ctx:
         mcp = McpServer(ctx, "proj")._mcp
-        with pytest.raises(ToolError, match="No resolved component named 'Nope'"):
-            call(mcp, "start_component", {"name": "Nope"})
+        with pytest.raises(ToolError, match="No resolved component with key 'service.nope'"):
+            call(mcp, "start_component", {"key": "service.nope"})
+
+
+def test_a_bare_name_is_rejected_with_the_key_hint():
+    with Context(namespaces=set()) as ctx:
+        mcp = McpServer(ctx, "proj")._mcp
+        with pytest.raises(ToolError, match="is not a key"):
+            call(mcp, "start_component", {"key": "Nope"})
+        with pytest.raises(ToolError, match="is not a key"):
+            call(mcp, "component_logs", {"key": "Nope"})
 
 
 # --- execute_task -----------------------------------------------------------------
@@ -143,7 +208,7 @@ def test_execute_task_runs_and_returns_result():
             return {"count": 3}
 
     with Context(namespaces={NS}) as ctx:
-        result = call(McpServer(ctx, "proj")._mcp, "execute_task", {"name": "DoStuff"})
+        result = call(McpServer(ctx, "proj")._mcp, "execute_task", {"key": ctx.key(DoStuff)})
 
     assert calls == ["ran"]
     assert json.loads(text(result)) == {"count": 3}
@@ -159,7 +224,7 @@ def test_execute_task_rejects_non_executable():
     with Context(namespaces={NS}) as ctx:
         mcp = McpServer(ctx, "proj")._mcp
         with pytest.raises(ToolError, match="is not a Task or Pipeline"):
-            call(mcp, "execute_task", {"name": "Thing"})
+            call(mcp, "execute_task", {"key": ctx.key(Thing)})
 
 
 def test_execute_task_surfaces_exceptions():
@@ -174,14 +239,14 @@ def test_execute_task_surfaces_exceptions():
     with Context(namespaces={NS}) as ctx:
         mcp = McpServer(ctx, "proj")._mcp
         with pytest.raises(ToolError, match="kaboom"):
-            call(mcp, "execute_task", {"name": "Boom"})
+            call(mcp, "execute_task", {"key": ctx.key(Boom)})
 
 
-def test_execute_task_unknown_name_raises():
+def test_execute_task_unknown_key_raises():
     with Context(namespaces=set()) as ctx:
         mcp = McpServer(ctx, "proj")._mcp
-        with pytest.raises(ToolError, match="No resolved component named 'Nope'"):
-            call(mcp, "execute_task", {"name": "Nope"})
+        with pytest.raises(ToolError, match="No resolved component with key 'task.nope'"):
+            call(mcp, "execute_task", {"key": "task.nope"})
 
 
 # --- component_logs ----------------------------------------------------------------
@@ -195,7 +260,7 @@ def test_component_logs_returns_entries(tmp_path):
     class Thing: ...
 
     with Context(namespaces={NS}, log_dir=tmp_path) as ctx:
-        result = call(McpServer(ctx, "proj")._mcp, "component_logs", {"name": "Thing"})
+        result = call(McpServer(ctx, "proj")._mcp, "component_logs", {"key": ctx.key(Thing)})
 
     entries = structured(result)
     assert any("resolved" in e["message"] for e in entries)
@@ -209,7 +274,7 @@ def test_component_logs_empty_without_log_dir():
     class Thing: ...
 
     with Context(namespaces={NS}) as ctx:
-        result = call(McpServer(ctx, "proj")._mcp, "component_logs", {"name": "Thing"})
+        result = call(McpServer(ctx, "proj")._mcp, "component_logs", {"key": ctx.key(Thing)})
 
     assert structured(result) == []
 
@@ -217,8 +282,8 @@ def test_component_logs_empty_without_log_dir():
 def test_component_logs_unknown_component_raises():
     with Context(namespaces=set()) as ctx:
         mcp = McpServer(ctx, "proj")._mcp
-        with pytest.raises(ToolError, match="No resolved component named 'Nonexistent'"):
-            call(mcp, "component_logs", {"name": "Nonexistent"})
+        with pytest.raises(ToolError, match="No resolved component with key 'component.nope'"):
+            call(mcp, "component_logs", {"key": "component.nope"})
 
 
 # --- query_repository ---------------------------------------------------------------
@@ -242,7 +307,7 @@ def test_query_repository_returns_page_and_total():
             return _widgets()
 
     with Context(namespaces={NS}) as ctx:
-        result = call(McpServer(ctx, "proj")._mcp, "query_repository", {"repo_id": "widgets"})
+        result = call(McpServer(ctx, "proj")._mcp, "query_repository", {"key": ctx.key(Widgets)})
 
     _, data = result
     assert data["total"] == 3
@@ -262,7 +327,7 @@ def test_query_repository_applies_limit_and_offset():
         result = call(
             McpServer(ctx, "proj")._mcp,
             "query_repository",
-            {"repo_id": "widgets", "limit": 1, "offset": 1},
+            {"key": ctx.key(Widgets), "limit": 1, "offset": 1},
         )
 
     _, data = result
@@ -283,7 +348,7 @@ def test_query_repository_clamps_limit_to_max():
         result = call(
             McpServer(ctx, "proj")._mcp,
             "query_repository",
-            {"repo_id": "widgets", "limit": 10_000},
+            {"key": ctx.key(Widgets), "limit": 10_000},
         )
 
     _, data = result
@@ -304,7 +369,7 @@ def test_query_repository_applies_filters():
         result = call(
             McpServer(ctx, "proj")._mcp,
             "query_repository",
-            {"repo_id": "widgets", "filters": {"color": "red"}},
+            {"key": ctx.key(Widgets), "filters": {"color": "red"}},
         )
 
     _, data = result
@@ -325,18 +390,52 @@ def test_query_repository_ignores_unknown_filter_keys():
         result = call(
             McpServer(ctx, "proj")._mcp,
             "query_repository",
-            {"repo_id": "widgets", "filters": {"nonexistent_field": "anything"}},
+            {"key": ctx.key(Widgets), "filters": {"nonexistent_field": "anything"}},
         )
 
     _, data = result
     assert data["total"] == 3
 
 
+def test_query_repository_leaves_out_content_metadata():
+    NS = make_ns()
+
+    @NS
+    @Repository(Widget)
+    class Widgets:
+        def all(self):
+            return _widgets()
+
+        def data_view(self):
+            return ImageView(field="name")
+
+        def content_metadata(self, widget):
+            return ContentMetadata(filename=f"{widget.name}.png", content_type="image/png")
+
+    with Context(namespaces={NS}) as ctx:
+        _, data = call(McpServer(ctx, "proj")._mcp, "query_repository", {"key": ctx.key(Widgets)})
+
+    assert all("$content" not in r for r in data["records"])
+
+
 def test_query_repository_unknown_repo_raises():
     with Context(namespaces=set()) as ctx:
         mcp = McpServer(ctx, "proj")._mcp
-        with pytest.raises(ToolError, match="No resolved repository named 'nope'"):
-            call(mcp, "query_repository", {"repo_id": "nope"})
+        with pytest.raises(ToolError, match="No resolved component with key 'repository.nope'"):
+            call(mcp, "query_repository", {"key": "repository.nope"})
+
+
+def test_query_repository_rejects_a_component_that_is_not_a_repository():
+    NS = make_ns()
+
+    @NS
+    @Component
+    class Thing: ...
+
+    with Context(namespaces={NS}) as ctx:
+        mcp = McpServer(ctx, "proj")._mcp
+        with pytest.raises(ToolError, match="is not a repository"):
+            call(mcp, "query_repository", {"key": ctx.key(Thing)})
 
 
 def test_query_repository_rejects_non_readable_repository():
@@ -350,7 +449,7 @@ def test_query_repository_rejects_non_readable_repository():
     with Context(namespaces={NS}) as ctx:
         mcp = McpServer(ctx, "proj")._mcp
         with pytest.raises(ToolError, match="is not readable"):
-            call(mcp, "query_repository", {"repo_id": "widgets"})
+            call(mcp, "query_repository", {"key": ctx.key(Widgets)})
 
 
 # --- component-exposed MCP tools (McpToolsProtocol) -------------------------------
@@ -369,7 +468,7 @@ def test_component_mcp_tool_is_registered_and_callable():
             return [McpTool(name="status", description="Report status.", handler=self.status)]
 
     with Context(namespaces={NS}) as ctx:
-        result = call(McpServer(ctx, "proj")._mcp, "thing.status")
+        result = call(McpServer(ctx, "proj")._mcp, "n-s.thing.status")
 
     assert structured(result) == "ok"
 
@@ -397,8 +496,8 @@ def test_two_components_with_same_local_tool_name_stay_distinct():
 
     with Context(namespaces={NS}) as ctx:
         mcp = McpServer(ctx, "proj")._mcp
-        assert structured(call(mcp, "alpha.status")) == "alpha"
-        assert structured(call(mcp, "beta.status")) == "beta"
+        assert structured(call(mcp, "n-s.alpha.status")) == "alpha"
+        assert structured(call(mcp, "n-s.beta.status")) == "beta"
 
 
 def test_duplicate_full_tool_name_within_one_component_raises_at_construction():
@@ -420,5 +519,156 @@ def test_duplicate_full_tool_name_within_one_component_raises_at_construction():
             ]
 
     with Context(namespaces={NS}) as ctx:
-        with pytest.raises(ValueError, match="Duplicate MCP tool name: 'thing.status'"):
+        with pytest.raises(ValueError, match="Duplicate MCP tool name: 'n-s.thing.status'"):
+            McpServer(ctx, "proj")
+
+
+# --- agents ------------------------------------------------------------------------
+
+
+def _librarian(NS):
+    from opendataframework.agent import Agent
+
+    @NS
+    @Agent
+    class Librarian:
+        """Answers questions about the catalogue.
+
+        Searches by keyword.
+        """
+
+        def invoke(self, question: str, limit: int = 3) -> dict:
+            return {"question": question, "limit": limit}
+
+    return Librarian
+
+
+def test_agent_is_registered_as_its_own_invoke_tool_with_a_typed_schema():
+    NS = make_ns()
+    _librarian(NS)
+
+    with Context(namespaces={NS}) as ctx:
+        tools = asyncio.run(McpServer(ctx, "proj")._mcp.list_tools())
+
+    tool = next(t for t in tools if t.name == "n-s.librarian.invoke")
+    assert tool.description == "Answers questions about the catalogue."
+    assert tool.inputSchema["properties"] == {
+        "question": {"title": "Question", "type": "string"},
+        "limit": {"default": 3, "title": "Limit", "type": "integer"},
+    }
+    assert tool.inputSchema["required"] == ["question"]
+
+
+def test_agent_invoke_tool_calls_the_agent_through_the_context(tmp_path):
+    NS = make_ns()
+    _librarian(NS)
+
+    with Context(namespaces={NS}, log_dir=tmp_path) as ctx:
+        mcp = McpServer(ctx, "proj")._mcp
+        result = call(mcp, "n-s.librarian.invoke", {"question": "Dune?", "limit": 2})
+        logs = ctx.tail_logs("n-s.librarian")
+
+    assert json.loads(text(result)) == {"question": "Dune?", "limit": 2}
+    assert any("invoke() completed" in entry["message"] for entry in logs)
+
+
+def test_agent_invoke_tool_is_listed_as_an_agent_component():
+    NS = make_ns()
+    _librarian(NS)
+
+    with Context(namespaces={NS}) as ctx:
+        nodes = structured(call(McpServer(ctx, "proj")._mcp, "list_components"))
+
+    node = next(n for n in nodes if n["label"] == "Librarian")
+    assert node["type"] == "agent"
+    assert node["decorator"] == "@Agent"
+
+
+def _scale(NS):
+    @NS
+    @Component
+    class Units:
+        factor = 10
+
+    @NS
+    @Function
+    def scale(value: int, units: Units, label: str = "x") -> dict:
+        """Scale a value by the configured factor.
+
+        Longer details.
+        """
+        return {"value": value * units.factor, "label": label}
+
+    @NS
+    @Function
+    def ping() -> str:
+        return "pong"
+
+    return scale
+
+
+def test_function_is_registered_as_its_own_call_tool_without_injected_parameters():
+    NS = make_ns()
+    _scale(NS)
+
+    with Context(namespaces={NS}) as ctx:
+        tools = {t.name: t for t in asyncio.run(McpServer(ctx, "proj")._mcp.list_tools())}
+
+    tool = tools["n-s.scale.call"]
+    assert tool.description == "Scale a value by the configured factor."
+    assert tool.inputSchema["properties"] == {
+        "value": {"title": "Value", "type": "integer"},
+        "label": {"default": "x", "title": "Label", "type": "string"},
+    }
+    assert tool.inputSchema["required"] == ["value"]
+    assert tools["n-s.ping.call"].description == "Call the ping function."
+    assert "n-s.scale.invoke" not in tools
+
+
+def test_function_call_tool_calls_the_function_through_the_context(tmp_path):
+    NS = make_ns()
+    _scale(NS)
+
+    with Context(namespaces={NS}, log_dir=tmp_path) as ctx:
+        mcp = McpServer(ctx, "proj")._mcp
+        result = call(mcp, "n-s.scale.call", {"value": 4})
+        logs = ctx.tail_logs("n-s.scale")
+
+    assert json.loads(text(result)) == {"value": 40, "label": "x"}
+    assert any("completed" in entry["message"] for entry in logs)
+
+
+def test_list_components_gives_each_entry_its_verb():
+    NS = make_ns()
+    _scale(NS)
+    _librarian(NS)
+
+    with Context(namespaces={NS}) as ctx:
+        nodes = structured(call(McpServer(ctx, "proj")._mcp, "list_components"))
+
+    verbs = {n["id"]: n["verb"] for n in nodes}
+    assert verbs["n-s.scale"] == "call"
+    assert verbs["n-s.librarian"] == "invoke"
+    assert verbs["n-s.units"] is None
+
+
+def test_agent_invoke_tool_clashing_with_its_own_mcp_tool_raises():
+    NS = make_ns()
+
+    from opendataframework.agent import Agent
+
+    @NS
+    @Agent
+    class Librarian:
+        def invoke(self) -> str:
+            return "agent"
+
+        def other(self) -> str:
+            return "tool"
+
+        def mcp_tools(self) -> list[McpTool]:
+            return [McpTool(name="invoke", description="Clash.", handler=self.other)]
+
+    with Context(namespaces={NS}) as ctx:
+        with pytest.raises(ValueError, match="Duplicate MCP tool name: 'n-s.librarian.invoke'"):
             McpServer(ctx, "proj")

@@ -1,8 +1,9 @@
 # 08 — Video View
 
 A single `SecurityClips` repository implementing `data_view() -> VideoView`
-instead of getting the default table. The topology UI renders it as a list
-of seekable video clips, one per record, instead of a grid of columns.
+instead of getting the default table. The topology UI renders it as a grid
+of cards, one per record, each previewing a frame of its clip with the clip's
+length. Selecting a card opens the clip in a player and starts it.
 
 This isolates the bounded, `ReadableProtocol` half of the concept covered in
 [`opendataframework`'s view docs](https://opendataframework.github.io/opendataframework/view/):
@@ -30,7 +31,7 @@ look at with something already in it.
 
 ## Dependencies
 
-Needs the `examples` extra (`pip install odf[examples]`), which pulls in
+Needs the `examples` extra (`pip install "odf[examples]"`), which pulls in
 both `opencv-python` (`cv2`) and `numpy` to synthesize each clip as a short
 mp4. Both are also in the repo's `dev` dependency group, so a plain
 `poetry install` covers it too (see [`CLAUDE.md`](../../CLAUDE.md)). No
@@ -62,4 +63,17 @@ odf run
 
 `GET /api/repositories` reports `SecurityClips`' view as
 `{"kind": "video", "field": "clip"}` — that's what tells the UI to render a
-list of seekable clips instead of a table.
+grid of playable clips instead of a table.
+
+Each clip is served from
+`GET /api/repositories/security-clips/records/{id}/media` with the media type
+detected from its bytes (MP4, QuickTime, WebM, Ogg, AVI), so `clip` isn't
+limited to mp4, and with `Range` requests honored, which is what lets the
+player seek.
+
+Time ranges and points can be labelled on an open clip, on the timeline under
+the player or with `M` where it is playing, and are saved to
+`annotations.json`. It works as for audio: see
+[`10-audio-view`](../10-audio-view#annotating) for the tools and the format.
+There are no boxes on video frames; frames saved as images can be boxed in the
+[image view](../11-image-view#annotating).

@@ -5,8 +5,9 @@ odf init my-project
 ```
 
 The bare starting point every other template builds on: one `Entity`, one
-`Repository`, one `sqlite3`-backed `Storage`. No extra dependencies beyond
-`odf` core and the Python standard library.
+`Repository`, one `sqlite3`-backed `Storage`. No dependencies beyond
+`opendataframework` and the Python standard library; `odf run` with its default
+UI needs the `odf[ui]` extra.
 
 ## Layout
 
@@ -26,8 +27,9 @@ my-project/
   `name`, `quantity`.
 - **`Items`** (`app/repositories.py`) — an `@Storage @Repository(Item)`
   backed by `SQLite`, exposing `all()`/`get()`/`save()`/`delete()`.
-- **`SQLite`** (`app/storages.py`) — an `@Storage @Component` that opens
-  the path from `[sqlite] path` in config (default `"app.db"`) and
+- **`SQLite`** (`app/storages.py`) — an `@Storage @Component` registered
+  as `sqlite` (key `component.sqlite`) that opens the path from
+  `[component.sqlite] path` in config (default `"app.db"`) and
   creates the `items` table if it doesn't exist yet.
 
 ```toml
@@ -35,7 +37,7 @@ my-project/
 [project]
 name = "my-project"
 
-[sqlite]
+[component.sqlite]
 path = "app.db"
 ```
 

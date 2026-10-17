@@ -21,10 +21,11 @@ if TYPE_CHECKING:
 
 _MAX_TOOL_ROUNDTRIPS = 6
 
-# Matches an `@handle` mention anywhere in a message, as long as the `@` is
-# preceded by whitespace or the start of the string (so `user@example.com`
-# doesn't get mistaken for one).
-_MENTION_RE = re.compile(r"(?:^|\s)@([A-Za-z][A-Za-z0-9-]*)")
+# Matches an `@<namespace>.<name>` mention of a component's key anywhere in a
+# message, as long as the `@` is preceded by whitespace or the start of the
+# string (so `user@example.com` doesn't get mistaken for one). Every dot must
+# be followed by a name character, so a sentence's closing period is left out.
+_MENTION_RE = re.compile(r"(?:^|\s)@([A-Za-z][A-Za-z0-9-]*(?:\.[A-Za-z0-9][A-Za-z0-9-]*)+)")
 
 # Fixed lifecycle tools that stay available, scoped to just the addressed
 # component, when a message addresses one (see `_tool_allowed`).
@@ -69,8 +70,8 @@ class ChatEngine:
         was passed to the constructor; the tool call itself still always
         executes and its result is always fed back to the model.
 
-        If the latest user message addresses a component with ``@id``
-        (e.g. ``"@postgres how many rows..."``), the turn's tool access is
+        If the latest user message addresses a component by its key
+        (e.g. ``"@service.postgres how many rows..."``), the turn's tool access is
         scoped to just that component for its whole tool-call loop — see
         ``_resolve_addressed``/``_tool_allowed``. Addressing more than one
         distinct component in the same message rejects the turn with an
@@ -146,7 +147,12 @@ class ChatEngine:
 
     @staticmethod
     def _tool_allowed(name: str, addressed: dict) -> bool:
-        """Whether ``name`` may be offered/called while a turn addresses ``addressed``."""
+        """Whether ``name`` may be offered/called while a turn addresses ``addressed``.
+
+        The addressed component's own ``<id>.``-prefixed tools stay available:
+        its ``mcp_tools()``, an agent's ``<id>.invoke`` and a function's
+        ``<id>.call``.
+        """
         if name.startswith(f"{addressed['id']}."):
             return True
         if name == "query_repository":
@@ -177,10 +183,8 @@ class ChatEngine:
         if addressed is not None:
             if not self._tool_allowed(name, addressed):
                 return f"error: tool {name!r} is not available while addressing {addressed['id']!r}"
-            if name == "query_repository":
-                arguments = {**arguments, "repo_id": addressed["id"]}
-            elif name in _LIFECYCLE_TOOLS:
-                arguments = {**arguments, "name": addressed["label"]}
+            if name == "query_repository" or name in _LIFECYCLE_TOOLS:
+                arguments = {**arguments, "key": addressed["id"]}
         try:
             result = await self._mcp.call_tool(name, arguments)
         except Exception as exc:

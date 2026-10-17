@@ -1,101 +1,59 @@
-# Open Data Framework — CLI, UI & MCP (`odf`)
+# Open Data Framework CLI (`odf`)
 
-The CLI, UI server, MCP server, and chat surface for
-Open Data Framework. Depends on `opendataframework` for the core abstractions (`Entity`,
-`Repository`, `Component`, `Service`, `Task`, `Pipeline`, `Layer`,
-`Context`, `Project`) — see that package for those.
+Scaffolds and runs Open Data Framework projects, and serves them through a UI, an
+MCP server and a chat window. Depends on `opendataframework` for the core
+abstractions (`Entity`, `Repository`, `Component`, `Service`, `Task`, `Pipeline`,
+`Agent`, `Function`, `Layer`, `Context`, `Project`) — see that package for those.
+
+**Documentation:** <https://opendataframework.github.io/odf/>
 
 ---
 
 # Install
 
 ```bash
-pip install odf              # CLI + scaffolding only
-pip install odf[ui]           # + UI dev server
-pip install odf[mcp]          # + MCP server
-pip install odf[chat]         # + chat window (requires [ui])
+pip install odf                # CLI + scaffolding only
+pip install "odf[ui]"          # + UI dev server
+pip install "odf[mcp]"         # + MCP server
+pip install "odf[ui,chat]"     # + chat window (served by the UI)
 ```
+
+`odf run` starts the UI by default, so most projects want at least `odf[ui]`.
 
 ---
 
-# CLI
-
-Scaffold a new project:
+# Quickstart
 
 ```bash
-odf init --template default my-project
+pip install "odf[ui]"
+odf init my-project            # or --template data-analytics / data-engineering / data-science / research
+cd my-project
+odf run                        # UI at http://127.0.0.1:4747
 ```
 
-Available templates: `default`, `data-analytics`, `data-engineering`,
-`data-science`, `research` — each scaffolds a `config.toml` and folder
-layout tailored to that use case.
-
-Run a project, optionally with the UI / MCP server / chat:
-
-```bash
-odf run
-odf run --ui --mcp --chat
-```
-
----
-
-# UI
-
-A small FastAPI dev server (backgrounded, like any `Service`) that
-visualizes the resolved object graph — every `Component`/`Service`/
-`Repository`, grouped by `Layer`, with lifecycle actions (start/stop/
-execute) available from the UI. Grid positions persist across reloads.
-Repositories can declare a `data_view()` to pick how their data renders
-(table, map, timeseries, streaming video/audio, ...) instead of the
-default table.
+With `pip install "odf[ui,mcp,chat]"`, `odf run --mcp --chat` adds the MCP server
+at `http://127.0.0.1:4748/mcp` and a chat window. The same from Python:
 
 ```python
-server.start(ui=True)
-print(server.ui_url)  # http://127.0.0.1:4747
-```
+from odf.server import Server
 
-Icons and colors can be extended beyond the built-in isometric set via
-`[ui] icon-scripts` / `[ui.colors]` in config, or by packages registering
-into `odf.ui.extensions`.
-
----
-
-# MCP Server
-
-Exposes the same actions available in the UI — component
-start/stop, task/pipeline execution, log inspection — as MCP tools for
-any MCP-speaking client.
-
-```python
-server.start(mcp=True)
-print(server.mcp_url)  # http://127.0.0.1:4748/mcp
-```
-
-New components can be added to an existing project from within an AI
-chat: the MCP service knows the available component library and the
-project's current structure, generates the config delta and any needed
-code, and the project rebuilds.
-
----
-
-# Chat
-
-An optional chat window added to the UI, backed by a local
-Ollama model. Requires `ui=True`; if `mcp=True` is also passed, the chat
-model gets tool-calling access to the same actions exposed as MCP tools.
-
-```python
+server = Server.from_config("config.toml")
 server.start(ui=True, mcp=True, chat=True)
+server.wait()  # blocks until Ctrl+C/SIGTERM
 ```
-
-Connection parameters come from `[project.chat]` in config: `model`
-(default `"gpt-oss"`) and `ollama-host` (default
-`"http://localhost:11434"`).
 
 ---
 
-# Examples
+# What's included
 
-See [`examples/`](examples/README.md) for the UI-server surface built on
-top of `opendataframework`. For the core abstractions themselves, see the
-`opendataframework` package and its own `examples/`.
+- **CLI** — `odf init` scaffolds a project from a template; `odf run` starts it.
+- **UI** — the topology of every component with its actions, a view of each
+  repository's data (table, map, timeseries, image, video, audio, document), and
+  labelling of that data into a plain `annotations.json`.
+- **MCP server** — the same actions as MCP tools, plus each agent, function and
+  component's own tools.
+- **Chat** — a chat window in the UI, backed by a local Ollama model, that acts
+  on the project through the MCP tools.
+
+See the [documentation](https://opendataframework.github.io/odf/) for each, and
+[`examples/`](https://github.com/opendataframework/odf/tree/main/examples) for 20 small projects, one concept each.

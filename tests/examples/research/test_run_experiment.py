@@ -30,7 +30,7 @@ def _write_data_csv(base: Path) -> None:
 
 @pytest.fixture
 def readings(tmp_path) -> Readings:
-    config = Config({"sqlite": {"path": str(tmp_path / "test.db")}})
+    config = Config({"component": {"sqlite": {"path": str(tmp_path / "test.db")}}})
     return Readings(SQLite(config))
 
 
