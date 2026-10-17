@@ -6,7 +6,9 @@
 poetry install
 pipx install pre-commit
 pre-commit install
-pre-commit run --all-files  # run all hooks on demand, without committing
+# run all hooks on demand, without committing; inside the project's
+# environment so the hooks pinned to python3.14 can find it
+poetry run pre-commit run --all-files
 ```
 
 ## Commit messages

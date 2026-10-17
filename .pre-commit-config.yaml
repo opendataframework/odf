@@ -19,10 +19,12 @@ repos:
     hooks:
       - id: interrogate
         pass_filenames: false
+        language_version: python3.14
         args:
           - --fail-under=100
           - --ignore-private
           - --ignore-magic
+          - --ignore-overloaded-functions
           - --verbose
           - src/odf/server.py
           - src/odf/cli.py

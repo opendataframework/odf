@@ -28,6 +28,10 @@ poetry run pytest tests/path/to/test_file.py
 # Run a single test
 poetry run pytest tests/path/to/test_file.py::test_name
 
+# Lint (same hooks as CI); run inside the project's environment so the
+# hooks pinned to python3.14 can find it
+poetry run pre-commit run --all-files
+
 # Try the CLI
 poetry run odf --help
 poetry run odf init --template default /tmp/scratch-project
