@@ -14,31 +14,50 @@ _CLIP_SIZE = (160, 120)  # (width, height)
 _CLIP_FPS = 12
 _CLIP_FRAME_COUNT = 24
 
+# (fourcc, file suffix), tried in order until a writer opens. H.264 plays in
+# every browser but the opencv-python wheels for Linux ship without an
+# encoder for it, VP8 plays everywhere but Safari, and MPEG-4 Part 2 is
+# FFmpeg's built-in fallback, which the UI labels if the browser can't play it.
+_CLIP_CODECS: tuple[tuple[str, str], ...] = (
+    ("avc1", ".mp4"),
+    ("VP80", ".webm"),
+    ("mp4v", ".mp4"),
+)
 
-def synth_clip_mp4(seed: int) -> bytes:
-    """Generate a short synthetic mp4 clip — a dot sweeping left to right,
+
+def synth_clip(seed: int) -> bytes:
+    """Generate a short synthetic clip — a dot sweeping left to right,
     position/color derived from ``seed`` so each clip looks distinct.
 
     ``cv2.VideoWriter`` has no in-memory sink, so the clip is written to a
-    temp file and read back as bytes.
+    temp file and read back as bytes. It is encoded with the first codec in
+    ``_CLIP_CODECS`` this OpenCV build can write; the UI detects which one
+    from the bytes.
+
+    Raises:
+        RuntimeError: If OpenCV can write none of ``_CLIP_CODECS``.
     """
     width, height = _CLIP_SIZE
-    fd, path = tempfile.mkstemp(suffix=".mp4")
-    os.close(fd)
-    writer = cv2.VideoWriter(path, cv2.VideoWriter_fourcc(*"avc1"), _CLIP_FPS, (width, height))
-    try:
-        color = (int(seed * 47) % 256, int(seed * 91) % 256, int(seed * 137) % 256)
-        for frame_index in range(_CLIP_FRAME_COUNT):
-            frame = np.zeros((height, width, 3), dtype=np.uint8)
-            x = int((frame_index / _CLIP_FRAME_COUNT) * width)
-            cv2.circle(frame, (x, height // 2), 12, color, -1)
-            writer.write(frame)
-    finally:
-        writer.release()
-    with open(path, "rb") as f:
-        clip_bytes = f.read()
-    os.remove(path)
-    return clip_bytes
+    for fourcc, suffix in _CLIP_CODECS:
+        fd, path = tempfile.mkstemp(suffix=suffix)
+        os.close(fd)
+        writer = cv2.VideoWriter(path, cv2.VideoWriter_fourcc(*fourcc), _CLIP_FPS, (width, height))
+        try:
+            if not writer.isOpened():
+                continue
+            color = (int(seed * 47) % 256, int(seed * 91) % 256, int(seed * 137) % 256)
+            for frame_index in range(_CLIP_FRAME_COUNT):
+                frame = np.zeros((height, width, 3), dtype=np.uint8)
+                x = int((frame_index / _CLIP_FRAME_COUNT) * width)
+                cv2.circle(frame, (x, height // 2), 12, color, -1)
+                writer.write(frame)
+            writer.release()
+            with open(path, "rb") as f:
+                return f.read()
+        finally:
+            writer.release()
+            os.remove(path)
+    raise RuntimeError(f"OpenCV can't write any of {[c for c, _ in _CLIP_CODECS]}")
 
 
 # (label, seed, recorded_at offset in seconds from construction time) — so
@@ -65,9 +84,7 @@ class SecurityClips:
         """Seed the in-memory clip list from ``_SEED_CLIPS``."""
         now = time.time()
         self._clips: list[SecurityClip] = [
-            SecurityClip(
-                id=clip_id, label=label, clip=synth_clip_mp4(seed), recorded_at=now + offset
-            )
+            SecurityClip(id=clip_id, label=label, clip=synth_clip(seed), recorded_at=now + offset)
             for clip_id, (label, seed, offset) in enumerate(_SEED_CLIPS, start=1)
         ]
         self._next_id = len(self._clips) + 1
