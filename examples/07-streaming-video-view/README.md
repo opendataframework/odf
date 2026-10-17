@@ -27,7 +27,7 @@ a webcam, only frames as they arrive. See
 
 ## Dependencies
 
-Needs the `examples` extra (`pip install odf[examples]`) for `opencv-python`
+Needs the `examples` extra (`pip install "odf[examples]"`) for `opencv-python`
 (`cv2`) to grab and JPEG-encode frames — already in the repo's `dev`
 dependency group, so a plain `poetry install` covers it (see
 [`CLAUDE.md`](../../CLAUDE.md)). Also needs a physical webcam attached at the

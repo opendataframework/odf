@@ -2,8 +2,8 @@
 
 An optional chat window in the UI, backed by a local [Ollama](https://ollama.com)
 model. It can act on the project by calling the same tools the MCP server
-(`odf.mcp.server.McpServer`) exposes — start/stop components, execute tasks
-and pipelines, inspect logs — so you can drive the project conversationally
+(see [MCP Server](mcp.md)) exposes — start/stop services, execute tasks
+and pipelines, query repositories, inspect logs — so you can drive the project conversationally
 instead of clicking through the UI.
 
 Like the UI and MCP server, chat is not a DI-managed `Component` —
@@ -12,7 +12,7 @@ it is started directly by `Server.start()` and requires an optional extra.
 ## Enabling
 
 ```bash
-pip install odf[ui,mcp,chat]
+pip install "odf[ui,mcp,chat]"
 ```
 
 ```python
@@ -53,9 +53,9 @@ When `mcp=True` is also passed, `Server.start()` hands the chat engine a
 reference to the same `FastMCP` instance the MCP server serves over
 streamable HTTP (`McpServer.mcp`) — tool definitions and execution are
 shared in-process, not duplicated. On each turn, the model is offered the
-current tool list — the six fixed tools (`list_components`,
-`query_repository`, `start_component`, `stop_component`, `execute_task`,
-`component_logs`) plus, for every resolved component that exposes its own
+current tool list — the six [fixed tools](mcp.md#tools) (`list_components`,
+`query_repository`, `start_component`, `stop_component`, `execute_task` for a
+task or pipeline, `component_logs`) plus, for every resolved component that exposes its own
 MCP tools (prefixed by its key, `<namespace>.<name>.<tool>`), that
 component's own tools, for every resolved `@Agent` its `<key>.invoke` tool, and
 for every resolved `@Function` its `<key>.call` tool;

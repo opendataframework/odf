@@ -101,7 +101,7 @@ reachable transitively from that one import registers.
 If, after resolving, zero application components were registered — no
 matter why (wrong `app_module`, a module that imports but forgot to
 decorate anything, or `app_module=None` with nothing registered
-elsewhere) — `start()` raises a `UserWarning` rather than silently
+elsewhere) — `start()` emits a `UserWarning` rather than silently
 booting an empty project:
 
 ```pycon
@@ -124,7 +124,7 @@ server.wait()  # blocks until Ctrl+C/SIGTERM or stop()
 
 - **`start(ui=, ui_host=, ui_port=, theme=, mcp=, mcp_host=, mcp_port=, chat=, app_module=)`**
   resolves the `Context` (importing `app_module` first, see above), then
-  optionally starts the MCP server and UI — each backgrounded on its own
+  optionally starts the [MCP server](mcp.md) and [UI](ui.md) — each backgrounded on its own
   daemon thread, like any `Service`. Always returns immediately, whether
   or not `ui=`/`mcp=` were passed, so you can do something with
   `server.ui_url`/`server.mcp_url` before ceding control of the process.

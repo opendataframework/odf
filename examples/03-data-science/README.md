@@ -44,7 +44,7 @@ Now open notebooks/explore.ipynb to explore app.db standalone.
 ```
 
 Then open the notebook (requires Jupyter — install with the `examples`
-extra, `pip install odf[examples]`, or `poetry install` in this repo,
+extra, `pip install "odf[examples]"`, or `poetry install` in this repo,
 which pulls it in via the `dev` dependency group) from inside this
 directory:
 

@@ -31,7 +31,7 @@ look at with something already in it.
 
 ## Dependencies
 
-Needs the `examples` extra (`pip install odf[examples]`), which pulls in
+Needs the `examples` extra (`pip install "odf[examples]"`), which pulls in
 both `opencv-python` (`cv2`) and `numpy` to synthesize each clip as a short
 mp4. Both are also in the repo's `dev` dependency group, so a plain
 `poetry install` covers it too (see [`CLAUDE.md`](../../CLAUDE.md)). No

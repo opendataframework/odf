@@ -125,10 +125,11 @@ external links to commit messages.
 ## Docs
 
 `docs/` holds this package's own mkdocs-material narrative documentation:
-`docs/cli.md` (this package's `cli.py`), `docs/chat.md`
-(`chat/engine.py`), plus `docs/index.md`/`docs/examples.md`. The topology
-UI and MCP server don't currently have their own dedicated doc pages
-(check `mkdocs.yml`'s nav before assuming one exists). Built with
+`docs/cli.md` (`cli.py`) and `docs/init-templates/`, `docs/server.md`
+(`server.py`), `docs/ui.md` (`ui/`, including the `config.toml` reference
+for every `[ui]`/`[project]` key `Server.start()` reads), `docs/mcp.md`
+(`mcp/server.py`), `docs/chat.md` (`chat/engine.py`), plus `docs/index.md`
+(an overview linking to each) and `docs/examples.md`. Built with
 `mkdocs.yml` at the repo root and deployed to GitHub Pages by
 `.github/workflows/docs.yml` on every push to `main`
 (`https://opendataframework.github.io/odf/`). It links out to the sibling

@@ -45,10 +45,10 @@ for `TriageTickets`, the MCP tools, and the chat model to act on.
 
 ## Dependencies
 
-Needs the `mcp` extra (`pip install odf[mcp]`) for the MCP server and its
+Needs the `mcp` extra (`pip install "odf[mcp]"`) for the MCP server and its
 client, already in the repo's `dev` dependency group, so a plain
 `poetry install` covers it (see [`CLAUDE.md`](../../CLAUDE.md)). Trying the
-chat window additionally needs the `chat` extra (`pip install odf[chat]`,
+chat window additionally needs the `chat` extra (`pip install "odf[chat]"`,
 also already in `dev`) plus a running [Ollama](https://ollama.com) daemon —
 see below.
 

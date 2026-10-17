@@ -5,8 +5,9 @@ odf init my-project
 ```
 
 The bare starting point every other template builds on: one `Entity`, one
-`Repository`, one `sqlite3`-backed `Storage`. No extra dependencies beyond
-`odf` core and the Python standard library.
+`Repository`, one `sqlite3`-backed `Storage`. No dependencies beyond
+`opendataframework` and the Python standard library; `odf run` with its default
+UI needs the `odf[ui]` extra.
 
 ## Layout
 

@@ -53,7 +53,7 @@ their reorder level (see `app/repositories.py`'s `_SEED_ITEMS`), so
 
 ## Dependencies
 
-Needs the `mcp` extra (`pip install odf[mcp]`) for the MCP server and its
+Needs the `mcp` extra (`pip install "odf[mcp]"`) for the MCP server and its
 client, already in the repo's `dev` dependency group, so a plain
 `poetry install` covers it (see [`CLAUDE.md`](../../CLAUDE.md)).
 

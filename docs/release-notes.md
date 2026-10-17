@@ -181,7 +181,7 @@
   (`component.stock-room.low_stock`). Chat addresses a component as
   `@<namespace>.<name>`. Saved positions, icons and colors in `layout.json` were keyed
   by the old ids, so the topology resets them once after upgrading. See
-  [UI](index.md#ui), [MCP Server](index.md#mcp-server) and [Chat](chat.md).
+  [UI](ui.md), [MCP Server](mcp.md) and [Chat](chat.md).
 - **Templates**: config sections are named after each class's key, following
   `opendataframework` 0.3.0: `odf init` writes `[component.sqlite]` instead of `[sqlite]`,
   and the `data-analytics` task reads `[task.summarize-items]`. The scaffolded `SQLite`

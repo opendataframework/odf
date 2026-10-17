@@ -58,7 +58,7 @@ node's **Show Logs** action and the `component_logs` MCP tool read.
 
 ## Dependencies
 
-Needs the `mcp` extra (`pip install odf[mcp]`) for the MCP server and its
+Needs the `mcp` extra (`pip install "odf[mcp]"`) for the MCP server and its
 client. It is already in the repo's `dev` dependency group, so a plain
 `poetry install` covers it.
 
