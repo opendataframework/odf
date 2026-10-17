@@ -135,7 +135,8 @@ for every `[ui]`/`[project]` key `Server.start()` reads), `docs/mcp.md`
 (`mcp/server.py`), `docs/chat.md` (`chat/engine.py`), plus `docs/index.md`
 (an overview linking to each) and `docs/examples.md`. Built with
 `mkdocs.yml` at the repo root and deployed to GitHub Pages by
-`.github/workflows/docs.yml` on every push to `main`
+`.github/workflows/docs.yml` when a version tag is pushed — only for the
+highest tag, so tagging an older patch doesn't overwrite the site
 (`https://opendataframework.github.io/odf/`). It links out to the sibling
 `opendataframework` package's own separately-deployed docs site
 (`https://opendataframework.github.io/opendataframework/`) rather than
