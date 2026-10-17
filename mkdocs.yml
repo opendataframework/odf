@@ -1,5 +1,5 @@
 site_name: ODF
-site_description: CLI, UI, MCP server, and chat for Open Data Framework (ODF) projects built on opendataframework.
+site_description: Open Data Framework CLI.
 repo_url: https://github.com/opendataframework/odf
 repo_name: opendataframework/odf
 

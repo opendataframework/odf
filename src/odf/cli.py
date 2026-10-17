@@ -202,7 +202,7 @@ def _exit_on_startup_error(console: Console, exc: BaseException) -> None:
 
 def _banner() -> Panel:
     """Build the rich ``Panel`` shown on CLI startup, wrapping ``_logo()``."""
-    body = f"{_logo()}[dim]Lightweight dependency-injection framework for data applications.[/dim]"
+    body = f"{_logo()}[dim]Open Data Framework CLI[/dim]"
     return Panel(
         body,
         box=box.ROUNDED,
@@ -216,7 +216,7 @@ def _banner() -> Panel:
 
 @app.callback()
 def main() -> None:
-    """ODF — config-driven Python framework for building data applications."""
+    """Open Data Framework CLI."""
 
 
 @app.command()
@@ -249,7 +249,7 @@ def run(
     """Start a project: import its app package, load its config, and run until Ctrl+C.
 
     Run from the project's root directory (the one containing ``config.toml``
-    and the ``app`` package), the same layout as ``demo/``.
+    and the ``app`` package), the layout ``odf init`` scaffolds.
     """
     console = Console()
     errors = Console(stderr=True)

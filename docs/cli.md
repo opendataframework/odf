@@ -16,7 +16,7 @@ $ odf --help
 
  Usage: odf [OPTIONS] COMMAND [ARGS]...
 
- ODF — config-driven Python framework for building data applications.
+ Open Data Framework CLI.
 
 Commands:
   init  Scaffold a new ODF project: a config.toml and an importable app package.

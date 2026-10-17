@@ -1,7 +1,7 @@
 [project]
 name = "odf"
 version = "0.3.0"
-description = "CLI, UI, MCP server, and chat for Open Data Framework (ODF) projects built on opendataframework."
+description = "Open Data Framework CLI."
 authors = [
     {name = "mykytapavlov",email = "mykytapavlov@users.noreply.github.com"}
 ]
