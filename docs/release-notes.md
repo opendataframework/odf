@@ -193,6 +193,13 @@
   layout. A project scaffolded by an earlier version keeps working as it is. See
   [Templates](init-templates/default.md).
 
+### Fixed
+
+- **Examples**: `08-video-view` seeds playable clips on Linux. It encoded them as
+  H.264 only, which the `opencv-python` wheels for Linux can't write, so the clips
+  were empty; it now falls back to VP8 (WebM) or MPEG-4 Part 2. See
+  [Examples](examples.md).
+
 ## 0.2.0
 
 ### Added
