@@ -152,6 +152,9 @@
 
 ### Changed
 
+- **Deps**: requires `opendataframework >=0.3.0,<0.4.0`. Upstream addresses every
+  component by its `<namespace>.<name>` key and adds `@Agent`, `@Function` and
+  `ContentMetadata`, which the entries above and below build on.
 - **UI**: the Activity and Chat buttons moved from the top-right corner of the map into
   the header bar, as icon buttons next to the theme toggle. They no longer cover a
   view's own controls, such as the table view's timeline dropdown and replay controls,
