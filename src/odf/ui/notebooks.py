@@ -17,6 +17,7 @@ it runs in its own process. Only launching it imports ``zmq``, to check that
 kernels' traffic can be encrypted.
 """
 
+import atexit
 import importlib.util
 import json
 import os
@@ -140,7 +141,14 @@ class NotebookServer:
                 env=env,
                 stdin=subprocess.DEVNULL,
                 stdout=subprocess.DEVNULL,
+                # Out of the terminal's process group, so Ctrl+C reaches only
+                # odf, whose stop() shuts Jupyter down and Jupyter its kernels.
+                # Otherwise Jupyter exits on the same SIGINT before its kernels.
+                start_new_session=True,
             )
+            # Then nothing else stops it with odf, should stop() not be called.
+            atexit.unregister(self.stop)
+            atexit.register(self.stop)
             self._wait_until_ready()
             return self._port
 
@@ -151,8 +159,10 @@ class NotebookServer:
 
     def _stop(self) -> None:
         if self._process is not None:
-            # Jupyter shuts its kernels down on SIGTERM.
-            self._process.terminate()
+            # Jupyter shuts its kernels down on its shutdown request, or, should
+            # that fail, on SIGTERM (which it logs as critical).
+            if self._process.poll() is None and not self._request_shutdown():
+                self._process.terminate()
             try:
                 self._process.wait(timeout=10)
             except subprocess.TimeoutExpired:
@@ -162,6 +172,19 @@ class NotebookServer:
         if self._config_dir is not None:
             self._config_dir.cleanup()
             self._config_dir = None
+
+    def _request_shutdown(self) -> bool:
+        """Ask Jupyter to shut down, and say whether it agreed."""
+        request = urllib.request.Request(
+            f"http://{_HOST}:{self._port}{self._base_url}api/shutdown",
+            method="POST",
+            headers={"Authorization": f"token {self._token}"},
+        )
+        try:
+            with urllib.request.urlopen(request, timeout=5):  # nosec B310 - local http URL
+                return True
+        except urllib.error.URLError, OSError:
+            return False
 
     def _config(self) -> dict:
         """The Jupyter configuration the subprocess is launched with."""

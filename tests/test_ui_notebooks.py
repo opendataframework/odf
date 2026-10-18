@@ -1,4 +1,5 @@
 import json
+import os
 import urllib.request
 from dataclasses import dataclass
 
@@ -204,6 +205,27 @@ def test_notebook_server_serves_records_through_the_ui(running_ui):
     assert "frame-ancestors 'self'" in page.headers["Content-Security-Policy"]
     ui.stop()
     assert ui._notebooks._process is None
+
+
+@pytest.mark.timeout(120)
+@pytest.mark.skipif(not hasattr(os, "getsid"), reason="POSIX sessions")
+def test_notebook_server_shuts_down_on_its_own_not_on_the_terminal_s_ctrl_c(running_ui):
+    ui, _ = running_ui
+    ui._notebooks.start()
+    process = ui._notebooks._process
+    jupyter(ui, "POST", "api/kernels", {})
+    request_shutdown = ui._notebooks._request_shutdown
+    answers = []
+    ui._notebooks._request_shutdown = lambda: answers.append(request_shutdown()) or answers[-1]
+
+    separate = os.getsid(process.pid) != os.getsid(0)
+    ui._notebooks.stop()
+
+    # Out of the terminal's session, so Ctrl+C reaches only odf, and stopped
+    # through Jupyter's shutdown request, not a signal.
+    assert separate
+    assert answers == [True]
+    assert process.returncode is not None
 
 
 @pytest.mark.timeout(120)
