@@ -106,7 +106,8 @@ UI, on a free port of `127.0.0.1` with a random token, and is stopped with
 the UI. The browser never reaches that port: the UI forwards `/proxy/jupyter/`
 to Jupyter, HTTP and WebSockets, so the editor is served on the UI's own
 address, and Jupyter is never exposed on the network, whatever host the UI
-binds to. Kernels start in the directory `odf run` was started from, so a cell
+binds to. Kernels' traffic to Jupyter is encrypted (CurveZMQ) when pyzmq and
+the kernel support it, as they do with `odf[notebook]`'s Python kernel. Kernels start in the directory `odf run` was started from, so a cell
 can `import app` or open `data/...` the same way the project does.
 
 Jupyter reads and saves each notebook through the repository, as

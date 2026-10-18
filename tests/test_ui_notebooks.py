@@ -329,3 +329,17 @@ def test_jupyter_is_unavailable_through_the_ui_until_it_starts():
         response = client.get("/proxy/jupyter/api/status")
 
     assert response.status_code == 503
+
+
+@pytest.mark.parametrize("curve", [True, False])
+def test_notebook_server_encrypts_kernel_traffic_when_pyzmq_can(monkeypatch, tmp_path, curve):
+    import zmq
+
+    monkeypatch.setattr(zmq, "has", lambda capability: curve)
+
+    config = notebooks.NotebookServer("", "/proxy/jupyter/", tmp_path)._config()
+
+    if curve:
+        assert config["KernelManager"] == {"transport_encryption": "auto"}
+    else:
+        assert "KernelManager" not in config

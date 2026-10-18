@@ -13,7 +13,8 @@ forwards to it (see ``odf.ui.proxy``), so the browser reaches it on the UI's
 own origin, through whatever reverse proxy the UI is behind.
 
 Nothing here imports Jupyter: whether it is installed is only looked up, and
-it runs in its own process.
+it runs in its own process. Only launching it imports ``zmq``, to check that
+kernels' traffic can be encrypted.
 """
 
 import importlib.util
@@ -164,7 +165,9 @@ class NotebookServer:
 
     def _config(self) -> dict:
         """The Jupyter configuration the subprocess is launched with."""
-        return {
+        import zmq
+
+        config = {
             "ServerApp": {
                 "ip": _HOST,
                 "port": self._port,
@@ -184,6 +187,12 @@ class NotebookServer:
             "IdentityProvider": {"token": self._token},
             "RepositoryContentsManager": {"ui_url": self._ui_url},
         }
+        # Kernels talk to Jupyter over local TCP; encrypt that (CurveZMQ) for
+        # kernels that support it, so another user of the machine can't read
+        # their outputs. Jupyter refuses the setting without pyzmq's support.
+        if zmq.has("curve"):
+            config["KernelManager"] = {"transport_encryption": "auto"}
+        return config
 
     def _wait_until_ready(self) -> None:
         """Block until Jupyter answers its status endpoint, or raise ``RuntimeError``."""
