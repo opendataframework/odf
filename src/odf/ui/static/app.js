@@ -4610,7 +4610,7 @@ async function editNotebook() {
   }
   if (token !== docLoadToken) return;
   button.disabled = false;
-  const src = `http://${location.hostname}:${session.port}/notebooks/${notebookPath(record)}?token=${encodeURIComponent(session.token)}`;
+  const src = `${session.url}notebooks/${notebookPath(record)}?token=${encodeURIComponent(session.token)}`;
   reader.classList.add('doc-reader-frame');
   reader.innerHTML = `<iframe class="doc-notebook-frame" title="Jupyter Notebook" src="${escapeHtml(src)}"></iframe>`;
 }

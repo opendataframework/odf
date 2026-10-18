@@ -102,8 +102,11 @@ writable repository can also be edited in place: **Edit in Jupyter** in the
 reader's rail swaps the rendered notebook for Jupyter Notebook's own editor,
 with kernels and extensions as in a local notebook server. Jupyter is
 started the first time a notebook is edited, by the same interpreter as the
-UI, on a free port of the UI's host with a random token, and is stopped with
-the UI. Kernels start in the directory `odf run` was started from, so a cell
+UI, on a free port of `127.0.0.1` with a random token, and is stopped with
+the UI. The browser never reaches that port: the UI forwards `/proxy/jupyter/`
+to Jupyter, HTTP and WebSockets, so the editor is served on the UI's own
+address, and Jupyter is never exposed on the network, whatever host the UI
+binds to. Kernels start in the directory `odf run` was started from, so a cell
 can `import app` or open `data/...` the same way the project does.
 
 Jupyter reads and saves each notebook through the repository, as
@@ -116,6 +119,27 @@ renamed or deleted from Jupyter; that is done to the records, in the UI. In
 Jupyter's file browser each repository is a folder, with a folder per record
 holding its notebook. `[ui] notebooks = false` turns editing off. See
 [`examples/21-notebook-view`](https://github.com/opendataframework/odf/tree/main/examples/21-notebook-view).
+
+Behind a reverse proxy (HTTPS, a login page), Jupyter needs nothing of its
+own: a login in front of the UI covers it too. The proxy only has to pass
+WebSocket upgrades, keep the `Host` the browser sent, and accept request bodies
+as large as your notebooks, since saving one sends it whole. With nginx:
+
+```nginx
+location / {
+    proxy_pass http://127.0.0.1:4747;
+    proxy_http_version 1.1;
+    proxy_set_header Upgrade $http_upgrade;
+    proxy_set_header Connection "upgrade";
+    proxy_set_header Host $http_host;
+    client_max_body_size 100m;
+}
+```
+
+Since Jupyter's pages share the UI's origin, script output of a notebook
+Jupyter trusts (one you ran yourself) can call the UI's HTTP API. That doesn't
+give a notebook more than its kernel has, which already runs code as the
+project, but open in Jupyter only notebooks you would run anyway.
 
 A component implementing `details()` gets a details panel, and one implementing
 `chart()` a **View Chart** button (see
@@ -217,7 +241,8 @@ registered name:
 | `GET /api/functions/{name}/parameters`, `POST .../call` | an `@Function` |
 | `/api/repositories/{name}/records`, `.../stream`, ... | a `@Repository`'s data |
 | `PUT /api/repositories/{name}/records/{key}/media` | replacing a document file through `save()` (see [Notebooks](#notebooks)) |
-| `POST /api/notebooks/session` | starting Jupyter for notebook editing; returns its `port` and `token` |
+| `POST /api/notebooks/session` | starting Jupyter for notebook editing; returns the `url` it is served at through the UI (`/proxy/jupyter/`) and its `token` |
+| `/proxy/jupyter/...` | Jupyter itself, HTTP and WebSockets, while notebook editing is on |
 
 The collection comes from the execution type, not the key's namespace: a `@Task`
 registered as `loader` is `/api/tasks/loader`, whatever its key. An action that

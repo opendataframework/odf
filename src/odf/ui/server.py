@@ -112,7 +112,9 @@ class UiServer:
             the other endpoints.
         notebooks: Whether a notebook in a document view can be edited in
             the reader, in a Jupyter Notebook server launched on the first
-            edit (see ``odf.ui.notebooks``). Needs the ``notebook`` package.
+            edit (see ``odf.ui.notebooks``) and reached through the UI at
+            ``/proxy/jupyter/`` (see ``odf.ui.proxy``). Needs the
+            ``notebook`` package.
             ``False`` (the default) only renders notebooks.
     """
 
@@ -151,13 +153,18 @@ class UiServer:
         self._brand = brand
         self._theme_dir = themes.theme_dir(theme)
         self._topology = topology
-        self._notebooks = (
-            NotebookServer(self.local_url, port, host, Path.cwd()) if notebooks else None
-        )
+        self._notebooks: NotebookServer | None = None
         self._server: uvicorn.Server | None = None
         self._thread: threading.Thread | None = None
 
         app = FastAPI(title="ODF Topology", docs_url=None, redoc_url=None)
+
+        if notebooks:
+            # Only now: forwarding needs tornado, which comes with Jupyter.
+            from odf.ui import proxy
+
+            self._notebooks = NotebookServer(self.local_url, proxy.prefix("jupyter"), Path.cwd())
+            proxy.mount_proxy(app, "jupyter", lambda: self._notebooks.origin)
 
         @app.get("/api/topology")
         def topology() -> dict:
@@ -380,10 +387,10 @@ class UiServer:
             if self._notebooks is None:
                 raise HTTPException(status_code=404, detail="Notebook editing is not enabled")
             try:
-                port = self._notebooks.start()
+                self._notebooks.start()
             except RuntimeError as exc:
                 raise HTTPException(status_code=503, detail=str(exc)) from exc
-            return {"port": port, "token": self._notebooks.token}
+            return {"url": "/proxy/jupyter/", "token": self._notebooks.token}
 
         @app.get("/api/repositories/{repo_id}/annotations")
         def repository_annotations(repo_id: str) -> dict:

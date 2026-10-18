@@ -8,6 +8,10 @@ project's own interpreter — so its kernels see the project's packages — with
 file-backed contents. That reads and saves each notebook through the UI's
 own record media endpoints, and so through the repository's ``save()``.
 
+Jupyter only listens on the loopback interface, under a ``base_url`` the UI
+forwards to it (see ``odf.ui.proxy``), so the browser reaches it on the UI's
+own origin, through whatever reverse proxy the UI is behind.
+
 Nothing here imports Jupyter: whether it is installed is only looked up, and
 it runs in its own process.
 """
@@ -26,6 +30,10 @@ import urllib.error
 import urllib.request
 from pathlib import Path
 
+# The interface Jupyter listens on, whatever the UI binds to: the browser
+# reaches it through the UI.
+_HOST = "127.0.0.1"
+
 # How long ``NotebookServer.start()`` waits for Jupyter to answer.
 _START_TIMEOUT = 60.0
 
@@ -37,8 +45,12 @@ _SETTING_DEFAULTS = {"@jupyterlab/docmanager-extension:plugin": {"autosaveInterv
 
 
 def available() -> bool:
-    """Whether the ``notebook`` package is installed in this interpreter."""
-    return importlib.util.find_spec("notebook") is not None
+    """Whether notebook editing's packages are installed in this interpreter.
+
+    That is ``notebook``, and ``websockets`` for the UI to forward Jupyter's
+    WebSockets: both come with ``odf[notebook]``.
+    """
+    return all(importlib.util.find_spec(name) is not None for name in ("notebook", "websockets"))
 
 
 def local_host(host: str) -> str:
@@ -59,16 +71,15 @@ class NotebookServer:
     Args:
         ui_url: The base URL of the UI whose record media endpoints the
             notebooks are read from and saved through.
-        ui_port: The UI's port, the only one allowed to frame Jupyter's pages.
-        host: The interface Jupyter binds to, the UI's own.
+        base_url: The path Jupyter is served under, the one the UI forwards
+            to it.
         root_dir: The directory kernels start in, the project's.
     """
 
-    def __init__(self, ui_url: str, ui_port: int, host: str, root_dir: Path) -> None:
+    def __init__(self, ui_url: str, base_url: str, root_dir: Path) -> None:
         """Prepare, but don't launch, the server (see class docstring for args)."""
         self._ui_url = ui_url
-        self._ui_port = ui_port
-        self._host = host
+        self._base_url = base_url
         self._root_dir = root_dir
         self._token = secrets.token_urlsafe(32)
         self._port: int | None = None
@@ -80,6 +91,13 @@ class NotebookServer:
     def token(self) -> str:
         """The token that authenticates a browser to Jupyter."""
         return self._token
+
+    @property
+    def origin(self) -> str | None:
+        """The origin Jupyter is served at, or ``None`` while it isn't running."""
+        if self._process is None or self._process.poll() is not None:
+            return None
+        return f"http://{_HOST}:{self._port}"
 
     def start(self) -> int:
         """Launch Jupyter, unless it is already running, and wait until it answers.
@@ -94,7 +112,7 @@ class NotebookServer:
             if self._process is not None and self._process.poll() is None:
                 return self._port
             self._stop()
-            self._port = _free_port(self._host)
+            self._port = _free_port(_HOST)
             self._config_dir = tempfile.TemporaryDirectory(prefix="odf-notebooks-")
             config_dir = Path(self._config_dir.name)
             config = config_dir / "jupyter_server_config.json"
@@ -146,19 +164,18 @@ class NotebookServer:
 
     def _config(self) -> dict:
         """The Jupyter configuration the subprocess is launched with."""
-        # Only pages served on the UI's port may frame Jupyter's, on whichever
-        # name the browser reached the UI by.
-        ancestors = f"'self' http://*:{self._ui_port} https://*:{self._ui_port}"
         return {
             "ServerApp": {
-                "ip": self._host,
+                "ip": _HOST,
                 "port": self._port,
+                "base_url": self._base_url,
                 "port_retries": 0,
                 "open_browser": False,
                 "root_dir": str(self._root_dir),
                 "contents_manager_class": ("odf.ui.notebook_contents.RepositoryContentsManager"),
                 "tornado_settings": {
-                    "headers": {"Content-Security-Policy": f"frame-ancestors {ancestors}"}
+                    # Reached through the UI, so framed by the UI's own pages only.
+                    "headers": {"Content-Security-Policy": "frame-ancestors 'self'"}
                 },
             },
             # Every Jupyter app logs on its own: Jupyter's start-up chatter would
@@ -170,7 +187,7 @@ class NotebookServer:
 
     def _wait_until_ready(self) -> None:
         """Block until Jupyter answers its status endpoint, or raise ``RuntimeError``."""
-        url = f"http://{local_host(self._host)}:{self._port}/api/status"
+        url = f"http://{_HOST}:{self._port}{self._base_url}api/status"
         request = urllib.request.Request(url, headers={"Authorization": f"token {self._token}"})
         deadline = time.monotonic() + _START_TIMEOUT
         while time.monotonic() < deadline:

@@ -57,7 +57,7 @@ needs a third-party dependency:
 | `mcp/server.py` | MCP server exposing component lifecycle + task/pipeline execution + repository data queries as tools | `mcp`, `uvicorn` |
 | `ui/server.py`, `ui/topology.py`, `ui/keys.py`, `ui/data.py`, `ui/arguments.py`, `ui/layout.py`, `ui/extensions.py`, `ui/themes.py` | UI dev server | `fastapi`, `uvicorn` |
 | `ui/static/` | The UI itself: `index.html` + `app.js` shared by every theme, `icons/` holding the built-in topology icons (one file per picker group, plus `shared.js`), and `themes/<name>/` holding each theme's `theme.css`, `favicon.svg` and optional `theme.js` | (Leaflet from a CDN; no build step) |
-| `ui/notebooks.py`, `ui/notebook_contents.py` | Jupyter Notebook launched on demand to edit notebooks in the document view; `notebook_contents.py` is its contents manager, loaded only inside that Jupyter subprocess, reading and saving records through the UI's HTTP API | `notebook` (optional) |
+| `ui/notebooks.py`, `ui/notebook_contents.py`, `ui/proxy.py` | Jupyter Notebook launched on demand (on `127.0.0.1` only) to edit notebooks in the document view; `notebook_contents.py` is its contents manager, loaded only inside that Jupyter subprocess, reading and saving records through the UI's HTTP API; `proxy.py` forwards `/proxy/<name>/` (HTTP and WebSockets) to such an embedded app, so the browser reaches Jupyter on the UI's own origin | `notebook`, `websockets` (optional) |
 | `chat/engine.py` | Chat window backing a `Server`'s UI | `ollama` |
 
 Every component is addressed by its upstream key, `<namespace>.<name>`

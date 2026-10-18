@@ -141,7 +141,7 @@ class Server:
                 kind to show (a kind without a list shows all of its
                 components). A notebook in a document view can be edited in
                 place, in an embedded Jupyter Notebook, when the ``notebook``
-                package is installed (``pip install odf[notebook]``);
+                extra is installed (``pip install odf[notebook]``);
                 ``[ui] notebooks = false`` turns that off.
             ui_host: Interface for the UI server to bind to.
             ui_port: Port for the UI server to bind to.
@@ -186,7 +186,7 @@ class Server:
                 of the wrong type, or if ``[ui] notebooks`` isn't a boolean.
             ImportError: If ``ui=True``/``mcp=True``/``chat=True`` but the
                 corresponding extra is not installed, or if ``[ui] notebooks
-                = true`` but the ``notebook`` package is not.
+                = true`` but the ``notebook`` extra is not.
 
         Warns:
             UserWarning: If, after ``Project.start()``, no application
@@ -259,8 +259,8 @@ class Server:
                 raise ValueError(f"[ui] notebooks must be true or false, got {edit_notebooks!r}.")
             if edit_notebooks and not notebooks.available():
                 raise ImportError(
-                    "[ui] notebooks = true requires Jupyter Notebook in the project's "
-                    "environment. Install with: pip install odf[notebook]"
+                    "[ui] notebooks = true requires Jupyter Notebook and websockets in "
+                    "the project's environment. Install with: pip install odf[notebook]"
                 )
             annotations_file = self.config.get("project", {}).get(
                 "annotations-file", "annotations.json"
