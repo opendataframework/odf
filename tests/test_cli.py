@@ -69,6 +69,12 @@ def fake_project(monkeypatch):
     FakeServer.instances = []
     calls = {}
 
+    def copy_to_clipboard(text):
+        calls["copied"] = text
+        return calls.get("clipboard_works", True)
+
+    monkeypatch.setattr(cli, "_copy_to_clipboard", copy_to_clipboard)
+
     class FromConfigServer(FakeServer):
         @classmethod
         def from_config(cls, path):
@@ -270,6 +276,66 @@ def test_run_prints_ui_and_mcp_urls(tmp_path, monkeypatch, fake_project):
 
     assert "UI running at http://127.0.0.1:4747" in result.output
     assert "MCP server running at http://127.0.0.1:4748/mcp" in result.output
+
+
+def test_run_copies_ui_url_to_clipboard(tmp_path, monkeypatch, fake_project):
+    make_project_dir(tmp_path, monkeypatch)
+
+    result = runner.invoke(cli.app, ["run", "--mcp"])
+
+    assert fake_project["copied"] == "http://127.0.0.1:4747"
+    assert "http://127.0.0.1:4747 (copied)" in result.output
+    assert "/mcp (copied)" not in result.output
+
+
+def test_run_copies_mcp_url_without_ui(tmp_path, monkeypatch, fake_project):
+    make_project_dir(tmp_path, monkeypatch)
+
+    result = runner.invoke(cli.app, ["run", "--no-ui", "--mcp"])
+
+    assert fake_project["copied"] == "http://127.0.0.1:4748/mcp"
+    assert "http://127.0.0.1:4748/mcp (copied)" in result.output
+
+
+def test_run_omits_copied_note_without_clipboard(tmp_path, monkeypatch, fake_project):
+    make_project_dir(tmp_path, monkeypatch)
+    fake_project["clipboard_works"] = False
+
+    result = runner.invoke(cli.app, ["run"])
+
+    assert result.exit_code == 0, result.output
+    assert "UI running at http://127.0.0.1:4747" in result.output
+    assert "(copied)" not in result.output
+
+
+def test_copy_to_clipboard_uses_first_installed_tool(monkeypatch):
+    runs = []
+    monkeypatch.setattr(
+        cli.shutil, "which", lambda name: f"/usr/bin/{name}" if name == "xclip" else None
+    )
+    monkeypatch.setattr(cli.subprocess, "run", lambda args, **kwargs: runs.append((args, kwargs)))
+
+    assert cli._copy_to_clipboard("http://127.0.0.1:4747") is True
+    assert runs[0][0] == ["/usr/bin/xclip", "-selection", "clipboard"]
+    assert runs[0][1]["input"] == b"http://127.0.0.1:4747"
+
+
+def test_copy_to_clipboard_skips_a_failing_tool(monkeypatch):
+    monkeypatch.setattr(cli.shutil, "which", lambda name: f"/usr/bin/{name}")
+
+    def run(args, **kwargs):
+        if args[0] == "/usr/bin/pbcopy":
+            raise cli.subprocess.CalledProcessError(1, args)
+
+    monkeypatch.setattr(cli.subprocess, "run", run)
+
+    assert cli._copy_to_clipboard("x") is True
+
+
+def test_copy_to_clipboard_without_a_tool(monkeypatch):
+    monkeypatch.setattr(cli.shutil, "which", lambda name: None)
+
+    assert cli._copy_to_clipboard("x") is False
 
 
 def test_run_accepts_explicit_config_path(tmp_path, monkeypatch, fake_project):

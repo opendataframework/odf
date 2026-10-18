@@ -110,9 +110,14 @@ the `app` package, the same layout `odf init` produces.
 
 ```text
 $ odf run
-UI running at http://127.0.0.1:4747
+UI running at http://127.0.0.1:4747 (copied)
 Press Ctrl+C to stop
 ```
+
+The UI URL (the MCP URL with `--no-ui`) is copied to the clipboard on start,
+ready to paste into another browser or an MCP client's config. The copy uses
+`pbcopy` on macOS, `clip` on Windows, and `wl-copy`, `xclip` or `xsel` on
+Linux; without one of them, `odf run` skips it and leaves out `(copied)`.
 
 When `opendataframework` or `odf` rejects the project at start-up, `odf run`
 prints the reason on one line and exits with status 1, without a traceback.

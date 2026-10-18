@@ -15,6 +15,13 @@
   [`21-notebook-view`](https://github.com/opendataframework/odf/tree/main/examples/21-notebook-view)
   example.
 
+### Changed
+
+- **CLI**: `odf run` copies the UI URL (the MCP URL with `--no-ui`) to the clipboard on
+  start, marked `(copied)`, to paste into another browser or an MCP client's config. It
+  uses `pbcopy`, `wl-copy`, `xclip`, `xsel` or `clip`, and skips the copy when none is
+  installed. The URLs are also terminal links.
+
 ## 0.3.0
 
 ### Added
