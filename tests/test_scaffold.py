@@ -1,3 +1,7 @@
+import json
+import subprocess  # nosec B404 — runs this interpreter on a scaffolded project
+import sys
+
 import pytest
 
 from odf import scaffold
@@ -56,11 +60,60 @@ def test_copy_template_writes_the_ml_template(tmp_path):
 
     scaffold.copy_template("ml", target, "trainer")
 
-    for module in ("entities", "storages", "repositories", "training", "tasks", "charts"):
+    for module in (
+        "entities",
+        "storages",
+        "repositories",
+        "training",
+        "tasks",
+        "charts",
+        "exports",
+    ):
         assert (target / "app" / f"{module}.py").exists()
     config = (target / "config.toml").read_text()
     assert 'name = "trainer"' in config
     assert "[task.sweep]" in config
+
+
+# The scaffolded project runs in its own interpreter, so its `app` package
+# never meets the examples' `app` packages this pytest process imports.
+_SWEEP_AND_EXPORT = """
+import json
+import app
+from odf.server import Server
+
+server = Server.from_config("config.toml")
+server.start()
+summaries = server.context.execute("task.sweep")
+best = min(summaries, key=lambda s: s["final"]["loss"])
+folder = server.context.call("function.export-run", run_id=best["run_id"])
+server.stop()
+print(json.dumps({"best": best["run"], "folder": folder}))
+"""
+
+
+def test_ml_template_sweeps_and_exports_a_run_with_the_standard_library(tmp_path):
+    target = tmp_path / "trainer"
+    scaffold.copy_template("ml", target, "trainer")
+
+    result = subprocess.run(  # nosec B603 — fixed arguments, this interpreter
+        [sys.executable, "-c", _SWEEP_AND_EXPORT],
+        cwd=target,
+        capture_output=True,
+        text=True,
+        check=True,
+        timeout=25,
+    )
+
+    out = json.loads(result.stdout.strip().splitlines()[-1])
+    assert out["best"] == "lr=0.1"
+    folder = target / out["folder"]
+    # The template trains no real model, so there is no model file to export.
+    assert sorted(p.name for p in folder.iterdir()) == [
+        "metrics.csv",
+        "params.json",
+        "summary.json",
+    ]
 
 
 def test_copy_template_escapes_quotes_in_project_name(tmp_path):

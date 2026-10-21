@@ -67,16 +67,18 @@ class Metric:
 @Entity
 @dataclass
 class Artifact:
-    """Something a run produced, here a JSON-shaped summary.
+    """Something a run produced: its JSON summary, or the trained model file.
 
     Attributes:
         id: Primary key, ``None`` until ``Artifacts.save()`` assigns one.
         run_id: The run that produced it.
-        name: What it is, such as ``"summary"``.
-        content: The artifact itself, shown as a document.
+        name: What it is, such as ``"summary"``, or the file's name, such as
+            ``"model.pkl"``.
+        content: The artifact itself: a JSON-shaped ``dict``, opened as a
+            tree, or a file's ``bytes``, downloaded under ``name``.
     """
 
     id: int | None
     run_id: int
     name: str
-    content: dict
+    content: dict | bytes

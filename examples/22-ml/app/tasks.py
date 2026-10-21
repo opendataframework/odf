@@ -32,8 +32,8 @@ class Sweep:
             train_once: ``train``, taking only the learning rate and epochs.
         """
         cfg = config.get("task").get("sweep")
-        self.learning_rates = list(cfg.get("learning-rates", [0.01, 0.1, 0.5]))
-        self.epochs = int(cfg.get("epochs", 6))
+        self.learning_rates = list(cfg.get("learning-rates", [0.001, 0.01, 0.1, 1.0]))
+        self.epochs = int(cfg.get("epochs", 5))
         self.logger = logger
         self.train_once = train_once
 

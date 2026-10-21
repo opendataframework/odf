@@ -19,10 +19,16 @@
 - **CLI**: `odf init --template ml` scaffolds a project for training and comparing models:
   `Runs`, `Params`, `Metrics` (one row per training step) and `Artifacts` repositories, a
   `train` `@Function` recording one run, a `Sweep` `@Task` recording one run per learning
-  rate in `[task.sweep]`, and a `RunComparison` chart of final loss by learning rate. It
-  needs only the standard library. See [`ml` template](init-templates/ml.md), including
-  when to pick it over `data-science`, and the
-  [`22-ml`](https://github.com/opendataframework/odf/tree/main/examples/22-ml) example.
+  rate in `[task.sweep]`, an `export_run` `@Function` writing a run's params, metrics and
+  artifacts to `exports/`, and a `RunComparison` chart of final loss and accuracy by
+  learning rate. An artifact can be a JSON summary or a file's bytes, such as a trained
+  model, which the document view downloads under its name. It needs only the standard
+  library. See [`ml` template](init-templates/ml.md), including when to pick it over
+  `data-science`, and the
+  [`22-ml`](https://github.com/opendataframework/odf/tree/main/examples/22-ml) example,
+  which trains a real scikit-learn classifier, exports it as `model.pkl`, and compares the
+  runs on an interactive Plotly page in the UI's theme. The `examples` extra now includes
+  `scikit-learn`.
 - **UI**: the timeseries view plots only the view's `fields` when set, and with `group`
   set draws one line per value of that field, colored per group and dashed per field, with
   every group on its field's y axis so they compare on one chart. The legend toggles

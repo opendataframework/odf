@@ -8,7 +8,8 @@ odf init my-project --template ml
 four entities that structure training: a `Run`, the `Param`s it was trained
 with, a `Metric` row per training step, and the `Artifact`s it produced. A
 `train` function records one run, a `Sweep` task records one run per
-learning rate, and a `RunComparison` chart compares them. Since runs and
+learning rate, a `RunComparison` chart compares them, and an `export_run`
+function writes a run out to reproduce or deploy it elsewhere. Since runs and
 what they record are ordinary repositories, the UI shows them, the MCP
 tools query them and chat answers questions about them, with no extra code.
 
@@ -41,6 +42,7 @@ my-project/
     ├── repositories.py   # Runs, Params, Metrics, Artifacts
     ├── training.py       # train (@Function)
     ├── tasks.py          # Sweep (@Task)
+    ├── exports.py        # export_run (@Function), writes exports/<id>-<name>/
     └── charts.py         # RunComparison (@Analytics @Component)
 ```
 
@@ -51,10 +53,11 @@ my-project/
 | `Runs` | One record per run: name, status, start and finish time | A table, the list of runs |
 | `Params` | One row per parameter of a run, its value stored as text | A table |
 | `Metrics` | One row per training step, with each metric (`loss`, `accuracy`) as a column | A chart of each metric by step, one line per run |
-| `Artifacts` | What a run produced, here a JSON summary of its params and results | A document per artifact |
+| `Artifacts` | What a run produced: a JSON `dict` (here, a summary of its params and results) or a file's `bytes` (a trained model) | A document per artifact; a file opens to **Download** under its name |
 | `train` | A `@Function` taking `learning_rate` and `epochs`, recording one run | A **Call** form, and the `function.train.call` MCP tool |
 | `Sweep` | A `@Task` training once per learning rate in `[task.sweep]` | **Execute** |
-| `RunComparison` | A chart of each run's final loss against its learning rate | **View Chart** |
+| `export_run` | A `@Function` taking a `run_id`, writing the run to `exports/` | A **Call** form, and the `function.export-run.call` MCP tool |
+| `RunComparison` | A chart of each run's final loss and accuracy against its learning rate | **View Chart** |
 
 `Metrics` charts its rows with a grouped timeseries view:
 
@@ -71,6 +74,28 @@ a new field on `Metric` and a new column in `storages.py`.
 The training step in `training.py` is simulated: deterministic, and best
 near a learning rate of `0.1`. Replace `simulate_step()` with your model's
 training step. The rest of `train`, recording the run, stays as it is.
+
+To keep the trained model with its run, save it as an artifact at the end
+of `train`:
+
+```python
+artifacts.save(Artifact(id=None, run_id=run.id, name="model.pkl", content=pickle.dumps(model)))
+```
+
+A `bytes` artifact is stored as it is. `Artifacts.content_metadata()` names
+it, so the document view's **Download** saves it under that name.
+
+`export_run` writes a run to `exports/<id>-<name>/`:
+
+- `params.json`;
+- `metrics.csv`;
+- every artifact the run saved, a `dict` as `<name>.json` and `bytes` as
+  `<name>`.
+
+It doesn't know about models, so once `train` saves one, it's exported with
+no change to `export_run`. As scaffolded, an export holds `params.json`,
+`metrics.csv` and `summary.json`. A pickled model runs code when it's loaded,
+so load only models your own project saved.
 
 `Sweep` takes no arguments when it runs, like every task, so the grid is
 in `config.toml`:
@@ -97,7 +122,15 @@ $ odf run --mcp
 
 Execute `Sweep`, then open `Metrics` and `RunComparison` to compare the runs.
 In chat (`odf run --mcp --chat`), "which run had the lowest loss?" is
-answered from the repositories. The
+answered from the repositories. Call `export_run` with a run's id to write
+it to `exports/`.
+
+The
 [`22-ml`](https://github.com/opendataframework/odf/tree/main/examples/22-ml)
-example is this layout, with a `main.py` that records a sweep and trains
-once over MCP.
+example is this layout, with two differences:
+
+- `train` fits a real scikit-learn classifier and saves it as `model.pkl`.
+- `RunComparison` is a fuller, interactive Plotly page.
+
+Its `main.py` records a sweep, trains once over MCP, and exports the best
+run, model included.

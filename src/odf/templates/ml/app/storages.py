@@ -39,7 +39,8 @@ class SQLite:
                 id      INTEGER PRIMARY KEY AUTOINCREMENT,
                 run_id  INTEGER NOT NULL,
                 name    TEXT NOT NULL,
-                content TEXT NOT NULL
+                kind    TEXT NOT NULL,
+                content BLOB NOT NULL
             );
         """)
         self.conn.commit()

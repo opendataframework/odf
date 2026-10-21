@@ -38,7 +38,10 @@ class Metric:
 @Entity
 @dataclass
 class Artifact:
+    """Something a run produced: a JSON-shaped ``dict`` (a summary, a report)
+    or a file's ``bytes`` (a trained model), named by ``name``."""
+
     id: int | None
     run_id: int
     name: str
-    content: dict
+    content: dict | bytes

@@ -1,6 +1,6 @@
 import json
 
-from opendataframework import DocumentView, Repository, Storage, TimeseriesView
+from opendataframework import ContentMetadata, DocumentView, Repository, Storage, TimeseriesView
 
 from app.entities import Artifact, Metric, Param, Run
 from app.storages import SQLite
@@ -118,18 +118,40 @@ class Artifacts:
     def all(self) -> list[Artifact]:
         with self.db.lock:
             rows = self.db.conn.execute(
-                "SELECT id, run_id, name, content FROM artifacts ORDER BY run_id, id"
+                "SELECT id, run_id, name, kind, content FROM artifacts ORDER BY run_id, id"
             ).fetchall()
-        return [Artifact(id=r[0], run_id=r[1], name=r[2], content=json.loads(r[3])) for r in rows]
+        return [
+            Artifact(
+                id=r[0],
+                run_id=r[1],
+                name=r[2],
+                content=json.loads(r[4]) if r[3] == "json" else bytes(r[4]),
+            )
+            for r in rows
+        ]
+
+    def for_run(self, run_id: int) -> list[Artifact]:
+        return [a for a in self.all() if a.run_id == run_id]
 
     def save(self, artifact: Artifact) -> None:
+        if isinstance(artifact.content, bytes):
+            kind, content = "bytes", artifact.content
+        else:
+            kind, content = "json", json.dumps(artifact.content).encode()
         with self.db.lock:
             cursor = self.db.conn.execute(
-                "INSERT INTO artifacts (run_id, name, content) VALUES (?, ?, ?)",
-                (artifact.run_id, artifact.name, json.dumps(artifact.content)),
+                "INSERT INTO artifacts (run_id, name, kind, content) VALUES (?, ?, ?, ?)",
+                (artifact.run_id, artifact.name, kind, content),
             )
             artifact.id = cursor.lastrowid
             self.db.conn.commit()
 
     def data_view(self) -> DocumentView:
         return DocumentView(field="content")
+
+    def content_metadata(self, artifact: Artifact) -> ContentMetadata:
+        # A file artifact (a model) is named by the artifact, so Download
+        # saves it under that name; a JSON one opens as a tree.
+        if isinstance(artifact.content, bytes):
+            return ContentMetadata(filename=artifact.name, content_type="application/octet-stream")
+        return ContentMetadata()

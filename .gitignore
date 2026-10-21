@@ -229,4 +229,5 @@ examples/**/app.db
 examples/**/reports/*
 examples/**/data/processed/*
 examples/**/results/*
+examples/**/exports/*
 !examples/**/.gitkeep

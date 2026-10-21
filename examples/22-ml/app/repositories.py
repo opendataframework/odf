@@ -2,7 +2,7 @@
 
 import json
 
-from opendataframework import DocumentView, Repository, Storage, TimeseriesView
+from opendataframework import ContentMetadata, DocumentView, Repository, Storage, TimeseriesView
 
 from app.entities import Artifact, Metric, Param, Run
 from app.storages import SQLite
@@ -180,7 +180,8 @@ class Metrics:
 @Storage
 @Repository(Artifact)
 class Artifacts:
-    """Every run's artifacts, each opened as a document."""
+    """Every run's artifacts: a summary opened as a document, and the
+    trained model, downloadable from the same view."""
 
     def __init__(self, sqlite: SQLite) -> None:
         """Store the shared ``SQLite`` component to persist through.
@@ -194,20 +195,40 @@ class Artifacts:
         """Return every artifact, grouped by run."""
         with self.db.lock:
             rows = self.db.conn.execute(
-                "SELECT id, run_id, name, content FROM artifacts ORDER BY run_id, id"
+                "SELECT id, run_id, name, kind, content FROM artifacts ORDER BY run_id, id"
             ).fetchall()
-        return [Artifact(id=r[0], run_id=r[1], name=r[2], content=json.loads(r[3])) for r in rows]
+        return [
+            Artifact(
+                id=r[0],
+                run_id=r[1],
+                name=r[2],
+                content=json.loads(r[4]) if r[3] == "json" else bytes(r[4]),
+            )
+            for r in rows
+        ]
+
+    def for_run(self, run_id: int) -> list[Artifact]:
+        """Return one run's artifacts.
+
+        Args:
+            run_id: The ``id`` of the run.
+        """
+        return [a for a in self.all() if a.run_id == run_id]
 
     def save(self, artifact: Artifact) -> None:
-        """Insert an artifact, storing its content as JSON.
+        """Insert an artifact: a ``dict`` stored as JSON, ``bytes`` as they are.
 
         Args:
             artifact: The artifact to persist; its ``id`` is assigned.
         """
+        if isinstance(artifact.content, bytes):
+            kind, content = "bytes", artifact.content
+        else:
+            kind, content = "json", json.dumps(artifact.content).encode()
         with self.db.lock:
             cursor = self.db.conn.execute(
-                "INSERT INTO artifacts (run_id, name, content) VALUES (?, ?, ?)",
-                (artifact.run_id, artifact.name, json.dumps(artifact.content)),
+                "INSERT INTO artifacts (run_id, name, kind, content) VALUES (?, ?, ?, ?)",
+                (artifact.run_id, artifact.name, kind, content),
             )
             artifact.id = cursor.lastrowid
             self.db.conn.commit()
@@ -219,3 +240,18 @@ class Artifacts:
             A ``DocumentView`` keyed on the ``content`` field.
         """
         return DocumentView(field="content")
+
+    def content_metadata(self, artifact: Artifact) -> ContentMetadata:
+        """Name a file artifact, so **Download** saves it under its name.
+
+        A JSON artifact declares nothing and opens as a tree.
+
+        Args:
+            artifact: The artifact whose content to describe.
+
+        Returns:
+            The file's name and a binary type, or an empty ``ContentMetadata``.
+        """
+        if isinstance(artifact.content, bytes):
+            return ContentMetadata(filename=artifact.name, content_type="application/octet-stream")
+        return ContentMetadata()
