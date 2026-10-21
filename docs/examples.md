@@ -30,8 +30,9 @@ external consumers.
 | 19 | [`19-agent`](https://github.com/opendataframework/odf/tree/main/examples/19-agent) | A `Librarian` `@Agent` whose `invoke(question, limit=3)` takes arguments: called through `context.call()`, invoked from a form in the UI, and exposed as its own typed `agent.librarian.invoke` MCP tool. | [MCP Server](mcp.md), [Chat](chat.md) |
 | 20 | [`20-function`](https://github.com/opendataframework/odf/tree/main/examples/20-function) | Adopting plain functions with `@Function`: `to_eur` and `store_total` keep their signatures and still work when called directly, while `context.call()` injects their `Rates`/`Orders` dependencies and another function through `Annotated`. Each one gets a **Call** action in the UI and its own typed `<key>.call` MCP tool. | [MCP Server](mcp.md), [Chat](chat.md) |
 | 21 | [`21-notebook-view`](https://github.com/opendataframework/odf/tree/main/examples/21-notebook-view) | A `Notebooks` repository over the `.ipynb` files in `notebooks/`, with a `DocumentView`: each notebook opens as its cells and outputs, and **Edit in Jupyter** edits it in place, saving through `save()` back to its file. | [UI](ui.md#notebooks) |
+| 22 | [`22-ml`](https://github.com/opendataframework/odf/tree/main/examples/22-ml) | The `ml` template layout: `Runs`, `Params`, `Metrics` and `Artifacts` repositories, recorded by a `train` `@Function` and a `Sweep` `@Task`. `Metrics` uses a grouped `TimeseriesView`, one line per run, and a `RunComparison` chart plots final loss by learning rate. | [UI](ui.md#grouped-timeseries), [`ml` template](init-templates/ml.md) |
 
-Examples 2–5 mirror `odf init --template <name>`'s scaffolded layouts —
+Examples 2–5 and 22 mirror `odf init --template <name>`'s scaffolded layouts —
 each is runnable both as a plain script (`python main.py`) and via
 `odf run` (see each example's own `README.md` for specifics). Most "Docs"
 entries above refer to concept pages on the
@@ -56,6 +57,6 @@ UI running at http://127.0.0.1:4747
 ```
 
 Open the UI and look at `Books` — it renders as a plain table with no
-extra step needed. Examples 2–5 can also run as a plain script instead of
+extra step needed. Examples 2–5 and 22 can also run as a plain script instead of
 the UI (`python main.py`) — see each example's own `README.md` for
 specifics.

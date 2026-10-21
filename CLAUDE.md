@@ -109,7 +109,7 @@ don't exist in this package anymore. If an import like that shows up
 
 ### Templates (`odf init`)
 
-`templates/{default,data-analytics,data-engineering,data-science,research}/`
+`templates/{default,data-analytics,data-engineering,data-science,ml,research}/`
 are scaffolded onto disk by `scaffold.py` via
 `importlib.resources.files("odf") / "templates" / template`. Each
 template's `app/*.py` imports core symbols from `opendataframework`, not
@@ -153,7 +153,7 @@ not per commit; format mirrors `opendataframework`'s release notes).
 
 ## Examples
 
-`examples/` has 21 examples. `01-table-view/` (a repository with no
+`examples/` has 22 examples. `01-table-view/` (a repository with no
 `data_view()` at all, so the UI falls back to the implicit default table)
 and `06-location-view/` (`data_view() -> LocationView` overriding that
 default with a map) are the two ends of the `data_view()` concept.
@@ -166,7 +166,9 @@ belong with the CLI that describes them, not the core package).
 Plotly, MCP + chat) ported from the original monorepo's `demo/` project.
 `17-custom-icon/`, `18-custom-mcp-tool/`, `19-agent/` (an `@Agent`
 invoked from the UI, over MCP and from chat), `20-function/` (plain
-functions adopted with `@Function`) and `21-notebook-view/` (notebooks in a
-`DocumentView`, edited in an embedded Jupyter) were added here since. Treat new examples here as small and focused, one concept each, matching
+functions adopted with `@Function`), `21-notebook-view/` (notebooks in a
+`DocumentView`, edited in an embedded Jupyter) and `22-ml/` (mirrors
+`odf init --template ml`: runs, params, metrics and artifacts as
+repositories, with a grouped `TimeseriesView`) were added here since. Treat new examples here as small and focused, one concept each, matching
 `opendataframework/examples/`'s style rather than `demo/`'s
 everything-at-once approach.

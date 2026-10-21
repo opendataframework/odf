@@ -299,6 +299,47 @@ def test_build_repositories_reports_explicit_view():
     assert schema["view"] == {"kind": "location", "fields": ["lat", "lon"]}
 
 
+def test_build_repositories_reports_timeseries_fields_and_group():
+    NS = make_ns()
+
+    @NS
+    @Repository(Widget)
+    class WidgetHistory:
+        def all(self):
+            return []
+
+        def data_view(self):
+            return TimeseriesView(field="id", fields=("name",), group="name")
+
+    with Context(namespaces={NS}) as ctx:
+        schema = build_repositories(ctx)[0]
+
+    assert schema["view"] == {
+        "kind": "timeseries",
+        "field": "id",
+        "fields": ["name"],
+        "group": "name",
+    }
+
+
+def test_build_repositories_reports_plain_timeseries_without_fields_or_group():
+    NS = make_ns()
+
+    @NS
+    @Repository(Widget)
+    class WidgetHistory:
+        def all(self):
+            return []
+
+        def data_view(self):
+            return TimeseriesView(field="id")
+
+    with Context(namespaces={NS}) as ctx:
+        schema = build_repositories(ctx)[0]
+
+    assert schema["view"] == {"kind": "timeseries", "field": "id", "fields": None, "group": None}
+
+
 def test_build_repositories_view_is_none_without_readable_or_data_view():
     NS = make_ns()
 

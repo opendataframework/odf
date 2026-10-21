@@ -373,7 +373,7 @@ def test_run_missing_app_module_reports_clean_error(tmp_path, monkeypatch):
 
 
 @pytest.mark.parametrize(
-    "template", ["default", "data-analytics", "data-science", "data-engineering", "research"]
+    "template", ["default", "data-analytics", "data-science", "data-engineering", "ml", "research"]
 )
 def test_init_scaffolds_an_importable_app_package(tmp_path, monkeypatch, template):
     monkeypatch.chdir(tmp_path)

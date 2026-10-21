@@ -54,8 +54,9 @@ gets registered:
 |---|---|
 | [`default`](init-templates/default.md) | — nothing; this is the starting point itself |
 | [`data-analytics`](init-templates/data-analytics.md) | An `@Analytics @Task` that aggregates repository data and writes a JSON report |
-| [`data-science`](init-templates/data-science.md) | A seed CSV and a notebook that loads it into the repository |
+| [`data-science`](init-templates/data-science.md) | A seed CSV and a notebook that loads it into the repository, for exploring data |
 | [`data-engineering`](init-templates/data-engineering.md) | A `SeedItems` → `ExportItemsSummary` `Pipeline` reading `data/raw/` and writing `data/processed/` |
+| [`ml`](init-templates/ml.md) | `Item` replaced by `Run`/`Param`/`Metric`/`Artifact` repositories, a `train` function, a `Sweep` task and a `RunComparison` chart, for training and comparing models |
 | [`research`](init-templates/research.md) | A `RunExperiment` `Task` that loads `data/items.csv` and writes `results/summary.json`, plus a write-up stub |
 
 `data-science`, `data-engineering`, and `data-analytics` all borrow folder names from
@@ -71,6 +72,9 @@ rather than ingesting one. `research` follows ["Good Enough Practices in Scienti
 Computing"](https://doi.org/10.1371/journal.pcbi.1005510) (Wilson et al., 2017): a
 flat `data/` for raw, read-only input, a `results/` for everything generated, and a
 `doc/` for the write-up — `app/` plays the role of that layout's `src/`.
+`data-science` and `ml` split data work by what the records are: the data
+itself, to explore, or training runs and what they measured, to compare (see
+[Choosing between `data-science` and `ml`](init-templates/ml.md#choosing-between-data-science-and-ml)).
 
 <!-- termynal -->
 

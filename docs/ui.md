@@ -87,6 +87,28 @@ declared as anything else is shown as written. Records list it, under a
 `$content` key, so the UI has it without a request per record. See
 [`examples/12-document-view`](https://github.com/opendataframework/odf/tree/main/examples/12-document-view).
 
+### Grouped timeseries
+
+A timeseries view plots numeric fields against an ordering `field`: a
+timestamp, or any number records are ordered by, such as a training step.
+`fields` names which numeric fields to plot (every other numeric field when
+unset), and `group` names a field whose distinct values each get their own
+line:
+
+```python
+def data_view(self) -> TimeseriesView:
+    return TimeseriesView(field="step", fields=("loss", "accuracy"), group="run_id")
+```
+
+Grouped, the chart colors each group and dashes each field, and every group
+shares its field's y axis, so groups compare on one chart. The legend lists
+the fields and then the groups. Click one to hide or show it. The chart
+shows one page of records, like the table, so a group can be split across
+pages. Returning records sorted by group, then by `field`, keeps whole groups
+together where a page can hold them, and a larger page size shows more at
+once. See the [`ml` template](init-templates/ml.md) and
+[`examples/22-ml`](https://github.com/opendataframework/odf/tree/main/examples/22-ml).
+
 ### Notebooks
 
 A Jupyter notebook in a document view opens as its cells and their saved

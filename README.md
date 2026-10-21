@@ -26,7 +26,7 @@ pip install "odf[ui,chat]"     # + chat window (served by the UI)
 
 ```bash
 pip install "odf[ui]"
-odf init my-project            # or --template data-analytics / data-engineering / data-science / research
+odf init my-project            # or --template data-analytics / data-engineering / data-science / ml / research
 cd my-project
 odf run                        # UI at http://127.0.0.1:4747
 ```
@@ -56,4 +56,4 @@ server.wait()  # blocks until Ctrl+C/SIGTERM
   on the project through the MCP tools.
 
 See the [documentation](https://opendataframework.github.io/odf/) for each, and
-[`examples/`](https://github.com/opendataframework/odf/tree/main/examples) for 20 small projects, one concept each.
+[`examples/`](https://github.com/opendataframework/odf/tree/main/examples) for 22 small projects, one concept each.

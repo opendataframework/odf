@@ -51,6 +51,18 @@ def test_copy_template_writes_files_and_substitutes_project_name(tmp_path):
     assert 'name = "myproject"' in (target / "config.toml").read_text()
 
 
+def test_copy_template_writes_the_ml_template(tmp_path):
+    target = tmp_path / "trainer"
+
+    scaffold.copy_template("ml", target, "trainer")
+
+    for module in ("entities", "storages", "repositories", "training", "tasks", "charts"):
+        assert (target / "app" / f"{module}.py").exists()
+    config = (target / "config.toml").read_text()
+    assert 'name = "trainer"' in config
+    assert "[task.sweep]" in config
+
+
 def test_copy_template_escapes_quotes_in_project_name(tmp_path):
     target = tmp_path / "weird"
 

@@ -16,6 +16,19 @@
   in `config.toml` turns editing off. See [UI](ui.md#notebooks) and the
   [`21-notebook-view`](https://github.com/opendataframework/odf/tree/main/examples/21-notebook-view)
   example.
+- **CLI**: `odf init --template ml` scaffolds a project for training and comparing models:
+  `Runs`, `Params`, `Metrics` (one row per training step) and `Artifacts` repositories, a
+  `train` `@Function` recording one run, a `Sweep` `@Task` recording one run per learning
+  rate in `[task.sweep]`, and a `RunComparison` chart of final loss by learning rate. It
+  needs only the standard library. See [`ml` template](init-templates/ml.md), including
+  when to pick it over `data-science`, and the
+  [`22-ml`](https://github.com/opendataframework/odf/tree/main/examples/22-ml) example.
+- **UI**: the timeseries view plots only the view's `fields` when set, and with `group`
+  set draws one line per value of that field, colored per group and dashed per field, with
+  every group on its field's y axis so they compare on one chart. The legend toggles
+  groups as well as fields. The ordering `field` can be any number, such as a training
+  step, not only a timestamp. Requires `opendataframework` 0.4.0. See
+  [UI](ui.md#grouped-timeseries).
 
 ### Changed
 

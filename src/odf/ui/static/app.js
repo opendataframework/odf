@@ -2174,7 +2174,8 @@ let tableOffset = 0;
 let tablePageSize = TABLE_PAGE_SIZE_OPTIONS[1];
 let tableTotal = 0;
 let tsHiddenFields = new Set(); // numeric fields the user unchecked from the timeseries chart
-let tsHiddenFieldsRepoId = null; // repo the above selection belongs to — reset on repo change, kept across page/mode switches
+let tsHiddenGroups = new Set(); // groups (as strings) of a grouped timeseries the user unchecked
+let tsHiddenFieldsRepoId = null; // repo the above selections belong to — reset on repo change, kept across page/mode switches
 
 // ── Replay (timeline scrubber) state ────────────────────────────────────
 // Shared by Map/Timeseries/Media replay modes (see renderTimelineBar/
@@ -5099,8 +5100,10 @@ document.addEventListener('mouseup', e => {
 
 // ── Timeseries view ───────────────────────────────────────────────────────
 // Backs the "View Timeline" action on repository nodes whose DataView is a
-// TimeseriesView — a line chart plotting every other numeric entity field
-// against the declared timestamp field. Plain inline SVG, no charting
+// TimeseriesView — a line chart plotting the view's numeric `fields` (every
+// other numeric entity field when unset) against its ordering `field`, a
+// timestamp or any number such as a training step, with one line per value
+// of its `group` field when set. Plain inline SVG, no charting
 // dependency (see ChartProtocol/showChartView above for anything fancier —
 // that's a component-authored, server-rendered alternative). Time ranges and
 // points can be labelled on it (see "Timeseries annotations" below).
@@ -5174,6 +5177,7 @@ function renderTimeseriesChart(schema, records) {
   tsPlot = null;
   if (tsHiddenFieldsRepoId !== activeRepoId) {
     tsHiddenFields = new Set();
+    tsHiddenGroups = new Set();
     tsHiddenFieldsRepoId = activeRepoId;
   }
   const bottomBar = renderTsBottomBar(schema);
@@ -5184,10 +5188,12 @@ function renderTimeseriesChart(schema, records) {
     bottomBar.wire();
     return;
   }
-  const tsField = schema.view.field;
-  const numericFields = schema.fields
-    .map(f => f.name)
-    .filter(name => name !== tsField && typeof records[0][name] === 'number');
+  const { field: tsField, fields: viewFields, group: groupField } = schema.view;
+  const numericFields = viewFields
+    ? viewFields.filter(name => schema.fields.some(f => f.name === name))
+    : schema.fields
+      .map(f => f.name)
+      .filter(name => name !== tsField && name !== groupField && typeof records[0][name] === 'number');
   const visibleFields = numericFields.filter(name => !tsHiddenFields.has(name));
   const sorted = [...records].sort((a, b) => a[tsField] - b[tsField]);
   const w = 640, h = 280, pad = 32;
@@ -5195,26 +5201,42 @@ function renderTimeseriesChart(schema, records) {
   const xMin = Math.min(...xs), xMax = Math.max(...xs);
   const xScale = x => xMax === xMin ? pad : pad + ((x - xMin) / (xMax - xMin)) * (w - 2 * pad);
   const colors = [ACCENT.repository, ACCENT.component, ACCENT.service, ACCENT.task, ACCENT.pipeline];
-  const series = visibleFields.map(name => {
+  // A grouped view draws one line per field and group: color tells the
+  // groups apart and the dash the fields, and every group shares its field's
+  // y scale so they compare on one chart. Ungrouped, all records are one
+  // group and color tells the fields apart, as before.
+  const groups = groupField ? tsGroupsOf(sorted, groupField) : [null];
+  const visibleGroups = groups.filter(g => g === null || !tsHiddenGroups.has(g));
+  const dashes = ['', '6 3', '2 3', '8 3 2 3'];
+  const series = visibleFields.flatMap(name => {
     const i = numericFields.indexOf(name);
     const ys = sorted.map(r => Number(r[name]));
     const yMin = Math.min(...ys), yMax = Math.max(...ys);
     const yScale = y => yMax === yMin ? h / 2 : h - pad - ((y - yMin) / (yMax - yMin)) * (h - 2 * pad);
-    const points = sorted.map((r, idx) => `${xScale(xs[idx])},${yScale(Number(r[name]))}`).join(' ');
-    const color = colors[i % colors.length];
-    // Replay mode: a small circle at each visible series' last point marks
-    // the playhead — the leading edge of the progressively-revealed chart.
-    const lastIdx = sorted.length - 1;
-    const playhead = isReplay
-      ? `<circle cx="${xScale(xs[lastIdx])}" cy="${yScale(Number(sorted[lastIdx][name]))}" r="3.5" fill="${color}"/>`
-      : '';
-    return `<polyline points="${points}" fill="none" stroke="${color}" stroke-width="1.5"/>${playhead}`;
+    return visibleGroups.map(g => {
+      const rows = g === null ? sorted : sorted.filter(r => String(r[groupField]) === g);
+      if (!rows.length) return '';
+      const points = rows.map(r => `${xScale(Number(r[tsField]))},${yScale(Number(r[name]))}`).join(' ');
+      const color = g === null ? colors[i % colors.length] : colors[groups.indexOf(g) % colors.length];
+      const dash = g === null ? '' : dashes[i % dashes.length];
+      // Replay mode: a small circle at each visible series' last point marks
+      // the playhead — the leading edge of the progressively-revealed chart.
+      const last = rows[rows.length - 1];
+      const playhead = isReplay
+        ? `<circle cx="${xScale(Number(last[tsField]))}" cy="${yScale(Number(last[name]))}" r="3.5" fill="${color}"/>`
+        : '';
+      return `<polyline points="${points}" fill="none" stroke="${color}" stroke-width="1.5"` +
+        `${dash ? ` stroke-dasharray="${dash}"` : ''}/>${playhead}`;
+    });
   }).join('');
-  const legend = numericFields.map((name, i) => {
-    const hidden = tsHiddenFields.has(name);
-    return `<label class="ts-legend-item${hidden ? ' hidden' : ''}" data-field="${escapeHtml(name)}" title="Click to ${hidden ? 'show' : 'hide'}">` +
-      `<span class="ts-swatch" style="background:${colors[i % colors.length]}"></span>${escapeHtml(name)}</label>`;
-  }).join('');
+  const legendItem = (attr, value, hidden, swatch) =>
+    `<label class="ts-legend-item${hidden ? ' hidden' : ''}" ${attr}="${escapeHtml(value)}" title="Click to ${hidden ? 'show' : 'hide'}">` +
+    `${swatch}${escapeHtml(value)}</label>`;
+  const legend = numericFields.map((name, i) => legendItem('data-field', name, tsHiddenFields.has(name), groupField
+    ? `<svg width="16" height="9" viewBox="0 0 16 9"><line x1="0" y1="4.5" x2="16" y2="4.5" stroke="currentColor" stroke-width="1.5"${dashes[i % dashes.length] ? ` stroke-dasharray="${dashes[i % dashes.length]}"` : ''}/></svg>`
+    : `<span class="ts-swatch" style="background:${colors[i % colors.length]}"></span>`)).join('') +
+    (groupField ? groups.map((g, i) => legendItem('data-group', g, tsHiddenGroups.has(g),
+      `<span class="ts-swatch" style="background:${colors[i % colors.length]}"></span>`)).join('') : '');
   const annotating = viewAnnotating() && visibleFields.length > 0;
   const chart = visibleFields.length
     ? '<div class="ts-plot">' +
@@ -5238,13 +5260,25 @@ function renderTimeseriesChart(schema, records) {
 
   body.querySelectorAll('.ts-legend-item').forEach(el => {
     el.addEventListener('click', () => {
-      const name = el.dataset.field;
-      if (tsHiddenFields.has(name)) tsHiddenFields.delete(name);
-      else tsHiddenFields.add(name);
+      const [hidden, value] = el.dataset.group !== undefined
+        ? [tsHiddenGroups, el.dataset.group]
+        : [tsHiddenFields, el.dataset.field];
+      if (hidden.has(value)) hidden.delete(value);
+      else hidden.add(value);
       renderTimeseriesChart(schema, records);
     });
   });
   bottomBar.wire();
+}
+
+// The distinct values of a grouped timeseries' `group` field among
+// `records`, as strings (so they key the legend and tsHiddenGroups), in
+// numeric order when they're all numbers and alphabetical otherwise.
+function tsGroupsOf(records, groupField) {
+  const values = [...new Set(records.map(r => r[groupField]))];
+  const numeric = values.every(v => typeof v === 'number');
+  values.sort((a, b) => numeric ? a - b : String(a).localeCompare(String(b)));
+  return values.map(String);
 }
 
 // ── Timeseries annotations ────────────────────────────────────────────────

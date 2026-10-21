@@ -14,6 +14,7 @@ nav:
           - data-analytics: init-templates/data-analytics.md
           - data-science: init-templates/data-science.md
           - data-engineering: init-templates/data-engineering.md
+          - ml: init-templates/ml.md
           - research: init-templates/research.md
   - Server: server.md
   - UI: ui.md

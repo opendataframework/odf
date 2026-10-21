@@ -35,6 +35,7 @@ class Template(StrEnum):
     data_analytics = "data-analytics"
     data_science = "data-science"
     data_engineering = "data-engineering"
+    ml = "ml"
     research = "research"
 
 
