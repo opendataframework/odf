@@ -51,6 +51,16 @@
 
 ### Changed
 
+- **UI**: each theme draws topology icons its own way instead of all as wireframes:
+  `emerald` as tinted glass, `glitch` as dark solids with bright edges, `neo` as flat
+  solid faces outlined in ink, `onyx` as tonal solids without outlines, while `default`
+  keeps its outlines but hides the lines behind each icon. Icons within each group
+  have more varied shapes and heights: a setback tower, pitched roofs, round tanks,
+  drums and turrets, sloped consoles, and five kinds of stand for the charts. Icon keys
+  are unchanged, so saved layouts keep their icons. Custom icon scripts get the new
+  solids in `ODF.iconKit` (`stepped`, `gable`, `wedge`, `cylinder`), and a theme sets
+  its icon look with `ODF.registerTheme({ faces })`. See
+  [UI](ui.md#themes-icons-and-branding).
 - **CLI**: `odf run` copies the UI URL (the MCP URL with `--no-ui`) to the clipboard on
   start, marked `(copied)`, to paste into another browser or an MCP client's config. It
   uses `pbcopy`, `wl-copy`, `xclip`, `xsel` or `clip`, and skips the copy when none is

@@ -1,40 +1,36 @@
 // Devices: field hardware and comms gear — controllers, sensors, radios,
 // cameras, aircraft, gateways and actuators.
 (() => {
-  const { pt, line, dot, block, wave, strong } = ODF.iconKit;
+  const { pt, line, dot, block, wedge, cylinder, onFace, wave, strong } = ODF.iconKit;
   const add = (key, draw, meta) => ODF.registerIcon(key, draw, { group: 'Devices', ...meta });
 
-  // Controller → gamepad body as a small docked box, d-pad + buttons on its face
+  // Controller → gamepad lying on the ground: a flat body between two round
+  // grips, d-pad + buttons on its top
   function drawController(sx, sy, accent, lit) {
-    const bh = 7, scale = 0.65;
-    const { w2, h2 } = drawBox(sx, sy, bh, accent, lit, scale);
-    const topY = sy - bh;
-
-    const bodyW2 = w2 * 0.92, bodyH2 = h2 * 0.92, bodyBh = 6;
-    isoBox(sx, topY, bodyW2, bodyH2, bodyBh, accent, lit, { fillAlpha: 1.2, strokeAlpha: 1.15 });
-    const cy = topY - bodyBh;
+    const c = [sx, sy], bh = 6, w2 = TW2 * 0.65;
+    cylinder(pt(c, -0.4, 0), 0.24, bh + 1, accent, lit);
+    block(c, 0.4, 0.24, bh, accent, lit, { fillAlpha: 1.2, strokeAlpha: 1.15 });
+    cylinder(pt(c, 0.4, 0), 0.24, bh + 1, accent, lit);
+    const cy = sy - bh, ink = faceInk(accent);
 
     ctx.save();
-    ctx.strokeStyle = rgba(accent, lit ? 0.95 : 0.8);
+    ctx.strokeStyle = rgba(ink, lit ? 0.95 : 0.8);
     ctx.lineWidth = 1.3;
     if (lit) { ctx.shadowColor = accent; ctx.shadowBlur = 4; }
     ctx.beginPath(); ctx.moveTo(sx - w2 * 0.32, cy); ctx.lineTo(sx - w2 * 0.12, cy); ctx.stroke();
     ctx.beginPath(); ctx.moveTo(sx - w2 * 0.22, cy - 3.5); ctx.lineTo(sx - w2 * 0.22, cy + 3.5); ctx.stroke();
-    ctx.fillStyle = rgba(accent, lit ? 0.85 : 0.6);
+    ctx.fillStyle = rgba(ink, lit ? 0.85 : 0.6);
     ctx.beginPath(); ctx.arc(sx + w2 * 0.18, cy - 2.5, 1.8, 0, Math.PI * 2); ctx.fill();
     ctx.beginPath(); ctx.arc(sx + w2 * 0.3, cy + 2, 1.8, 0, Math.PI * 2); ctx.fill();
     ctx.restore();
   }
 
-  // Sensor → small raised pod with a pulsing dot and radiating ping arcs
+  // Sensor → round pod on a round plinth, a pulsing dot and radiating ping arcs
   function drawSensor(sx, sy, accent, lit) {
-    const bh = 6, scale = 0.5;
-    const { h2 } = drawBox(sx, sy, bh, accent, lit, scale);
-    const topY = sy - bh;
-
-    const podW2 = TW2 * scale * 0.5, podH2 = h2 * 0.5, podBh = 5;
-    isoBox(sx, topY, podW2, podH2, podBh, accent, lit, { fillAlpha: 1.2, strokeAlpha: 1.15 });
-    const cy = topY - podBh - podH2 * 0.3;
+    const c = [sx, sy];
+    cylinder(c, 0.34, 4, accent, lit);
+    const pod = cylinder(c, 0.17, 7, accent, lit, { lift: 4, fillAlpha: 1.2, strokeAlpha: 1.15 });
+    const cy = pod.y - 1;
 
     const pulse = (Math.sin(animT * 3) + 1) / 2;
     ctx.save();
@@ -54,27 +50,28 @@
     ctx.restore();
   }
 
-  // Radio → docked base, tapered mast, broadcast arcs (on-air motif)
+  // Radio → a set with a sloped front panel, a mast from its back and
+  // broadcast arcs (on-air motif)
   function drawRadio(sx, sy, accent, lit) {
-    const bh = 8, scale = 0.5;
-    drawBox(sx, sy, bh, accent, lit, scale);
-    const topY = sy - bh;
-
-    const baseW2 = TW2 * scale * 0.55, baseH2 = TH2 * scale * 0.55, baseBh = 6;
-    isoBox(sx, topY, baseW2, baseH2, baseBh, accent, lit, { fillAlpha: 1.2, strokeAlpha: 1.15 });
-    const mastTop = topY - baseBh, tipY = mastTop - 18;
+    const c = [sx, sy];
+    const set = wedge(c, 0.45, 0.3, 14, 8, accent, lit, { axis: 'v' });
+    onFace(set, 'v', len => {
+      for (const x of [0.2, 0.32, 0.44]) line(len * x, -6.5, len * x, -1.5, accent, lit ? 0.7 : 0.45, 0.8);
+      dot(len * 0.72, -4, 2, accent, 0.4 + 0.5 * wave(2));
+    });
+    const [mx, mastTop] = pt(c, -0.25, -0.18, 13), tipY = mastTop - 18;
 
     ctx.save();
     ctx.strokeStyle = rgba(accent, lit ? 0.95 : 0.8);
     ctx.lineWidth = 1.4;
     if (lit) { ctx.shadowColor = accent; ctx.shadowBlur = 5; }
-    ctx.beginPath(); ctx.moveTo(sx, mastTop); ctx.lineTo(sx, tipY); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(mx, mastTop); ctx.lineTo(mx, tipY); ctx.stroke();
     ctx.fillStyle = rgba(accent, lit ? 0.95 : 0.8);
-    ctx.beginPath(); ctx.arc(sx, tipY, 2, 0, Math.PI * 2); ctx.fill();
+    ctx.beginPath(); ctx.arc(mx, tipY, 2, 0, Math.PI * 2); ctx.fill();
     ctx.lineWidth = 1.2;
     for (const r of [6, 11]) {
-      ctx.beginPath(); ctx.arc(sx, tipY, r, -Math.PI / 4, Math.PI / 4); ctx.stroke();
-      ctx.beginPath(); ctx.arc(sx, tipY, r, Math.PI * 0.75, Math.PI * 1.25); ctx.stroke();
+      ctx.beginPath(); ctx.arc(mx, tipY, r, -Math.PI / 4, Math.PI / 4); ctx.stroke();
+      ctx.beginPath(); ctx.arc(mx, tipY, r, Math.PI * 0.75, Math.PI * 1.25); ctx.stroke();
     }
     ctx.restore();
   }
@@ -106,7 +103,7 @@
 
     // Speaker grille on the front-right face
     ctx.save();
-    ctx.strokeStyle = rgba(accent, lit ? 0.7 : 0.45);
+    ctx.strokeStyle = rgba(faceInk(accent), lit ? 0.7 : 0.45);
     ctx.lineWidth = 0.9;
     for (const f of [0.32, 0.46, 0.6]) {
       ctx.beginPath();
@@ -254,46 +251,45 @@
     ctx.restore();
   }
 
-  // Gateway → docked body block, two antenna prongs, wifi broadcast arcs
+  // Gateway → slim router standing on edge in a foot, two antenna prongs,
+  // status lights along its front and wifi broadcast arcs
   function drawGateway(sx, sy, accent, lit) {
-    const bh = 8, scale = 0.55;
-    const { w2 } = drawBox(sx, sy, bh, accent, lit, scale);
-    const topY = sy - bh;
-
-    const bodyW2 = w2 * 0.9, bodyH2 = TH2 * scale * 0.9, bodyBh = 6;
-    isoBox(sx, topY, bodyW2, bodyH2, bodyBh, accent, lit, { fillAlpha: 1.15, strokeAlpha: 1.1 });
-    const bodyTopY = topY - bodyBh;
+    const c = [sx, sy], bh = 16;
+    block(c, 0.42, 0.2, 2, accent, lit);
+    const body = block(c, 0.36, 0.1, bh, accent, lit, { lift: 2, fillAlpha: 1.15, strokeAlpha: 1.1 });
+    onFace(body, 'v', len => {
+      for (let i = 0; i < 4; i++) dot(len * (0.2 + i * 0.2), -4, 1.1, accent, wave(3, i * 1.3) > 0.5 ? 0.95 : 0.3);
+    });
 
     ctx.save();
     ctx.strokeStyle = rgba(accent, lit ? 0.95 : 0.8);
     ctx.lineWidth = 1.4;
     if (lit) { ctx.shadowColor = accent; ctx.shadowBlur = 4; }
-    for (const dx of [-bodyW2 * 0.35, bodyW2 * 0.35]) {
-      ctx.beginPath(); ctx.moveTo(sx + dx, bodyTopY); ctx.lineTo(sx + dx, bodyTopY - 11); ctx.stroke();
+    for (const u of [-0.26, 0.26]) {
+      const [x, y] = pt(c, u, 0, bh + 2);
+      ctx.beginPath(); ctx.moveTo(x, y); ctx.lineTo(x, y - 11); ctx.stroke();
     }
     ctx.restore();
 
+    const bodyTopY = sy - bh - 2;
     const blink = (Math.sin(animT * 6 + sx) + 1) / 2 > 0.5;
     ctx.save();
     ctx.lineWidth = 1.2;
     ctx.strokeStyle = rgba(accent, blink ? 0.95 : 0.45);
     if (blink) { ctx.shadowColor = accent; ctx.shadowBlur = 5; }
     for (const r of [5, 9]) {
-      ctx.beginPath(); ctx.arc(sx, bodyTopY - 16, r, Math.PI * 1.2, Math.PI * 1.8); ctx.stroke();
+      ctx.beginPath(); ctx.arc(sx, bodyTopY - 12, r, Math.PI * 1.2, Math.PI * 1.8); ctx.stroke();
     }
     ctx.restore();
   }
 
-  // Robot arm → docked base block, two-segment articulated arm, gripper jaws
+  // Robot arm → round base and turret, two-segment articulated arm, gripper jaws
   function drawRobotArm(sx, sy, accent, lit) {
-    const bh = 8, scale = 0.5;
-    const { w2 } = drawBox(sx, sy, bh, accent, lit, scale);
-    const topY = sy - bh;
+    const c = [sx, sy];
+    cylinder(c, 0.34, 5, accent, lit);
+    const turret = cylinder(c, 0.2, 6, accent, lit, { lift: 5, fillAlpha: 1.2, strokeAlpha: 1.15 });
 
-    const baseW2 = w2 * 0.6, baseH2 = TH2 * scale * 0.6, baseBh = 7;
-    isoBox(sx, topY, baseW2, baseH2, baseBh, accent, lit, { fillAlpha: 1.2, strokeAlpha: 1.15 });
-
-    const base = { x: sx, y: topY - baseBh };
+    const base = { x: sx, y: turret.y };
     const joint = { x: base.x + 11, y: base.y - 17 };
     const tip = { x: joint.x - 5, y: joint.y - 15 };
     ctx.save();
@@ -319,15 +315,14 @@
     ctx.restore();
   }
 
-  // Pump / valve → docked base block, P&ID-style gate-valve glyph + handle
+  // Pump / valve → a round pump housing on a skid with an outlet pipe, and a
+  // P&ID-style gate-valve glyph + handle over it
   function drawPumpValve(sx, sy, accent, lit) {
-    const bh = 8, scale = 0.55;
-    const { w2 } = drawBox(sx, sy, bh, accent, lit, scale);
-    const topY = sy - bh;
-
-    const baseW2 = w2 * 0.5, baseH2 = TH2 * scale * 0.5, baseBh = 6;
-    isoBox(sx, topY, baseW2, baseH2, baseBh, accent, lit, { fillAlpha: 1.2, strokeAlpha: 1.15 });
-    const cy = topY - baseBh - 6;
+    const c = [sx, sy];
+    block(c, 0.5, 0.3, 3, accent, lit);
+    const pump = cylinder(pt(c, -0.14, 0), 0.24, 12, accent, lit, { lift: 3, fillAlpha: 1.2, strokeAlpha: 1.15 });
+    block(pt(c, 0.3, 0), 0.18, 0.06, 5, accent, lit, { lift: 7 });
+    const cy = pump.y - 8;
 
     ctx.save();
     ctx.strokeStyle = rgba(accent, lit ? 0.95 : 0.8);
@@ -371,10 +366,10 @@
     ctx.restore();
   }
 
-  // Radar → a radar station with a sweeping beam.
+  // Radar → a round radar station with a sweeping beam.
   function drawRadar(sx, sy, accent, lit) {
     const c = [sx, sy];
-    block(c, 0.5, 0.5, 10, accent, lit);
+    cylinder(c, 0.5, 10, accent, lit);
     const [cx, cy] = pt(c, 0, 0, 22);
     line(cx, cy + 12, cx, cy, accent, strong(lit), 1.3);
     ctx.save();
@@ -402,17 +397,17 @@
     ctx.restore();
   }
 
-  add('controller', drawController, { bh: 7, scale: 0.65, extraTop: 10, label: 'Controller' });
-  add('sensor', drawSensor, { bh: 6, scale: 0.5, extraTop: 16, label: 'Sensor' });
-  add('radio', drawRadio, { bh: 8, scale: 0.5, extraTop: 24, label: 'Radio' });
+  add('controller', drawController, { bh: 7, scale: 0.65, extraTop: 4, label: 'Controller' });
+  add('sensor', drawSensor, { bh: 11, scale: 0.5, extraTop: 14, label: 'Sensor' });
+  add('radio', drawRadio, { bh: 14, scale: 0.5, extraTop: 26, label: 'Radio' });
   add('walkie-talkie', drawWalkieTalkie, { bh: 30, scale: 0.4, extraTop: 28, label: 'Walkie-talkie' });
   add('camera', drawCamera, { bh: 16, scale: 0.6, extraTop: 6, label: 'Camera' });
   add('drone', drawDrone, { bh: 8, scale: 0.8, extraTop: 4, label: 'Drone' });
   add('plane', drawPlane, { bh: 12, scale: 1.4, extraTop: 6, label: 'Plane' });
   add('satellite', drawSatellite, { bh: 14, scale: 1.05, extraTop: 4, label: 'Satellite' });
-  add('gateway', drawGateway, { bh: 8, scale: 0.55, extraTop: 22, label: 'Gateway' });
-  add('robot-arm', drawRobotArm, { bh: 8, scale: 0.5, extraTop: 36, label: 'Robot arm' });
-  add('pump-valve', drawPumpValve, { bh: 8, scale: 0.55, extraTop: 14, label: 'Pump / valve' });
+  add('gateway', drawGateway, { bh: 18, scale: 0.55, extraTop: 20, label: 'Gateway' });
+  add('robot-arm', drawRobotArm, { bh: 11, scale: 0.5, extraTop: 34, label: 'Robot arm' });
+  add('pump-valve', drawPumpValve, { bh: 15, scale: 0.55, extraTop: 20, label: 'Pump / valve' });
   add('mast', drawMast, { bh: 5, scale: 0.8, extraTop: 34, label: 'Radio mast' });
   add('radar', drawRadar, { bh: 10, scale: 0.8, extraTop: 22, label: 'Radar' });
 })();

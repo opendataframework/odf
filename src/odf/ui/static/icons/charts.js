@@ -1,24 +1,62 @@
-// Charts: a billboard on two posts whose board shows one animated chart —
-// scatter, curves, lines, bars, a donut, a heatmap, a KPI, a matrix or a
-// histogram. Every icon here shares the one frame and differs only in the
-// face drawn on its board.
+// Charts: a board showing one animated chart — scatter, curves, lines, bars,
+// a donut, a heatmap, a KPI, a matrix or a histogram — put up on one of a
+// few frames: posts, a pylon, a monolith, a wall or an easel.
 (() => {
-  const { pt, poly, line, path, rect, dot, block, onFace, wave, strong } = ODF.iconKit;
+  const { pt, poly, line, path, rect, dot, block, wedge, cylinder, onFace, wave, strong } = ODF.iconKit;
   const add = (key, draw, meta) => ODF.registerIcon(key, draw, { group: 'Charts', ...meta });
 
-  // Builds a draw function for a billboard showing `face(len, accent, lit)`,
-  // which draws in the board's own flat coordinates (see onFace).
-  function billboard(face) {
-    return (sx, sy, accent, lit) => {
-      const c = [sx, sy];
+  // The board every face is drawn on: same size in every frame, so each
+  // face fits whichever frame shows it.
+  const BOARD_A = 0.62, BOARD_H = 22;
+  function board(c, accent, lit, face, { lift, b = 0.05 }) {
+    const blk = block(c, BOARD_A, b, BOARD_H, accent, lit, { lift });
+    onFace(blk, 'v', len => face(len, accent, lit));
+  }
+
+  // The stands a board is put up on. Each takes the ground point and draws
+  // the board itself, so it can put parts in front of or behind it.
+  const FRAMES = {
+    // Two posts on a low footing.
+    posts(c, accent, lit, face) {
       block(c, 0.45, 0.16, 3, accent, lit);
       for (const u of [-0.28, 0.28]) {
         const [x1, y1] = pt(c, u, 0, 3), [x2, y2] = pt(c, u, 0, 14);
         line(x1, y1, x2, y2, accent, strong(lit), 1.2);
       }
-      const board = block(c, 0.62, 0.05, 22, accent, lit, { lift: 14 });
-      onFace(board, 'v', len => face(len, accent, lit));
-    };
+      board(c, accent, lit, face, { lift: 14 });
+    },
+    // One round column, the board high up on it.
+    pylon(c, accent, lit, face) {
+      cylinder(pt(c, 0, -0.08), 0.22, 3, accent, lit);
+      cylinder(pt(c, 0, -0.08), 0.07, 24, accent, lit, { fillAlpha: 1.5 });
+      board(c, accent, lit, face, { lift: 22 });
+    },
+    // A thick screen standing on a sloped plinth.
+    monolith(c, accent, lit, face) {
+      wedge(c, 0.72, 0.3, 6, 3, accent, lit, { axis: 'v' });
+      board(pt(c, 0, -0.05), accent, lit, face, { lift: 5, b: 0.12 });
+    },
+    // A board hung on the front of a low wall.
+    wall(c, accent, lit, face) {
+      block(pt(c, 0, -0.22), 0.74, 0.16, 30, accent, lit);
+      board(pt(c, 0, -0.01), accent, lit, face, { lift: 5 });
+    },
+    // An easel: the back leg behind, two splayed front legs and a ledge.
+    easel(c, accent, lit, face) {
+      const leg = (from, to) => line(...pt(c, ...from), ...pt(c, ...to), accent, strong(lit), 1.2);
+      leg([0, -0.5, 0], [0, -0.05, 34]);
+      board(c, accent, lit, face, { lift: 10 });
+      leg([-0.5, 0.18, 0], [-0.3, 0.06, 36]);
+      leg([0.5, 0.18, 0], [0.3, 0.06, 36]);
+      block(pt(c, 0, 0.1), 0.66, 0.06, 2, accent, lit, { lift: 8, fillAlpha: 1.5 });
+    },
+  };
+
+  // Builds a draw function for a chart showing `face(len, accent, lit)` on
+  // a board put up on `frame`. `face` draws in the board's own flat
+  // coordinates (see onFace).
+  function chart(frame, face) {
+    return (sx, sy, accent, lit) => FRAMES[frame]([sx, sy], accent, lit, face);
   }
 
   // Plot area shared by the axis-based faces: x and y in 0..1 mapped onto
@@ -189,19 +227,22 @@
     path(revealed([0.85, 0.9, 0.88, 0.4, 0.35, 0.9, 0.92], X, Y), accent, lit ? 1 : 0.75, 1);
   }
 
-  const meta = label => ({ bh: 36, scale: 0.62, label: `Billboard (${label})` });
+  // Top of each frame, for the registry's label placement.
+  const HEIGHT = { posts: 36, pylon: 44, monolith: 27, wall: 30, easel: 36 };
+  const addChart = (key, frame, face, label) => add(key, chart(frame, face),
+    { bh: HEIGHT[frame], scale: 0.62, label: `${frame === 'posts' || frame === 'pylon' ? 'Billboard' : 'Board'} (${label})` });
 
-  add('billboard-scatter', billboard(scatterFace), meta('scatter'));
-  add('billboard-curve', billboard(curveFace), meta('curve'));
-  add('billboard-lines', billboard(linesFace), meta('lines'));
-  add('billboard-bars', billboard(barsFace), meta('bars'));
-  add('billboard-pairs', billboard(pairsFace), meta('paired bars'));
-  add('billboard-heatmap', billboard(heatmapFace), meta('heatmap'));
-  add('billboard-kpi', billboard(kpiFace), meta('KPI'));
-  add('billboard-donut', billboard(donutFace), meta('donut'));
-  add('board-matrix', billboard(matrixFace), meta('matrix'));
-  add('board-curve', billboard(plateauFace), meta('plateau curve'));
-  add('board-bars', billboard(rankedFace), meta('ranked bars'));
-  add('board-hist', billboard(histFace), meta('histogram'));
-  add('board-lines', billboard(dipFace), meta('dip line'));
+  addChart('billboard-scatter', 'posts', scatterFace, 'scatter');
+  addChart('billboard-curve', 'pylon', curveFace, 'curve');
+  addChart('billboard-lines', 'posts', linesFace, 'lines');
+  addChart('billboard-bars', 'pylon', barsFace, 'bars');
+  addChart('billboard-pairs', 'monolith', pairsFace, 'paired bars');
+  addChart('billboard-heatmap', 'monolith', heatmapFace, 'heatmap');
+  addChart('billboard-kpi', 'pylon', kpiFace, 'KPI');
+  addChart('billboard-donut', 'posts', donutFace, 'donut');
+  addChart('board-matrix', 'wall', matrixFace, 'matrix');
+  addChart('board-curve', 'easel', plateauFace, 'plateau curve');
+  addChart('board-bars', 'wall', rankedFace, 'ranked bars');
+  addChart('board-hist', 'easel', histFace, 'histogram');
+  addChart('board-lines', 'monolith', dipFace, 'dip line');
 })();

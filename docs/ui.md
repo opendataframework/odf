@@ -259,13 +259,25 @@ Pick one with `odf run --theme <name>`, `server.start(theme=...)`, or
 `[ui] theme` in config. A theme only restyles the UI; markup and behavior are
 the same in every theme. An unknown theme name raises a `ValueError` at start.
 
+Each theme also has its own icon look: `default` keeps thin outlines over
+faint faces, `emerald` tints faces more strongly with a soft shadow under a
+lit icon, `glitch` draws near-black solids with bright edges, `neo` flat
+solid faces in three tones outlined in ink, and `onyx` tonal solids with no
+outlines at all. A theme's `theme.js` sets this through
+`ODF.registerTheme({ faces: {...} })`, whose knobs are listed on
+`THEME_STYLE.faces` in `app.js`.
+
 A node's icon and color can be changed from its "Customize" popover, which
 lists the built-in isometric icons by group (devices, buildings, charts,
 research, ML, shop). Icons and colors can be extended beyond the built-in
 set via `[ui] icon-scripts` / `[ui.colors]` in config, or by packages
 registering into `odf.ui.extensions`. The favicon, header logo, and "ODF" brand
 label can likewise be overridden with `[ui] favicon` / `[ui] logo` /
-`[ui] brand`. See
+`[ui] brand`. A custom icon drawn with `ODF.iconKit`'s solids (`block`,
+`stepped`, `gable`, `wedge`, `cylinder`) or with `paintFace()` takes on each
+theme's icon look; details drawn on a solid's wall inside `iconKit.onFace()`
+use the theme's face ink (`faceInk(accent)`), so they stay visible on opaque
+faces. See
 [`examples/17-custom-icon`](https://github.com/opendataframework/odf/tree/main/examples/17-custom-icon).
 
 ## Configuration

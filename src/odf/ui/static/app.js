@@ -123,6 +123,33 @@ const THEME_STYLE = {
   tileLine: lit => lit ? 1.1 : 0.8,
   faceLine: 0.8,
   topLine: lit => lit ? 1.3 : 1,
+  // How icon faces are painted (see paintFace), per side: 'top', 'left' or
+  // 'right'. `fill` is 'tint' (the accent at the `tint` alphas, so the grid
+  // shows through) or 'shade' (opaque: the accent mixed by the `shade`
+  // amounts, toward white when positive and toward `shadeBase` when
+  // negative). `occlude` under-fills a tinted face with the canvas color so
+  // it hides what's behind it. `outline` strokes faces in the accent, in
+  // 'ink' (the tile-stroke color) or not at all ('none'). Each `*Lit` entry
+  // is used instead while the node is lit.
+  faces: {
+    fill: 'tint',
+    tint:    { top: 0.1,  left: 0.08, right: 0.05 },
+    tintLit: { top: 0.16, left: 0.08, right: 0.05 },
+    shade:    { top: 0.15, left: -0.15, right: -0.35 },
+    shadeLit: { top: 0.3,  left: 0,     right: -0.2 },
+    // A color, 'canvas' (the canvas background) or null (black).
+    shadeBase: null,
+    occlude: true,
+    outline: 'accent',
+    // Shade (as in `shade`) for details drawn on an opaque face, or null to
+    // draw them in the accent; see faceInk().
+    detail: null,
+    // Scales the face line widths, so a theme with thick tile lines can keep
+    // small icon parts from drowning in their outlines.
+    lineScale: 1,
+    stroke:    { top: 0.6, left: 0.4,  right: 0.35 },
+    strokeLit: { top: 1,   left: 0.65, right: 0.55 },
+  },
   // Shadow applied to the stroke of a lit shape.
   litShadow(part, accent) {
     ctx.shadowColor = accent;
@@ -161,6 +188,62 @@ function strokeShape(buildPath, part, accent, lit, sMul = 1) {
   ctx.shadowBlur = 0;
   ctx.shadowOffsetX = 0;
   ctx.shadowOffsetY = 0;
+}
+
+// Fills and strokes one face of an icon solid in the theme's look (see
+// THEME_STYLE.faces). `side` is 'top', 'left' or 'right'; fMul and sMul are
+// a shape's fillAlpha/strokeAlpha: a tinted face scales its alphas by them,
+// a shaded one reads fMul above 1 as a lighter face and either below 1 as
+// fading out. `lw` overrides the theme's line width, and `fill`/`stroke`
+// false skip that half, for a face whose fill and outline are split up (a
+// cylinder's side, shaded in two halves under a single outline).
+function paintFace(buildPath, side, accent, lit, fMul = 1, sMul = 1, { lw, fill = true, stroke = true } = {}) {
+  const f = THEME_STYLE.faces;
+  ctx.save();
+  buildPath();
+  if (fill && f.fill === 'shade') {
+    ctx.save();
+    ctx.globalAlpha *= Math.max(0, Math.min(1, fMul, sMul));
+    const t = (lit ? f.shadeLit : f.shade)[side] + Math.max(0, Math.min(fMul, 2.5) - 1) * 0.12;
+    ctx.fillStyle = shadeHex(accent, t);
+    ctx.fill();
+    ctx.restore();
+  } else if (fill) {
+    // A fading shape (alpha multipliers below 1) stays see-through.
+    if (f.occlude && fMul >= 1 && sMul >= 1) { ctx.fillStyle = BG_CANVAS; ctx.fill(); }
+    ctx.fillStyle = rgba(accent, (lit ? f.tintLit : f.tint)[side] * fMul);
+    ctx.fill();
+  }
+  if (stroke && f.outline !== 'none') {
+    const ink = f.outline === 'ink';
+    const a = ink ? Math.min(1, sMul) : (lit ? f.strokeLit : f.stroke)[side] * sMul;
+    ctx.strokeStyle = rgba(ink ? TILE_STROKE : accent, a);
+    ctx.lineWidth = (lw ?? (side === 'top' ? THEME_STYLE.topLine(lit) : THEME_STYLE.faceLine)) * f.lineScale;
+    ctx.lineJoin = 'round';
+    strokeShape(buildPath, side === 'top' ? 'top' : 'face', accent, lit, sMul);
+  }
+  ctx.restore();
+}
+
+// `accent` shaded by t as THEME_STYLE.faces describes: toward white when
+// positive, toward its shadeBase when negative.
+function shadeHex(accent, t) {
+  const f = THEME_STYLE.faces;
+  const base = f.shadeBase === 'canvas' ? BG_CANVAS : (f.shadeBase || '#000000');
+  return t >= 0 ? mixHex(accent, '#ffffff', t) : mixHex(accent, base, -t);
+}
+
+// Whether the theme paints icon faces opaque.
+function solidFaces() {
+  return THEME_STYLE.faces.fill === 'shade';
+}
+
+// Color for details drawn onto a face (windows, doors, rack lines, screens):
+// the accent itself, unless the theme paints faces opaque in their own
+// accent, where it would vanish, and shifts it by `faces.detail` instead.
+function faceInk(accent) {
+  const { detail } = THEME_STYLE.faces;
+  return solidFaces() && detail != null ? shadeHex(accent, detail) : accent;
 }
 
 function updateThemeButton(theme) {
@@ -365,6 +448,13 @@ function rgba(hex, a) {
   return `rgba(${r},${g},${b},${a})`;
 }
 
+// `hex` moved fraction t of the way to `toHex`, as another #rrggbb.
+function mixHex(hex, toHex, t) {
+  const c = (h, i) => parseInt(h.slice(i, i + 2), 16);
+  const m = i => Math.round(c(hex, i) + (c(toHex, i) - c(hex, i)) * t).toString(16).padStart(2, '0');
+  return `#${m(1)}${m(3)}${m(5)}`;
+}
+
 function lerp(a, b, t) { return [a[0]+(b[0]-a[0])*t, a[1]+(b[1]-a[1])*t]; }
 
 function hashSeed(s) {
@@ -418,52 +508,34 @@ function isoBox(sx, sy, w2, h2, bh, accent, lit, opts = {}) {
   const sMul = opts.strokeAlpha ?? 1;
 
   // ── Right face ──
-  const rightFace = () => {
+  paintFace(() => {
     ctx.beginPath();
     ctx.moveTo(sx + w2, sy - bh);
     ctx.lineTo(sx + w2, sy);
     ctx.lineTo(sx,      sy + h2);
     ctx.lineTo(sx,      sy + h2 - bh);
     ctx.closePath();
-  };
-  rightFace();
-  ctx.fillStyle   = rgba(accent, 0.05 * fMul);
-  ctx.fill();
-  ctx.strokeStyle = rgba(accent, (lit ? 0.55 : 0.35) * sMul);
-  ctx.lineWidth   = THEME_STYLE.faceLine;
-  strokeShape(rightFace, 'face', accent, lit, sMul);
+  }, 'right', accent, lit, fMul, sMul);
 
   // ── Left face ──
-  const leftFace = () => {
+  paintFace(() => {
     ctx.beginPath();
     ctx.moveTo(sx - w2, sy - bh);
     ctx.lineTo(sx - w2, sy);
     ctx.lineTo(sx,      sy + h2);
     ctx.lineTo(sx,      sy + h2 - bh);
     ctx.closePath();
-  };
-  leftFace();
-  ctx.fillStyle   = rgba(accent, 0.08 * fMul);
-  ctx.fill();
-  ctx.strokeStyle = rgba(accent, (lit ? 0.65 : 0.4) * sMul);
-  ctx.lineWidth   = THEME_STYLE.faceLine;
-  strokeShape(leftFace, 'face', accent, lit, sMul);
+  }, 'left', accent, lit, fMul, sMul);
 
   // ── Top face ──
-  const topFace = () => {
+  paintFace(() => {
     ctx.beginPath();
     ctx.moveTo(sx,      sy - h2 - bh);
     ctx.lineTo(sx + w2, sy      - bh);
     ctx.lineTo(sx,      sy + h2 - bh);
     ctx.lineTo(sx - w2, sy      - bh);
     ctx.closePath();
-  };
-  topFace();
-  ctx.fillStyle   = rgba(accent, (lit ? 0.16 : 0.1) * fMul);
-  ctx.fill();
-  ctx.strokeStyle = rgba(accent, (lit ? 1.0 : 0.6) * sMul);
-  ctx.lineWidth   = THEME_STYLE.topLine(lit);
-  strokeShape(topFace, 'top', accent, lit, sMul);
+  }, 'top', accent, lit, fMul, sMul);
 
   return { w2, h2, topY: sy - bh };
 }
@@ -515,7 +587,7 @@ function drawWarehouse(sx, sy, accent, lit) {
   ctx.beginPath();
   ctx.moveTo(sx, sy - h2 - bh);
   ctx.lineTo(sx, sy + h2 - bh);
-  ctx.strokeStyle = rgba(accent, lit ? 0.9 : 0.5);
+  ctx.strokeStyle = rgba(faceInk(accent), lit ? 0.9 : 0.5);
   ctx.lineWidth = lit ? 1.3 : 1;
   if (lit) { ctx.shadowColor = accent; ctx.shadowBlur = 5; }
   ctx.stroke();
@@ -531,7 +603,7 @@ function drawServerRack(sx, sy, accent, lit) {
   const rBot = [[sx + w2, sy],      [sx, sy + TH2 * scale]];
   const n = 5;
   ctx.save();
-  ctx.strokeStyle = rgba(accent, lit ? 0.5 : 0.25);
+  ctx.strokeStyle = rgba(faceInk(accent), lit ? 0.5 : 0.25);
   ctx.lineWidth = 0.7;
   for (let i = 1; i < n; i++) {
     const t = i / n;
@@ -593,15 +665,10 @@ function drawFactoryCube(sx, sy, accent, lit) {
   const { w2, h2 } = drawBox(sx, sy, bh, accent, lit, 0.8);
   const cx = sx - w2 * 0.35, cBase = sy - h2 * 0.2 - bh, cH = 16, cw = 5;
 
-  ctx.save();
-  ctx.fillStyle = rgba(accent, 0.12);
-  ctx.strokeStyle = rgba(accent, lit ? 0.7 : 0.4);
-  ctx.lineWidth = 0.8;
-  ctx.beginPath();
-  ctx.rect(cx - cw / 2, cBase - cH, cw, cH);
-  ctx.fill();
-  ctx.stroke();
-  ctx.restore();
+  paintFace(() => {
+    ctx.beginPath();
+    ctx.rect(cx - cw / 2, cBase - cH, cw, cH);
+  }, 'left', accent, lit, 1.5);
 
   for (let i = 0; i < 3; i++) {
     const phase = (animT * 0.5 + i / 3) % 1;
@@ -628,7 +695,7 @@ function drawConveyorPad(sx, sy, accent, lit) {
   ctx.lineTo(sx - w2, sy      - bh);
   ctx.closePath();
   ctx.clip();
-  ctx.strokeStyle = rgba(accent, lit ? 0.5 : 0.28);
+  ctx.strokeStyle = rgba(faceInk(accent), lit ? 0.5 : 0.28);
   ctx.lineWidth = 2.2;
   const shift = (animT * 10) % 16;
   for (let i = -4; i <= 4; i++) {
@@ -647,25 +714,19 @@ function drawObservatory(sx, sy, accent, lit) {
   drawBox(sx, sy, bh, accent, lit, 0.75);
   const cy = sy - bh, r = 13;
 
-  ctx.save();
-  ctx.beginPath();
-  ctx.ellipse(sx, cy, r, r * (TH2 / TW2), 0, 0, Math.PI);
-  ctx.arc(sx, cy, r, 0, Math.PI, true);
-  ctx.closePath();
-  ctx.fillStyle = rgba(accent, lit ? 0.2 : 0.12);
-  ctx.strokeStyle = rgba(accent, lit ? 0.9 : 0.55);
-  ctx.lineWidth = 1;
-  if (lit) { ctx.shadowColor = accent; ctx.shadowBlur = 5; }
-  ctx.fill();
-  ctx.stroke();
-  ctx.restore();
+  paintFace(() => {
+    ctx.beginPath();
+    ctx.ellipse(sx, cy, r, r * (TH2 / TW2), 0, 0, Math.PI);
+    ctx.arc(sx, cy, r, 0, Math.PI, true);
+    ctx.closePath();
+  }, 'top', accent, lit, 1.4, 1, { lw: 1 });
 
   // A slit in the dome, and the beam leaving it, both turning with time.
   const angle = animT * 0.8 + sx;
   const dx = Math.cos(angle), dy = Math.sin(angle) * (TH2 / TW2);
   const front = Math.sin(angle) > 0;
   ctx.save();
-  ctx.strokeStyle = rgba(accent, front ? (lit ? 0.85 : 0.6) : 0.2);
+  ctx.strokeStyle = rgba(faceInk(accent), front ? (lit ? 0.85 : 0.6) : 0.2);
   ctx.lineWidth = 1.4;
   ctx.beginPath();
   ctx.moveTo(sx + dx * r * 0.35, cy - r * 0.95);
@@ -783,9 +844,10 @@ const COLOR_SWATCHES = [
 // odf.ui.extensions.register_icon_script, either by a framework-extension
 // package (Python, import time) or by [ui] icon-scripts in config.toml. Each
 // file calls ODF.registerIcon(key, draw, meta) at its top level, same
-// signature/shared primitives (drawBox, isoBox, isoDisc, rgba, ctx, animT,
-// plus ODF.iconKit from icons/shared.js) as every draw function above, so a
-// custom icon renders at the same fidelity as a built-in one. `meta.group`
+// signature/shared primitives (drawBox, isoBox, isoDisc, paintFace, faceInk,
+// rgba, ctx, animT, plus ODF.iconKit from icons/shared.js) as every draw
+// function above, so a custom icon renders at the same fidelity as a
+// built-in one, in the theme's look. `meta.group`
 // names the icon picker tab it's listed under — 'Custom' unless given.
 window.ODF = {
   registerIcon(key, draw, meta = {}) {
@@ -793,8 +855,12 @@ window.ODF = {
     finalizeIconEntry(key);
   },
   // Called by a theme's optional theme.js to override THEME_STYLE entries.
+  // `faces` merges into the default face style, so a theme sets only the
+  // knobs it changes.
   registerTheme(overrides) {
-    Object.assign(THEME_STYLE, overrides);
+    const { faces, ...rest } = overrides;
+    Object.assign(THEME_STYLE, rest);
+    if (faces) Object.assign(THEME_STYLE.faces, faces);
     readTheme();
     vignetteDirty = true;
   },
