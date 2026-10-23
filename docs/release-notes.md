@@ -70,6 +70,14 @@
   outlined in ink on a hairline grid, with no glows. Select it with
   `odf run --theme ledger` or `[ui] theme = "ledger"` in `config.toml`. See
   [UI](ui.md#themes-icons-and-branding).
+- **UI**: `clay` theme, graphic realism: matte surfaces under one soft key light,
+  raised cards and buttons on layered shadows that press in when clicked, recessed
+  fields, and a faint film grain, over graphite in dark mode and warm grey in light
+  mode. The topology draws icons as matte painted solids lit from the top-left, darker
+  toward the floor, each on a soft contact shadow that spreads out when the icon lifts
+  on hover. Select it with `odf run --theme clay` or `[ui] theme = "clay"` in
+  `config.toml`. Themes can now draw on the floor under each icon with
+  `ODF.registerTheme({ groundShadow })`. See [UI](ui.md#themes-icons-and-branding).
 
 ### Changed
 

@@ -254,8 +254,8 @@ and
 
 ## Themes, icons and branding
 
-The UI ships eight themes: `default`, `glitch`, `neo`, `emerald`, `onyx`,
-`terminal`, `y2k` and `ledger`.
+The UI ships nine themes: `default`, `glitch`, `neo`, `emerald`, `onyx`,
+`terminal`, `y2k`, `ledger` and `clay`.
 Pick one with `odf run --theme <name>`, `server.start(theme=...)`, or
 `[ui] theme` in config. A theme only restyles the UI; markup and behavior are
 the same in every theme. An unknown theme name raises a `ValueError` at start.
@@ -265,14 +265,17 @@ faint faces, `emerald` tints faces more strongly with a soft shadow under a
 lit icon, `glitch` draws near-black solids with bright edges, `neo` flat
 solid faces in three tones outlined in ink, `onyx` tonal solids with no
 outlines at all, `terminal` glowing phosphor line art on a dotted grid,
-`y2k` liquid chrome solids, and `ledger` flat silhouettes outlined in ink,
-with nothing glowing, on a hairline grid. A theme's `theme.js` sets this through
+`y2k` liquid chrome solids, `ledger` flat silhouettes outlined in ink,
+with nothing glowing, on a hairline grid, and `clay` matte solids lit from
+the top-left, each standing on a soft contact shadow. A theme's `theme.js` sets this through
 `ODF.registerTheme({ faces: {...} })`, whose knobs are listed on
 `THEME_STYLE.faces` in `app.js`. It can also replace how empty grid tiles are
 drawn with `emptyTile(sx, sy)`, and fill opaque faces with its own style, such
 as a gradient spanning the whole icon, with
 `faceFill(side, accent, lit, t, frame)`, where `frame` is the icon's
-`{x, top, bottom}` on the canvas.
+`{x, top, bottom}` on the canvas. It can draw on the floor under each icon,
+such as a shadow, with `groundShadow(x, y, e, accent, lit)`, where `e` is the
+icon's registry entry (its `widthExtent` and `scale` give the footprint).
 
 A node's icon and color can be changed from its "Customize" popover, which
 lists the built-in isometric icons by group (devices, buildings, charts,

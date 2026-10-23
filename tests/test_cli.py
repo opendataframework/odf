@@ -151,7 +151,8 @@ def test_run_reports_unknown_theme_as_clean_error(tmp_path, monkeypatch):
 
     assert result.exit_code == 1
     assert "Unknown UI theme 'bogus'" in result.output
-    assert "available themes: default" in result.output
+    assert "available themes:" in result.output
+    assert "default" in result.output
     assert "Traceback" not in result.output
     assert RejectingServer.instances[-1].stopped is True
 

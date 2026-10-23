@@ -2147,6 +2147,27 @@ def test_serves_ledger_theme_files():
     assert "ODF.registerTheme(" in responses["/theme.js"].text
 
 
+def test_list_themes_finds_the_built_in_clay_theme():
+    assert "clay" in themes.list_themes()
+
+
+def test_serves_clay_theme_files():
+    with Context(namespaces=set()) as ctx:
+        client = TestClient(UiServer(ctx, "proj", theme="clay")._app)
+        responses = {path: client.get(path) for path in ("/theme.css", "/theme.js", "/favicon.svg")}
+
+    for path, r in responses.items():
+        assert r.status_code == 200, path
+    assert "groundShadow(x, y, e, accent, lit)" in responses["/theme.js"].text
+
+
+def test_theme_can_draw_a_ground_shadow_under_icons():
+    script = (themes.STATIC_DIR / "app.js").read_text()
+
+    assert "groundShadow: null" in script
+    assert "THEME_STYLE.groundShadow(x, y, e, accent, lit)" in script
+
+
 def test_theme_can_fill_faces_across_the_whole_icon():
     script = (themes.STATIC_DIR / "app.js").read_text()
 

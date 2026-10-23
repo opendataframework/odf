@@ -167,6 +167,11 @@ const THEME_STYLE = {
   // the icon being drawn, {x, top, bottom} in canvas pixels (see drawIcon),
   // so a gradient can span the whole icon rather than one face.
   faceFill: null,
+  // Optional (x, y, e, accent, lit) => void: draws on the floor under the
+  // icon standing on (x, y), before the icon itself, such as a contact
+  // shadow. `e` is its ICONS entry, whose widthExtent and scale give the
+  // footprint. Called inside a save()/restore().
+  groundShadow: null,
   // Optional (v) => void, called at the end of readTheme() with its CSS
   // custom-property reader, for themes that mirror extra variables.
   onReadTheme: null,
@@ -837,9 +842,15 @@ for (const key in ICONS) finalizeIconEntry(key);
 // runs; null otherwise. Read by paintFace() for THEME_STYLE.faceFill.
 let ICON_FRAME = null;
 
-// Draws ICONS[key] standing on (x, y), with ICON_FRAME set to its extents.
+// Draws ICONS[key] standing on (x, y), with ICON_FRAME set to its extents,
+// over the theme's ground shadow if it has one.
 function drawIcon(key, x, y, accent, lit) {
   const e = ICONS[key];
+  if (THEME_STYLE.groundShadow) {
+    ctx.save();
+    THEME_STYLE.groundShadow(x, y, e, accent, lit);
+    ctx.restore();
+  }
   ICON_FRAME = { x, top: y - e.topExtent, bottom: y + TH2 * e.scale };
   try {
     e.draw(x, y, accent, lit);
