@@ -30,6 +30,33 @@ the grid are saved to `layout.json` in the working directory, or the file named
 by `[project] layout-file`. Commit it to share a layout. Icons are stored by key,
 so a node whose icon key no longer exists falls back to its type's default.
 
+### Run activity
+
+The topology shows what the project is doing as it happens, whoever started
+the work: a button in the UI, an MCP client, chat, a pipeline running its
+steps, or a service's `run()` loop.
+
+- An edge animates only while a call goes through it: a pipeline running one
+  of its steps, a task calling a function, or a task, pipeline, agent or
+  function using a repository, component or service it depends on. Idle edges
+  stay still.
+- A node running a call (a task's or pipeline's `execute()`, an agent's
+  `invoke()`, a function call, a service's `setup()` or `stop()`) gets a ring
+  around its tile. When the call completes, the ring and a ✓ fade out after a
+  few seconds. A failed call leaves a red ring and a `!` (with a count if it
+  keeps failing), which stays until you select the node.
+- A failure also pops a notice in the top-right corner, with the error and a
+  **Show logs** button that opens the node's logs at the run, highlighting its
+  lines. It stays until closed. A step's failure is reported by its pipeline
+  when the pipeline fails too. A success pops a notice only for an action you
+  started in that tab, from its buttons or its chat, and closes by itself.
+- A service's **Start**/**Stop** button follows the service, so it's correct
+  after a start or stop over MCP or chat too.
+
+With the system's reduced-motion setting on, nothing moves: edges in use are
+drawn brighter instead of carrying a pulse, and a running node's ring holds
+still. The run state comes from `GET /api/events` (see [HTTP API](#http-api)).
+
 ### Choosing what the topology shows
 
 By default the topology shows every component and every connection between
@@ -159,6 +186,10 @@ location / {
 }
 ```
 
+`GET /api/events` is a long-lived stream. The UI sends `X-Accel-Buffering: no`
+with it, so nginx passes events on as they happen with no extra setting. Other
+proxies need response buffering turned off for that path.
+
 Since Jupyter's pages share the UI's origin, script output of a notebook
 Jupyter trusts (one you ran yourself) can call the UI's HTTP API. That doesn't
 give a notebook more than its kernel has, which already runs code as the
@@ -266,7 +297,24 @@ registered name:
 | `PUT /api/repositories/{name}/records/{key}/media` | replacing a document file through `save()` (see [Notebooks](#notebooks)) |
 | `POST /api/notebooks/session` | starting Jupyter for notebook editing; returns the `url` it is served at through the UI (`/proxy/jupyter/`) and its `token` |
 | `/proxy/jupyter/...` | Jupyter itself, HTTP and WebSockets, while notebook editing is on |
+| `GET /api/events` | every protocol call the project makes, as server-sent events (see below) |
 
 The collection comes from the execution type, not the key's namespace: a `@Task`
 registered as `loader` is `/api/tasks/loader`, whatever its key. An action that
 doesn't apply to a kind has no route, so it answers `404`.
+
+`GET /api/events` streams `opendataframework`'s
+[`Event`s](https://opendataframework.github.io/opendataframework/events/) as
+`text/event-stream`, one `data:` line of JSON per call state change, from the
+moment the client connects:
+
+```json
+{"type": "call", "key": "task.load-job", "protocol": "TaskProtocol", "method": "execute",
+ "state": "completed", "call_id": "…", "parent": "…", "ts": 1792776224.61,
+ "elapsed_ms": 203.7, "error": null}
+```
+
+`state` is `started`, `completed` or `failed`. A call's `started` and its
+`completed`/`failed` share a `call_id`, and `parent` is the `call_id` of the
+call it was made from (`null` for a top-level call). A client that falls more
+than 1000 events behind gets `{"type": "reset"}` in place of what it missed.

@@ -39,7 +39,7 @@ from opendataframework.view import (
     VideoView,
 )
 
-from odf.ui import annotations, arguments, data, keys, layout, media, themes
+from odf.ui import annotations, arguments, data, events, keys, layout, media, themes
 from odf.ui.notebooks import NotebookServer, local_host
 from odf.ui.topology import TopologyView, build_topology
 
@@ -154,6 +154,7 @@ class UiServer:
         self._theme_dir = themes.theme_dir(theme)
         self._topology = topology
         self._notebooks: NotebookServer | None = None
+        self._events = events.EventHub(context)
         self._server: uvicorn.Server | None = None
         self._thread: threading.Thread | None = None
 
@@ -495,6 +496,16 @@ class UiServer:
         # /api/tasks/loader (see odf.ui.keys). Actions that only apply to one
         # kind have routes for that kind only.
 
+        @app.get("/api/events")
+        def run_events() -> StreamingResponse:
+            """Stream every protocol call the context makes, as server-sent events."""
+            return StreamingResponse(
+                events.sse(self._events),
+                media_type="text/event-stream",
+                # X-Accel-Buffering: nginx would otherwise hold events back.
+                headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
+            )
+
         @app.get("/api/{collection}/{name}/logs")
         def component_logs(collection: str, name: str) -> list[dict]:
             """Return a component's tailed log records."""
@@ -802,6 +813,7 @@ class UiServer:
 
     def start(self) -> None:
         """Start serving in a background daemon thread. Returns immediately."""
+        self._events.start()
         config = uvicorn.Config(self._app, host=self._host, port=self._port, log_level="warning")
         self._server = uvicorn.Server(config)
         self._thread = threading.Thread(target=self._server.run, daemon=True)
@@ -809,6 +821,8 @@ class UiServer:
 
     def stop(self) -> None:
         """Signal the server to exit and wait for the background thread to finish."""
+        # Ends the open event streams first, which shutdown would wait on.
+        self._events.stop()
         if self._server is not None:
             self._server.should_exit = True
         if self._thread is not None:

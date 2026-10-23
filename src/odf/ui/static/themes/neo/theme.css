@@ -593,3 +593,21 @@ button.media-tile:hover,button.media-tile:focus-visible{border-color:var(--title
 .ts-point .ts-mark-head{left:50%;top:auto;bottom:0}
 .ts-mark-label{max-width:160px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;padding:1px 5px;background:var(--box-color);color:#111;font-size:10.5px;font-weight:600;line-height:1.4;cursor:pointer}
 .ts-mark-delete{width:18px;padding:0;border:0;border-left:1px solid rgba(0,0,0,.25);background:var(--box-color);color:#111;font-family:inherit;font-size:13px;line-height:1;cursor:pointer}
+
+/* Run toasts (see "Toasts" in app.js) and the log lines a toast opened the logs at */
+#toasts{position:absolute;top:44px;right:14px;z-index:8;display:flex;flex-direction:column;gap:6px;width:280px;max-width:calc(100% - 28px);pointer-events:none}
+.toast{pointer-events:auto;background:var(--panel);border:2px solid var(--border-strong);border-left:3px solid var(--border-strong);border-radius:0;box-shadow:0 6px 18px rgba(0,0,0,.25),var(--panel-shadow);padding:8px 10px;font-size:11px;color:var(--text);animation:toast-in .18s ease-out}
+.toast.failed{border-color:var(--accent-alert);border-left-color:var(--accent-alert)}
+.toast-head{display:flex;align-items:center;gap:6px}
+.toast-label{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-family:'SF Mono',Consolas,monospace;font-weight:600;letter-spacing:.04em;text-transform:uppercase;font-size:10px}
+.toast-count{font-family:'SF Mono',Consolas,monospace;font-size:10px;color:var(--accent-alert)}
+.toast-close{background:none;border:none;color:var(--text-dim);cursor:pointer;font-size:14px;line-height:1;padding:0 2px}
+.toast-close:hover{color:var(--text)}
+.toast-text{margin-top:4px;color:var(--text-muted);font-family:'SF Mono',Consolas,monospace;font-size:10.5px;word-break:break-word;max-height:4.5em;overflow:hidden}
+.toast.failed .toast-text{color:var(--accent-alert)}
+.toast-actions{margin-top:6px;display:flex;justify-content:flex-end}
+.toast-logs{background:transparent;border:1px solid var(--border);border-radius:0;color:var(--text-muted);font-family:'SF Mono',Consolas,monospace;font-size:9.5px;letter-spacing:.06em;text-transform:uppercase;padding:3px 8px;cursor:pointer}
+.toast-logs:hover{color:var(--title-accent);border-color:var(--border-strong);background:var(--hover-bg)}
+.log-line.run-match{background:color-mix(in srgb, var(--title-accent) 10%, transparent)}
+@keyframes toast-in{from{opacity:0;transform:translateY(-4px)}to{opacity:1;transform:none}}
+@media (prefers-reduced-motion: reduce){.toast{animation:none}}

@@ -1,5 +1,6 @@
 import json
 import re
+import threading
 import time
 from dataclasses import dataclass
 
@@ -472,6 +473,47 @@ def test_execute_endpoint_surfaces_task_exceptions_as_500():
         r = client.post("/api/tasks/boom/execute")
 
     assert r.status_code == 500
+
+
+def test_events_endpoint_streams_calls_as_server_sent_events():
+    NS = make_ns()
+
+    from opendataframework.task import Task
+
+    @NS
+    @Task
+    class DoThing:
+        def execute(self) -> None: ...
+
+    with Context(namespaces={NS}) as ctx:
+        server = UiServer(ctx, "proj")
+        server._events.start()
+
+        # The test client returns a response only once its body ends, so the
+        # call is made, and the stream ended, from another thread.
+        def run():
+            deadline = time.monotonic() + 5
+            while not server._events._clients and time.monotonic() < deadline:
+                time.sleep(0.01)
+            ctx.execute(ctx.key(DoThing))
+            server._events.stop()
+
+        thread = threading.Thread(target=run)
+        thread.start()
+        r = TestClient(server._app).get("/api/events")
+        thread.join()
+
+    assert r.headers["content-type"].startswith("text/event-stream")
+    assert r.headers["x-accel-buffering"] == "no"
+    frames = [
+        json.loads(line[len("data: ") :])
+        for line in r.text.splitlines()
+        if line.startswith("data: ")
+    ]
+    assert [(f["key"], f["state"]) for f in frames] == [
+        (ctx.key(DoThing), "started"),
+        (ctx.key(DoThing), "completed"),
+    ]
 
 
 def _librarian(NS, calls):

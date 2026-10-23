@@ -134,6 +134,18 @@ const THEME_STYLE = {
   // Optional (v) => void, called at the end of readTheme() with its CSS
   // custom-property reader, for themes that mirror extra variables.
   onReadTheme: null,
+  // Run marks (see "Run state"): the ring around a running, done or failed
+  // node's tile, and the extra glow on a wire a call is going through. Both
+  // are called inside a save()/restore().
+  runRingLine: 1.4,
+  runRingShadow(state, color) {
+    ctx.shadowColor = color;
+    ctx.shadowBlur = state === 'running' ? 10 : 6;
+  },
+  flowLine(accent) {
+    ctx.shadowColor = accent;
+    ctx.shadowBlur = 7;
+  },
 };
 
 // Strokes the outline of a tile or box face with the caller's strokeStyle and
@@ -804,7 +816,8 @@ function nodeAccentCss(node) {
   return node.color || `var(--accent-${node.type})`;
 }
 
-// ── Edges — grid-aligned wires with a traveling glow pulse ────────────────
+// ── Edges — grid-aligned wires, with a traveling glow pulse while a call
+// goes through them (see "Run state") ─────────────────────────────────────
 
 function edgePath(fromNode, toNode) {
   const f = iso(fromNode.col, fromNode.row);
@@ -813,7 +826,7 @@ function edgePath(fromNode, toNode) {
   return [[f.x, f.y], [bend.x, bend.y], [t.x, t.y]];
 }
 
-function drawEdge(fromNode, toNode, dashed) {
+function drawEdge(fromNode, toNode, dashed, flowing) {
   const pts = edgePath(fromNode, toNode);
   const c = dashed ? ACCENT.alert : WIRE;
   const g = dashed ? ACCENT.alert : WIRE_GLOW;
@@ -821,6 +834,7 @@ function drawEdge(fromNode, toNode, dashed) {
   ctx.save();
   ctx.shadowColor = g;
   ctx.shadowBlur  = dashed ? 5 : 3;
+  if (flowing) THEME_STYLE.flowLine(nodeAccent(toNode));
   ctx.beginPath();
   ctx.moveTo(pts[0][0], pts[0][1]);
   for (let i = 1; i < pts.length; i++) ctx.lineTo(pts[i][0], pts[i][1]);
@@ -842,7 +856,9 @@ function drawEdge(fromNode, toNode, dashed) {
     ctx.restore();
   }
 
-  // traveling pulse, colored by destination node
+  // traveling pulse, colored by destination node; still under reduced motion,
+  // where the brighter wire alone shows the flow
+  if (!flowing || reduceMotion) return;
   const accent = nodeAccent(toNode);
   const segLens = [];
   let total = 0;
@@ -874,6 +890,68 @@ function drawEdge(fromNode, toNode, dashed) {
     ctx.fill();
     ctx.restore();
   }
+}
+
+// ── Run marks — a ring on the tile of a node whose call is running, has just
+// completed (fading out) or failed (kept until seen), and a ✓ / ! badge above
+// its label. See "Run state" for where the state comes from. ───────────────
+
+function runMarkColor(node, run) {
+  return run.state === 'failed' ? ACCENT.alert : nodeAccent(node);
+}
+
+// 1 while running or failed; fades from 1 to 0 over a done mark's lifetime.
+function runMarkAlpha(run) {
+  if (run.state !== 'done') return 1;
+  return Math.max(0, 1 - (performance.now() - run.at) / RUN_DONE_MS);
+}
+
+function drawRunRing(node, sx, sy, run) {
+  const color = runMarkColor(node, run);
+  const alpha = runMarkAlpha(run);
+  if (alpha <= 0) return;
+  // A running ring breathes outward; a still one sits just outside the tile.
+  const pulse = run.state === 'running' && !reduceMotion ? (Math.sin(animT * 5) + 1) / 2 : 0;
+  const s = 1.08 + 0.06 * pulse;
+  ctx.save();
+  ctx.beginPath();
+  ctx.moveTo(sx,           sy - TH2 * s);
+  ctx.lineTo(sx + TW2 * s, sy);
+  ctx.lineTo(sx,           sy + TH2 * s);
+  ctx.lineTo(sx - TW2 * s, sy);
+  ctx.closePath();
+  ctx.strokeStyle = rgba(color, (run.state === 'running' ? 0.55 + 0.35 * pulse : 0.85) * alpha);
+  ctx.lineWidth = THEME_STYLE.runRingLine;
+  THEME_STYLE.runRingShadow(run.state, color);
+  ctx.stroke();
+  ctx.restore();
+}
+
+function drawRunBadge(node, sx, sy, run) {
+  if (run.state === 'running') return;
+  const alpha = runMarkAlpha(run);
+  if (alpha <= 0) return;
+  const color = runMarkColor(node, run);
+  const by = sy - ICONS[iconKey(node)].topExtent - 30;
+  const failed = run.state === 'failed';
+  const text = failed ? (run.count > 1 ? `! ×${run.count}` : '!') : '✓';
+
+  ctx.save();
+  ctx.globalAlpha = alpha;
+  ctx.font = "bold 9.5px 'SF Mono', 'Courier New', monospace";
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  const w = Math.max(14, ctx.measureText(text).width + 8);
+  ctx.beginPath();
+  ctx.rect(sx - w / 2, by - 7, w, 14);
+  ctx.fillStyle = `rgba(${LABEL_BG_RGB},${LABEL_BG_ALPHA})`;
+  ctx.fill();
+  ctx.strokeStyle = color;
+  ctx.lineWidth = 1;
+  ctx.stroke();
+  ctx.fillStyle = color;
+  ctx.fillText(text, sx, by + 0.5);
+  ctx.restore();
 }
 
 function drawLabel(node, sx, sy, lit) {
@@ -996,9 +1074,18 @@ function render() {
     ctx.restore();
   }
 
+  // 1.75 — Run rings around running, done and failed nodes' tiles
+  for (const id of Object.keys(nodeRun)) {
+    const node = nodeMap[id];
+    if (!node) continue;
+    const {x, y} = iso(node.col, node.row);
+    if (x < viewL || x > viewR || y < viewT || y > viewB) continue;
+    drawRunRing(node, x, y, nodeRun[id]);
+  }
+
   // 2 — Edges (grid-aligned wires, drawn at ground level, behind buildings)
   for (const e of edges) {
-    drawEdge(nodeMap[e.from], nodeMap[e.to], e.dashed || false);
+    drawEdge(nodeMap[e.from], nodeMap[e.to], e.dashed || false, flowingEdges.has(`${e.from}|${e.to}`));
   }
 
   // 3 — Buildings (back to front, per-type silhouette)
@@ -1015,6 +1102,7 @@ function render() {
     if (x < viewL || x > viewR || y < viewT || y > viewB) continue;
     const lit = node.id === hoverId || node.id === selectId || node === dragNode;
     drawLabel(node, x, y, lit);
+    if (nodeRun[node.id]) drawRunBadge(node, x, y, nodeRun[node.id]);
   }
 
   // 5 — Vignette (fixed to the viewport, unaffected by pan/zoom)
@@ -1133,13 +1221,14 @@ window.addEventListener('mouseup', e => {
         saveLayoutOverride(node);
       }
     }
+    markRunSeen(node.id);
     selectNode(node.id);
   }
 
   const p = canvasPoint(e);
   const w = screenToWorld(p.x, p.y);
   const hit = hitTest(w.x, w.y);
-  if (!node && !dragMoved) selectNode(hit);
+  if (!node && !dragMoved) { markRunSeen(hit); selectNode(hit); }
   hoverId = hit;
   canvas.style.cursor = hit ? 'pointer' : 'grab';
 });
@@ -1504,6 +1593,7 @@ for (const key of ['activity', 'chat']) {
 // objects doesn't force a trip back through the topology first. Falls back
 // to topology when the newly selected node has no equivalent view.
 function selectFromSidebar(id) {
+  markRunSeen(id);
   selectNode(id);
   if (mapMode === 'topology') return;
   const schema = repoSchemas[id];
@@ -1521,6 +1611,229 @@ function selectFromSidebar(id) {
   }
 }
 
+// ── Run state ────────────────────────────────────────────────────────────
+// GET /api/events streams every protocol call the Context makes, whoever made
+// it: this UI, an MCP client, chat, a pipeline running its steps, a service's
+// run() loop (see odf.ui.events). Each call arrives as `started`, then
+// `completed` or `failed`, sharing a `call_id`; `parent` is the call in
+// progress when it started (a pipeline for its steps, a task for a function
+// it calls). From these the topology knows which nodes are running and which
+// edges a call is going through, so motion on the grid means something
+// happened.
+
+// The calls a node counts as running for, by method, and the verb its log
+// line uses. Long-lived calls (a service's run(), a repository's stream) and
+// lifecycle hooks only show when they fail.
+const RUN_VERB = {
+  execute: 'executed', invoke: 'invoked', __call__: 'called', setup: 'started', stop: 'stopped',
+};
+const CALLABLE_TYPES = new Set(['task', 'pipeline', 'agent', 'function']);
+const RUN_DONE_MS = 3000;
+const TOAST_DONE_MS = 4000;
+const TOAST_MAX = 4;
+
+let runEventsLive = false;     // false until /api/events is connected
+const activeCalls = new Map(); // call_id -> event that started it
+const nodeRun = {};            // node id -> {state: running|done|failed, at, count}
+const pendingClicks = {};      // node id -> true while this tab's action awaits its call
+const chatCalls = new Set();   // call_ids started during this tab's chat turn
+let flowingEdges = new Set();  // `${from}|${to}` of edges a call goes through
+
+const reduceMotion = !!(window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches);
+
+function isRunCall(e) {
+  if (e.method === 'setup' || e.method === 'stop') return e.protocol === 'ServiceProtocol';
+  return e.method in RUN_VERB;
+}
+
+// "execute()", or "call" for a function, whose method is __call__.
+function methodLabel(method) {
+  return method === '__call__' ? 'call' : `${method}()`;
+}
+
+function initRunEvents() {
+  if (!window.EventSource) return;
+  const source = new EventSource('/api/events');
+  source.onopen = () => {
+    // A reconnect may have missed the end of calls in progress.
+    if (!runEventsLive) resetRunState();
+    runEventsLive = true;
+  };
+  source.onerror = () => { runEventsLive = false; };
+  source.onmessage = msg => {
+    const e = JSON.parse(msg.data);
+    if (e.type === 'reset') resetRunState();
+    else if (e.type === 'call') onRunEvent(e);
+  };
+}
+
+function resetRunState() {
+  activeCalls.clear();
+  chatCalls.clear();
+  for (const id of Object.keys(nodeRun)) {
+    if (nodeRun[id].state === 'running') delete nodeRun[id];
+  }
+  updateFlowingEdges();
+  render();
+}
+
+function onRunEvent(e) {
+  const node = nodeMap[e.key];
+  if (!node) return; // hidden by [ui.topology], or not a component
+  if (e.protocol === 'ServiceProtocol') syncServiceState(node, e);
+  const counted = isRunCall(e);
+
+  if (e.state === 'started') {
+    if (counted) {
+      activeCalls.set(e.call_id, e);
+      if (chatBusy) chatCalls.add(e.call_id);
+      nodeRun[node.id] = { ...nodeRun[node.id], state: 'running' };
+    }
+  } else {
+    const started = activeCalls.get(e.call_id);
+    activeCalls.delete(e.call_id);
+    const fromChat = chatCalls.delete(e.call_id);
+    if (counted || e.state === 'failed') finishRun(node, e, started, fromChat);
+  }
+  updateFlowingEdges();
+  render();
+}
+
+// A service's Start/Stop follows its calls, whoever made them.
+function syncServiceState(node, e) {
+  let running = node.running;
+  if (e.method === 'setup' && e.state === 'completed') running = true;
+  if (e.method === 'stop' && e.state === 'completed') running = false;
+  if (e.method === 'run' && e.state !== 'started') running = false;
+  if (running === node.running) return;
+  node.running = running;
+  if (selectId === node.id) selectNode(node.id);
+}
+
+function finishRun(node, e, started, fromChat) {
+  const failed = e.state === 'failed';
+  const stillRunning = [...activeCalls.values()].some(c => c.key === node.id);
+  const prev = nodeRun[node.id];
+  if (failed) {
+    nodeRun[node.id] = { state: 'failed', at: performance.now(), count: prev && prev.state === 'failed' ? prev.count + 1 : 1 };
+  } else if (!stillRunning && !(prev && prev.state === 'failed')) {
+    const entry = { state: 'done', at: performance.now() };
+    nodeRun[node.id] = entry;
+    setTimeout(() => {
+      if (nodeRun[node.id] === entry) { delete nodeRun[node.id]; render(); }
+    }, RUN_DONE_MS);
+  }
+
+  const since = started ? started.ts : e.ts - (e.elapsed_ms || 0) / 1000;
+  const verb = RUN_VERB[e.method] || methodLabel(e.method);
+  const took = e.elapsed_ms == null ? '' : ` in ${formatElapsed(e.elapsed_ms)}`;
+  const topLevel = e.parent === null;
+  if (failed) {
+    addLog(`${escapeHtml(node.label)} ${methodLabel(e.method)} failed — ${escapeHtml(e.error || '')}`, ACCENT.alert);
+    // A step's failure is told by its pipeline's own, when that fails too;
+    // one inside a service's run() loop has nothing above it to tell it.
+    if (!activeCalls.has(e.parent)) {
+      showToast(node, { failed: true, text: e.error || `${methodLabel(e.method)} failed`, since });
+    }
+  } else if (topLevel) {
+    addLog(`${escapeHtml(node.label)} ${verb}${took}`, nodeAccent(node));
+    if (pendingClicks[node.id] || fromChat) showToast(node, { failed: false, text: `${verb}${took}`, since });
+  }
+  if (topLevel) delete pendingClicks[node.id];
+}
+
+function formatElapsed(ms) {
+  return ms < 1000 ? `${Math.round(ms)} ms` : `${(ms / 1000).toFixed(1)} s`;
+}
+
+// A failure stays marked until the node is looked at: selected, or its
+// toast opened.
+function markRunSeen(id) {
+  if (id && nodeRun[id] && nodeRun[id].state === 'failed') {
+    delete nodeRun[id];
+    render();
+  }
+}
+
+// An edge carries a call while a call on one end is running and the other
+// end takes part: it has a call made from inside that one (a pipeline's
+// step, a function a task calls), or it is something called into rather
+// than called (a repository, a component, a service).
+function updateFlowingEdges() {
+  const flowing = new Set();
+  if (activeCalls.size) {
+    const byNode = {};
+    for (const c of activeCalls.values()) (byNode[c.key] = byNode[c.key] || []).push(c);
+    const linked = (a, b) => (byNode[a] || []).some(c =>
+      (byNode[b] || []).some(d => d.parent === c.call_id || c.parent === d.call_id));
+    const usedBy = (a, b) => byNode[a] && nodeMap[b] && !CALLABLE_TYPES.has(nodeMap[b].type) && nodeMap[b].type !== 'config';
+    for (const e of edges) {
+      if (linked(e.from, e.to) || usedBy(e.from, e.to) || usedBy(e.to, e.from)) {
+        flowing.add(`${e.from}|${e.to}`);
+      }
+    }
+  }
+  flowingEdges = flowing;
+}
+
+// ── Toasts ───────────────────────────────────────────────────────────────
+// One non-blocking notice per finished call worth telling about: every
+// top-level failure, and a success this tab asked for (an action clicked,
+// or a chat turn). A success goes after a few seconds; a failure stays
+// until closed, and a node failing again updates its toast's count.
+
+const failureToasts = {}; // node id -> {el, count}
+
+function showToast(node, { failed, text, since }) {
+  const box = document.getElementById('toasts');
+  if (!box) return;
+  const existing = failed && failureToasts[node.id];
+  if (existing) {
+    existing.count += 1;
+    existing.el.querySelector('.toast-text').textContent = text;
+    existing.el.querySelector('.toast-count').textContent = `×${existing.count}`;
+    existing.el.dataset.since = since;
+    box.prepend(existing.el);
+    return;
+  }
+
+  const el = document.createElement('div');
+  el.className = `toast${failed ? ' failed' : ''}`;
+  el.setAttribute('role', failed ? 'alert' : 'status');
+  el.dataset.since = since;
+  el.innerHTML =
+    `<div class="toast-head"><span class="toast-label" style="color:${nodeAccentCss(node)}">${escapeHtml(node.label)}</span>` +
+    `<span class="toast-count"></span>` +
+    `<button class="toast-close" title="Dismiss" aria-label="Dismiss">&times;</button></div>` +
+    `<div class="toast-text"></div>` +
+    `<div class="toast-actions"><button class="toast-logs">Show logs <span>&rarr;</span></button></div>`;
+  el.querySelector('.toast-text').textContent = text;
+  const close = () => {
+    el.remove();
+    if (failureToasts[node.id] && failureToasts[node.id].el === el) delete failureToasts[node.id];
+  };
+  el.querySelector('.toast-close').addEventListener('click', close);
+  el.querySelector('.toast-logs').addEventListener('click', () => {
+    markRunSeen(node.id);
+    selectNode(node.id);
+    showLogsView(node.id, Number(el.dataset.since));
+    close();
+  });
+  box.prepend(el);
+  if (failed) failureToasts[node.id] = { el, count: 1 };
+  else setTimeout(close, TOAST_DONE_MS);
+
+  // Keep the stack short, dropping successes before failures.
+  while (box.children.length > TOAST_MAX) {
+    const toasts = [...box.children];
+    const victim = toasts.reverse().find(t => !t.classList.contains('failed')) || box.lastChild;
+    victim.remove();
+    for (const id of Object.keys(failureToasts)) {
+      if (failureToasts[id].el === victim) delete failureToasts[id];
+    }
+  }
+}
+
 // ── Lifecycle actions ────────────────────────────────────────────────────
 // Backs the "Start"/"Stop" action on @Service nodes and the "Execute" action
 // on @Task/@Pipeline nodes. POST /api/services/{name}/{start,stop} and
@@ -1533,13 +1846,19 @@ async function toggleService(id) {
   const action = node.running ? 'stop' : 'start';
   const btn = document.getElementById('lifecycle-btn');
   if (btn) btn.disabled = true;
+  pendingClicks[id] = true;
   try {
     const res = await fetch(`${apiPath(id)}/${action}`, { method: 'POST' });
-    if (!res.ok) throw new Error(`HTTP ${res.status}`);
-    node.running = !node.running;
-    addLog(`${node.label} ${node.running ? 'started' : 'stopped'}`, ACCENT.service);
+    if (!res.ok) throw httpError(res.status, `HTTP ${res.status}`);
+    // Set, not toggled: the call's own event may have set it already.
+    node.running = action === 'start';
+    if (!runEventsLive) {
+      delete pendingClicks[id];
+      addLog(`${node.label} ${node.running ? 'started' : 'stopped'}`, ACCENT.service);
+    }
   } catch (err) {
-    addLog(`Failed to ${action} ${node.label}`, ACCENT.alert);
+    delete pendingClicks[id];
+    if (reportedByEvents(err)) addLog(`Failed to ${action} ${node.label}`, ACCENT.alert);
   }
   selectNode(id);
 }
@@ -1548,17 +1867,35 @@ async function executeNode(id) {
   const node = nodeMap[id];
   const btn = document.getElementById('execute-btn');
   if (btn) btn.disabled = true;
+  pendingClicks[id] = true;
   try {
     const res = await fetch(`${apiPath(id)}/execute`, { method: 'POST' });
     if (!res.ok) {
       const body = await res.json().catch(() => ({}));
-      throw new Error(body.detail || `HTTP ${res.status}`);
+      throw httpError(res.status, body.detail || `HTTP ${res.status}`);
     }
-    addLog(`${node.label} executed`, nodeAccent(node));
+    if (!runEventsLive) {
+      delete pendingClicks[id];
+      addLog(`${node.label} executed`, nodeAccent(node));
+    }
   } catch (err) {
-    addLog(`${node.label} execute failed — ${err.message}`, ACCENT.alert);
+    delete pendingClicks[id];
+    if (reportedByEvents(err)) addLog(`${node.label} execute failed — ${err.message}`, ACCENT.alert);
   }
   if (btn) btn.disabled = false;
+}
+
+// An Error carrying the HTTP status of a failed action.
+function httpError(status, message) {
+  return Object.assign(new Error(message), { status });
+}
+
+// Whether a failed action still needs its own log line: a 500 is the call
+// itself failing, which its event already reports while /api/events is
+// connected. Anything else (a 404, a 422 validation error) never reached the
+// call.
+function reportedByEvents(err) {
+  return !(runEventsLive && err.status === 500);
 }
 
 // ── Arguments form ───────────────────────────────────────────────────────
@@ -1675,6 +2012,7 @@ async function submitArguments(id, form, props, required) {
   const out = form.querySelector('.invoke-result');
   btn.disabled = true;
   out.classList.remove('error');
+  pendingClicks[id] = true;
   try {
     const args = readInvokeForm(form, props, required);
     const res = await fetch(`${apiPath(id)}/${node.verb}`, {
@@ -1683,14 +2021,18 @@ async function submitArguments(id, form, props, required) {
       body: JSON.stringify(args),
     });
     const body = await res.json().catch(() => ({}));
-    if (!res.ok) throw new Error(invokeErrorMessage(body.detail, res.status));
+    if (!res.ok) throw httpError(res.status, invokeErrorMessage(body.detail, res.status));
     const result = body.result;
     out.textContent = typeof result === 'string' ? result : JSON.stringify(result, null, 2);
-    addLog(`${node.label} ${pastTense(node.verb)}`, nodeAccent(node));
+    if (!runEventsLive) {
+      delete pendingClicks[id];
+      addLog(`${node.label} ${pastTense(node.verb)}`, nodeAccent(node));
+    }
   } catch (err) {
+    delete pendingClicks[id];
     out.textContent = err.message;
     out.classList.add('error');
-    addLog(`${node.label} ${node.verb} failed — ${err.message}`, ACCENT.alert);
+    if (reportedByEvents(err)) addLog(`${node.label} ${node.verb} failed — ${err.message}`, ACCENT.alert);
   }
   out.hidden = false;
   btn.disabled = false;
@@ -5474,9 +5816,17 @@ const LOG_LEVEL_COLOR = {
 
 let activeLogComponentId = null;
 let logsPollTimer = null;
+// Lines from this local time on ('YYYY-MM-DD HH:MM:SS', the log files'
+// format) are marked as the run a toast opened the logs for; the first is
+// scrolled to once.
+let logsSince = null;
+let logsScrollToSince = false;
 
-async function showLogsView(id) {
+// `since`, optional, is a run's start as epoch seconds (an event's `ts`).
+async function showLogsView(id, since) {
   activeLogComponentId = id;
+  logsSince = since ? logTimestamp(since) : null;
+  logsScrollToSince = !!logsSince;
   const node = nodeMap[id];
   setMapMode('logs');
   document.getElementById('map-panel-title').textContent = `${node.label} · logs`;
@@ -5509,14 +5859,28 @@ function renderLogs(entries) {
   let html = '<div class="map-logs-lines">';
   for (const e of entries) {
     const color = LOG_LEVEL_COLOR[e.level] || 'var(--text-muted)';
-    html += '<div class="log-line">' +
+    const match = logsSince && e.ts && e.ts >= logsSince;
+    html += `<div class="log-line${match ? ' run-match' : ''}">` +
       `<span class="dot" style="background:${color}"></span>` +
       (e.ts ? `<span class="ts">${escapeHtml(e.ts)}</span>` : '') +
       `<span>${escapeHtml(e.message)}</span></div>`;
   }
   html += '</div>';
   body.innerHTML = html;
-  if (wasAtBottom) body.scrollTop = body.scrollHeight;
+  const first = logsScrollToSince && body.querySelector('.run-match');
+  if (first) {
+    first.scrollIntoView({ block: 'start' });
+    logsScrollToSince = false;
+  } else if (wasAtBottom) {
+    body.scrollTop = body.scrollHeight;
+  }
+}
+
+function logTimestamp(epochSeconds) {
+  const d = new Date(epochSeconds * 1000);
+  const pad = n => String(n).padStart(2, '0');
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())} ` +
+    `${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`;
 }
 
 // ── Details view ─────────────────────────────────────────────────────────
@@ -5703,13 +6067,13 @@ async function init() {
   addLog(`${data.stats.objects} objects · ${data.stats.links} links resolved`);
   addLog(`Topology loaded · ${data.project}`, TITLE_ACCENT);
   initChat();
+  initRunEvents();
 
   // Animation loop — powers blinking lights, pulsing beacons and wire pulses.
   // Capped at ~30fps (plenty for these subtle effects) and paused while the
   // tab is hidden, since an uncapped 60fps full-canvas redraw running
   // forever in the background is what was driving up CPU/GPU usage.
   const FRAME_INTERVAL = 1000 / 30;
-  const reduceMotion = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
   let lastFrameTime = 0;
 
   function loop(ts) {

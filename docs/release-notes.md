@@ -35,6 +35,16 @@
   groups as well as fields. The ordering `field` can be any number, such as a training
   step, not only a timestamp. Requires `opendataframework` 0.4.0. See
   [UI](ui.md#grouped-timeseries).
+- **UI**: the topology shows runs as they happen, whoever started them (the UI, an MCP
+  client, chat, a pipeline, a service's `run()` loop). An edge animates only while a call
+  goes through it, where before every edge pulsed all the time. A running node gets a
+  ring that fades out with a ✓ when its call completes, or turns red with a `!` when it
+  fails, until the node is selected. Failures pop a notice with the error and a
+  **Show logs** button that opens the node's logs at the run. Successes pop one only for
+  actions started from that tab or its chat. With reduced motion on, nothing moves. A
+  service's Start/Stop button now follows starts and stops made over MCP or chat. The
+  new `GET /api/events` streams every protocol call as server-sent events. Requires
+  `opendataframework` 0.4.0. See [UI](ui.md#run-activity).
 
 ### Changed
 
