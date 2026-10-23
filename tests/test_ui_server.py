@@ -2119,6 +2119,32 @@ def test_theme_can_replace_empty_tile_drawing():
     assert "THEME_STYLE.emptyTile(sx, sy)" in script
 
 
+def test_list_themes_finds_the_built_in_y2k_theme():
+    assert "y2k" in themes.list_themes()
+
+
+def test_serves_y2k_theme_files():
+    with Context(namespaces=set()) as ctx:
+        client = TestClient(UiServer(ctx, "proj", theme="y2k")._app)
+        responses = {path: client.get(path) for path in ("/theme.css", "/theme.js", "/favicon.svg")}
+
+    for path, r in responses.items():
+        assert r.status_code == 200, path
+    assert "faceFill(side, accent, lit, t, frame)" in responses["/theme.js"].text
+
+
+def test_theme_can_fill_faces_across_the_whole_icon():
+    script = (themes.STATIC_DIR / "app.js").read_text()
+
+    assert "faceFill: null" in script
+    assert "function drawIcon(key, x, y, accent, lit)" in script
+    assert "THEME_STYLE.faceFill(side, accent, lit, t, ICON_FRAME)" in script
+    # Both the topology and the icon picker's swatches draw through drawIcon,
+    # so a face fill spans the icon in both.
+    assert "ICONS[iconKey(node)].draw(" not in script
+    assert "drawIcon(key, canvasEl.width / 2" in script
+
+
 def test_ui_has_the_collapsible_sidebar_rail():
     html = (themes.STATIC_DIR / "index.html").read_text()
     script = (themes.STATIC_DIR / "app.js").read_text()

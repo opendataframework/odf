@@ -55,6 +55,13 @@
   `[ui] theme = "terminal"` in `config.toml`. Themes can now replace how empty grid tiles
   are drawn with `ODF.registerTheme({ emptyTile })`. See
   [UI](ui.md#themes-icons-and-branding).
+- **UI**: `y2k` theme, millennium futurism: frosted glass panels, glossy pill buttons,
+  a chrome title and orb, and iridescent blue-violet edges, over midnight blue in dark
+  mode and brushed silver in light mode. The topology draws icons as liquid chrome, with
+  one reflection running across each icon. Select it with `odf run --theme y2k` or
+  `[ui] theme = "y2k"` in `config.toml`. Themes can now fill opaque icon faces their own
+  way, such as a gradient spanning the whole icon, with
+  `ODF.registerTheme({ faceFill })`. See [UI](ui.md#themes-icons-and-branding).
 
 ### Changed
 

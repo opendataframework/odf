@@ -162,6 +162,11 @@ const THEME_STYLE = {
   // instead of the default outline and center tick. Called inside a
   // save()/restore().
   emptyTile: null,
+  // Optional (side, accent, lit, t, frame) => fillStyle for an opaque
+  // ('shade') icon face, instead of the flat shadeHex(accent, t). `frame` is
+  // the icon being drawn, {x, top, bottom} in canvas pixels (see drawIcon),
+  // so a gradient can span the whole icon rather than one face.
+  faceFill: null,
   // Optional (v) => void, called at the end of readTheme() with its CSS
   // custom-property reader, for themes that mirror extra variables.
   onReadTheme: null,
@@ -209,7 +214,9 @@ function paintFace(buildPath, side, accent, lit, fMul = 1, sMul = 1, { lw, fill 
     ctx.save();
     ctx.globalAlpha *= Math.max(0, Math.min(1, fMul, sMul));
     const t = (lit ? f.shadeLit : f.shade)[side] + Math.max(0, Math.min(fMul, 2.5) - 1) * 0.12;
-    ctx.fillStyle = shadeHex(accent, t);
+    ctx.fillStyle = THEME_STYLE.faceFill && ICON_FRAME
+      ? THEME_STYLE.faceFill(side, accent, lit, t, ICON_FRAME)
+      : shadeHex(accent, t);
     ctx.fill();
     ctx.restore();
   } else if (fill) {
@@ -826,6 +833,21 @@ function finalizeIconEntry(key) {
 }
 for (const key in ICONS) finalizeIconEntry(key);
 
+// The icon being drawn, {x, top, bottom} in canvas pixels, while drawIcon()
+// runs; null otherwise. Read by paintFace() for THEME_STYLE.faceFill.
+let ICON_FRAME = null;
+
+// Draws ICONS[key] standing on (x, y), with ICON_FRAME set to its extents.
+function drawIcon(key, x, y, accent, lit) {
+  const e = ICONS[key];
+  ICON_FRAME = { x, top: y - e.topExtent, bottom: y + TH2 * e.scale };
+  try {
+    e.draw(x, y, accent, lit);
+  } finally {
+    ICON_FRAME = null;
+  }
+}
+
 // Resolves which registry entry to draw for a node: its icon override, or
 // its exec-type default. Falls back to the type default if the stored icon
 // key is unrecognized (e.g. stale after a future rename), so render() and
@@ -1169,7 +1191,7 @@ function render() {
     const {x, y} = iso(node.col, node.row);
     if (x < viewL || x > viewR || y < viewT || y > viewB) continue;
     const lit = node.id === hoverId || node.id === selectId || node === dragNode;
-    ICONS[iconKey(node)].draw(x, y, nodeAccent(node), lit);
+    drawIcon(iconKey(node), x, y, nodeAccent(node), lit);
   }
 
   // 4 — Labels (always on top)
@@ -1455,7 +1477,7 @@ function renderIconSwatch(canvasEl, key, accent) {
   const saved = ctx;
   ctx = canvasEl.getContext('2d');
   ctx.clearRect(0, 0, canvasEl.width, canvasEl.height);
-  ICONS[key].draw(canvasEl.width / 2, canvasEl.height * 0.8, accent, false);
+  drawIcon(key, canvasEl.width / 2, canvasEl.height * 0.8, accent, false);
   ctx = saved;
 }
 
