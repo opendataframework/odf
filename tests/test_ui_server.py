@@ -2106,6 +2106,20 @@ def test_ui_has_the_collapsible_sidebar_rail():
     assert "odf-ui-sidebar" in script
 
 
+def test_ui_header_status_shows_run_activity():
+    html = (themes.STATIC_DIR / "index.html").read_text()
+    script = (themes.STATIC_DIR / "app.js").read_text()
+
+    assert 'id="hdr-status"' in html
+    assert 'class="hdr-status-text"' in html
+    assert "function updateHeaderStatus()" in script
+    assert "RUN_ACTIVE_VERB" in script
+    for name in themes.list_themes():
+        css = (themes.STATIC_DIR / "themes" / name / "theme.css").read_text()
+        assert ".hdr-status.failed{" in css, name
+        assert ".hdr-status.running .dot" in css, name
+
+
 def test_ui_has_the_lightbox_tool_rail():
     html = (themes.STATIC_DIR / "index.html").read_text()
     script = (themes.STATIC_DIR / "app.js").read_text()

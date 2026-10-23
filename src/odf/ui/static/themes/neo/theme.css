@@ -126,6 +126,12 @@ body{
 
 .hdr-status{display:flex;align-items:center;gap:7px;margin-left:auto;padding:0 16px;font-family:'Archivo Black','Arial Black',Inter,'Segoe UI',Roboto,-apple-system,BlinkMacSystemFont,Helvetica,Arial,sans-serif;font-size:10px;letter-spacing:.08em;text-transform:uppercase;color:var(--text-muted)}
 .hdr-status .dot{width:6px;height:6px;background:var(--ok);box-shadow:0 0 0 2px color-mix(in srgb, var(--ok) 20%, transparent);animation:pulse-dot 2.4s ease-in-out infinite}
+.hdr-status-text{max-width:280px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.hdr-status.running .dot,.hdr-status.done .dot{background:var(--status-accent);box-shadow:0 0 0 2px color-mix(in srgb, var(--status-accent) 25%, transparent)}
+.hdr-status.running .dot{animation-duration:.8s}
+.hdr-status.running,.hdr-status.done{color:var(--text)}
+.hdr-status.failed{color:var(--accent-alert);cursor:pointer}
+.hdr-status.failed .dot{background:var(--accent-alert);box-shadow:0 0 0 2px color-mix(in srgb, var(--accent-alert) 25%, transparent);animation:none}
 .hdr-clock{font-family:'Archivo Black','Arial Black',Inter,'Segoe UI',Roboto,-apple-system,BlinkMacSystemFont,Helvetica,Arial,sans-serif;font-size:11px;color:var(--text-dim);font-variant-numeric:tabular-nums;padding:0 16px;border-left:1px solid var(--border)}
 @keyframes pulse-dot{0%,100%{opacity:1}50%{opacity:.35}}
 
@@ -610,4 +616,4 @@ button.media-tile:hover,button.media-tile:focus-visible{border-color:var(--title
 .toast-logs:hover{color:var(--title-accent);border-color:var(--border-strong);background:var(--hover-bg)}
 .log-line.run-match{background:color-mix(in srgb, var(--title-accent) 10%, transparent)}
 @keyframes toast-in{from{opacity:0;transform:translateY(-4px)}to{opacity:1;transform:none}}
-@media (prefers-reduced-motion: reduce){.toast{animation:none}}
+@media (prefers-reduced-motion: reduce){.toast,.hdr-status .dot{animation:none}}

@@ -50,6 +50,12 @@ steps, or a service's `run()` loop.
   lines. It stays until closed. A step's failure is reported by its pipeline
   when the pipeline fails too. A success pops a notice only for an action you
   started in that tab, from its buttons or its chat, and closes by itself.
+- The header status, **System Nominal** when idle, tells the same story where
+  nothing covers it, such as when the chat drawer hides the notices. It shows
+  the call that's running (`Loader executing`, with `+2` when others run
+  alongside it), a failure until the node is selected (click it to open the
+  node's logs at the run), and a completed call for a few seconds
+  (`Loader executed in 1.2 s`).
 - A service's **Start**/**Stop** button follows the service, so it's correct
   after a start or stop over MCP or chat too.
 

@@ -41,7 +41,10 @@
   ring that fades out with a ✓ when its call completes, or turns red with a `!` when it
   fails, until the node is selected. Failures pop a notice with the error and a
   **Show logs** button that opens the node's logs at the run. Successes pop one only for
-  actions started from that tab or its chat. With reduced motion on, nothing moves. A
+  actions started from that tab or its chat. The header status, **System Nominal** when
+  idle, shows the running call, an unseen failure (click it to open the logs) and a
+  just-completed call, so a run stays visible when the chat drawer covers the notices.
+  With reduced motion on, nothing moves. A
   service's Start/Stop button now follows starts and stops made over MCP or chat. The
   new `GET /api/events` streams every protocol call as server-sent events. Requires
   `opendataframework` 0.4.0. See [UI](ui.md#run-activity).

@@ -1627,6 +1627,10 @@ function selectFromSidebar(id) {
 const RUN_VERB = {
   execute: 'executed', invoke: 'invoked', __call__: 'called', setup: 'started', stop: 'stopped',
 };
+// The same calls while they run, for the header status.
+const RUN_ACTIVE_VERB = {
+  execute: 'executing', invoke: 'invoking', __call__: 'calling', setup: 'starting', stop: 'stopping',
+};
 const CALLABLE_TYPES = new Set(['task', 'pipeline', 'agent', 'function']);
 const RUN_DONE_MS = 3000;
 const TOAST_DONE_MS = 4000;
@@ -1638,6 +1642,7 @@ const nodeRun = {};            // node id -> {state: running|done|failed, at, co
 const pendingClicks = {};      // node id -> true while this tab's action awaits its call
 const chatCalls = new Set();   // call_ids started during this tab's chat turn
 let flowingEdges = new Set();  // `${from}|${to}` of edges a call goes through
+let lastDone = null;           // {nodeId, text} of the top-level call that just completed
 
 const reduceMotion = !!(window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches);
 
@@ -1674,6 +1679,7 @@ function resetRunState() {
     if (nodeRun[id].state === 'running') delete nodeRun[id];
   }
   updateFlowingEdges();
+  updateHeaderStatus();
   render();
 }
 
@@ -1696,6 +1702,7 @@ function onRunEvent(e) {
     if (counted || e.state === 'failed') finishRun(node, e, started, fromChat);
   }
   updateFlowingEdges();
+  updateHeaderStatus();
   render();
 }
 
@@ -1714,8 +1721,9 @@ function finishRun(node, e, started, fromChat) {
   const failed = e.state === 'failed';
   const stillRunning = [...activeCalls.values()].some(c => c.key === node.id);
   const prev = nodeRun[node.id];
+  const since = started ? started.ts : e.ts - (e.elapsed_ms || 0) / 1000;
   if (failed) {
-    nodeRun[node.id] = { state: 'failed', at: performance.now(), count: prev && prev.state === 'failed' ? prev.count + 1 : 1 };
+    nodeRun[node.id] = { state: 'failed', at: performance.now(), since, count: prev && prev.state === 'failed' ? prev.count + 1 : 1 };
   } else if (!stillRunning && !(prev && prev.state === 'failed')) {
     const entry = { state: 'done', at: performance.now() };
     nodeRun[node.id] = entry;
@@ -1724,7 +1732,6 @@ function finishRun(node, e, started, fromChat) {
     }, RUN_DONE_MS);
   }
 
-  const since = started ? started.ts : e.ts - (e.elapsed_ms || 0) / 1000;
   const verb = RUN_VERB[e.method] || methodLabel(e.method);
   const took = e.elapsed_ms == null ? '' : ` in ${formatElapsed(e.elapsed_ms)}`;
   const topLevel = e.parent === null;
@@ -1738,6 +1745,11 @@ function finishRun(node, e, started, fromChat) {
   } else if (topLevel) {
     addLog(`${escapeHtml(node.label)} ${verb}${took}`, nodeAccent(node));
     if (pendingClicks[node.id] || fromChat) showToast(node, { failed: false, text: `${verb}${took}`, since });
+    const done = { nodeId: node.id, text: `${verb}${took}` };
+    lastDone = done;
+    setTimeout(() => {
+      if (lastDone === done) { lastDone = null; updateHeaderStatus(); }
+    }, RUN_DONE_MS);
   }
   if (topLevel) delete pendingClicks[node.id];
 }
@@ -1751,8 +1763,64 @@ function formatElapsed(ms) {
 function markRunSeen(id) {
   if (id && nodeRun[id] && nodeRun[id].state === 'failed') {
     delete nodeRun[id];
+    updateHeaderStatus();
     render();
   }
+}
+
+// ── Header status ────────────────────────────────────────────────────────
+// The header's "System Nominal" tells what the project is doing, since
+// toasts can be hidden (under the chat drawer, say). First a call that's
+// running, then a failure not yet looked at (clicking it opens the logs, as
+// its toast's Show logs does), then a call that just completed.
+
+function updateHeaderStatus() {
+  const el = document.getElementById('hdr-status');
+  if (!el) return;
+  let state = '';
+  let node = null;
+  let text = 'System Nominal';
+  // A pipeline's own call, not its steps; the latest one started.
+  const running = [...activeCalls.values()].filter(c => isRunCall(c) && !activeCalls.has(c.parent) && nodeMap[c.key]);
+  const failedIds = Object.keys(nodeRun).filter(id => nodeRun[id].state === 'failed' && nodeMap[id]);
+  if (running.length) {
+    const c = running[running.length - 1];
+    state = 'running';
+    node = nodeMap[c.key];
+    text = `${node.label} ${RUN_ACTIVE_VERB[c.method] || methodLabel(c.method)}`;
+    if (running.length > 1) text += ` +${running.length - 1}`;
+  } else if (failedIds.length) {
+    const id = failedIds.reduce((a, b) => (nodeRun[b].at > nodeRun[a].at ? b : a));
+    state = 'failed';
+    node = nodeMap[id];
+    text = `${node.label} failed`;
+    if (failedIds.length > 1) text += ` +${failedIds.length - 1}`;
+  } else if (lastDone && nodeMap[lastDone.nodeId]) {
+    state = 'done';
+    node = nodeMap[lastDone.nodeId];
+    text = `${node.label} ${lastDone.text}`;
+  }
+
+  el.classList.remove('running', 'failed', 'done');
+  if (state) el.classList.add(state);
+  el.dataset.node = node ? node.id : '';
+  if (node) el.style.setProperty('--status-accent', nodeAccentCss(node));
+  else el.style.removeProperty('--status-accent');
+  el.querySelector('.hdr-status-text').textContent = text;
+  el.title = state === 'failed' ? `${text} — show logs` : text;
+}
+
+function initHeaderStatus() {
+  const el = document.getElementById('hdr-status');
+  if (!el) return;
+  el.addEventListener('click', () => {
+    const id = el.dataset.node;
+    if (!el.classList.contains('failed') || !nodeRun[id]) return;
+    const since = nodeRun[id].since;
+    markRunSeen(id);
+    selectNode(id);
+    showLogsView(id, since);
+  });
 }
 
 // An edge carries a call while a call on one end is running and the other
@@ -6067,6 +6135,7 @@ async function init() {
   addLog(`${data.stats.objects} objects · ${data.stats.links} links resolved`);
   addLog(`Topology loaded · ${data.project}`, TITLE_ACCENT);
   initChat();
+  initHeaderStatus();
   initRunEvents();
 
   // Animation loop — powers blinking lights, pulsing beacons and wire pulses.
