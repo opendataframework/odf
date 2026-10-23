@@ -48,6 +48,13 @@
   service's Start/Stop button now follows starts and stops made over MCP or chat. The
   new `GET /api/events` streams every protocol call as server-sent events. Requires
   `opendataframework` 0.4.0. See [UI](ui.md#run-activity).
+- **UI**: `terminal` theme, a retro text-mode look: green phosphor on black with
+  scanlines in dark mode, green ink on line-printer paper in light mode, a monospace font
+  throughout, double-ruled panels and `[ bracketed ]` buttons. The topology draws icons as
+  glowing line art on a dotted grid. Select it with `odf run --theme terminal` or
+  `[ui] theme = "terminal"` in `config.toml`. Themes can now replace how empty grid tiles
+  are drawn with `ODF.registerTheme({ emptyTile })`. See
+  [UI](ui.md#themes-icons-and-branding).
 
 ### Changed
 

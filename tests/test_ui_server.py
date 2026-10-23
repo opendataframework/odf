@@ -2098,6 +2098,27 @@ def test_list_themes_finds_the_built_in_onyx_theme():
     assert "onyx" in themes.list_themes()
 
 
+def test_list_themes_finds_the_built_in_terminal_theme():
+    assert "terminal" in themes.list_themes()
+
+
+def test_serves_terminal_theme_files():
+    with Context(namespaces=set()) as ctx:
+        client = TestClient(UiServer(ctx, "proj", theme="terminal")._app)
+        responses = {path: client.get(path) for path in ("/theme.css", "/theme.js", "/favicon.svg")}
+
+    for path, r in responses.items():
+        assert r.status_code == 200, path
+    assert "emptyTile(sx, sy)" in responses["/theme.js"].text
+
+
+def test_theme_can_replace_empty_tile_drawing():
+    script = (themes.STATIC_DIR / "app.js").read_text()
+
+    assert "emptyTile: null" in script
+    assert "THEME_STYLE.emptyTile(sx, sy)" in script
+
+
 def test_ui_has_the_collapsible_sidebar_rail():
     html = (themes.STATIC_DIR / "index.html").read_text()
     script = (themes.STATIC_DIR / "app.js").read_text()

@@ -158,6 +158,10 @@ const THEME_STYLE = {
   // Optional (buildPath, part, sMul) => void: extra strokes drawn under a lit
   // shape's own stroke.
   litFringe: null,
+  // Optional (sx, sy) => void: draws an empty grid tile centered at (sx, sy)
+  // instead of the default outline and center tick. Called inside a
+  // save()/restore().
+  emptyTile: null,
   // Optional (v) => void, called at the end of readTheme() with its CSS
   // custom-property reader, for themes that mirror extra variables.
   onReadTheme: null,
@@ -473,6 +477,12 @@ function tilePath(sx, sy) {
 }
 
 function drawEmptyTile(sx, sy) {
+  if (THEME_STYLE.emptyTile) {
+    ctx.save();
+    THEME_STYLE.emptyTile(sx, sy);
+    ctx.restore();
+    return;
+  }
   tilePath(sx, sy);
   ctx.fillStyle   = TILE_FILL;
   ctx.fill();
