@@ -90,6 +90,14 @@
   drawn as glossy, saturated solids, each on a soft shadow on the grass. Select it with
   `odf run --theme meadow` or `[ui] theme = "meadow"` in `config.toml`. See
   [UI](ui.md#themes-icons-and-branding).
+- **UI**: `beacon` theme, a tactical map display: square slate panels framed by orange
+  corner ticks, a header band over an orange rule, condensed uppercase labels, outlined
+  buttons that fill signal orange when engaged, and faint scanlines over the map, on
+  near-black in dark mode and a pale printed map in light mode. The topology is a city
+  seen from above, blocks and building footprints between streets with a wider avenue
+  every few tiles, with icons drawn as translucent holograms that glow when lit, each
+  inside a segmented marker ring. Select it with `odf run --theme beacon` or
+  `[ui] theme = "beacon"` in `config.toml`. See [UI](ui.md#themes-icons-and-branding).
 
 ### Changed
 
