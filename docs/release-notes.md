@@ -52,6 +52,8 @@
   start, marked `(copied)`, to paste into another browser or an MCP client's config. It
   uses `pbcopy`, `wl-copy`, `xclip`, `xsel` or `clip`, and skips the copy when none is
   installed. The URLs are also terminal links.
+- **Chat**: the default `[project.chat] model` is now `gpt-oss:20b` instead of `gpt-oss`.
+  See [Chat](chat.md).
 
 ## 0.3.0
 

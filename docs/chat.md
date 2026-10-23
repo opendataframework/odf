@@ -43,7 +43,7 @@ debug = false
 
 | Key | Default | Description |
 |---|---|---|
-| `model` | `"gpt-oss"` | Ollama model name. Must already be pulled (`ollama pull gpt-oss:20b`). |
+| `model` | `"gpt-oss:20b"` | Ollama model name. Must already be pulled (`ollama pull gpt-oss:20b`). |
 | `ollama-host` | `"http://localhost:11434"` | URL of the running Ollama daemon (`ollama serve`). |
 | `debug` | `false` | Show tool-call/tool-result debug info inline in the chat window. |
 

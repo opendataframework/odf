@@ -166,7 +166,7 @@ class Server:
                 in-process tool registry — otherwise it's a plain LLM chat
                 window with no ability to act on the project. Connection
                 parameters come from ``[project.chat]`` in config: ``model``
-                (default ``"gpt-oss"``) and ``ollama-host`` (default
+                (default ``"gpt-oss:20b"``) and ``ollama-host`` (default
                 ``"http://localhost:11434"``).
             app_module: Import name of the module/package that registers
                 components (``@Entity``/``@Repository``/``@Component``/...)
@@ -238,7 +238,7 @@ class Server:
 
                 chat_cfg = self.config.get("project", {}).get("chat", {})
                 chat_engine = ChatEngine(
-                    model=chat_cfg.get("model", "gpt-oss"),
+                    model=chat_cfg.get("model", "gpt-oss:20b"),
                     host=chat_cfg.get("ollama-host", "http://localhost:11434"),
                     mcp=self._mcp_server.mcp if self._mcp_server is not None else None,
                     debug=chat_cfg.get("debug", False),
