@@ -116,6 +116,11 @@ class UiServer:
             ``/proxy/jupyter/`` (see ``odf.ui.proxy``). Needs the
             ``notebook`` package.
             ``False`` (the default) only renders notebooks.
+        grid: How the topology grid is drawn: ``"iso"`` (the default), the
+            isometric grid with a building per node, or ``"flat"``, a
+            top-down schematic with every node the same shape in its type's
+            color and node customization turned off (see
+            ``static/grids/flat.js``).
     """
 
     def __init__(
@@ -135,6 +140,7 @@ class UiServer:
         theme: str = "default",
         topology: TopologyView | None = None,
         notebooks: bool = False,
+        grid: str = "iso",
     ) -> None:
         """Build the FastAPI app and register every route (see class docstring for args)."""
         self._context = context
@@ -153,6 +159,7 @@ class UiServer:
         self._brand = brand
         self._theme_dir = themes.theme_dir(theme)
         self._topology = topology
+        self._grid = grid
         self._notebooks: NotebookServer | None = None
         self._events = events.EventHub(context)
         self._server: uvicorn.Server | None = None
@@ -186,7 +193,7 @@ class UiServer:
 
         @app.get("/api/ui/extensions")
         def ui_extensions() -> dict:
-            """List icon scripts, extra colors, the custom logo, brand, and enabled features."""
+            """List icon scripts, colors, the custom logo, brand, grid, and enabled features."""
             return {
                 "iconScripts": [
                     f"/api/ui/icon-scripts/{i}" for i in range(len(self._icon_scripts))
@@ -194,6 +201,7 @@ class UiServer:
                 "colors": self._colors,
                 "logo": "/api/ui/logo" if self._logo is not None else None,
                 "brand": self._brand,
+                "grid": self._grid,
                 "annotations": self._annotations_path is not None,
                 "notebooks": self._notebooks is not None,
             }
@@ -611,6 +619,16 @@ class UiServer:
                 raise HTTPException(status_code=404, detail=f"Unknown icon script: {name}")
             return FileResponse(
                 icons_dir / name, media_type="application/javascript", headers=no_cache
+            )
+
+        @app.get("/grids/{name}")
+        def grid_script(name: str) -> FileResponse:
+            """Serve one of the UI's built-in grid scripts."""
+            grids_dir = themes.STATIC_DIR / "grids"
+            if name not in {p.name for p in grids_dir.glob("*.js")}:
+                raise HTTPException(status_code=404, detail=f"Unknown grid script: {name}")
+            return FileResponse(
+                grids_dir / name, media_type="application/javascript", headers=no_cache
             )
 
         @app.get("/theme.css")

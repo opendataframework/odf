@@ -56,7 +56,8 @@ needs a third-party dependency:
 | `cli.py`, `scaffold.py`, `templates/` | `odf init`/`odf run` CLI | `typer`, `rich` |
 | `mcp/server.py` | MCP server exposing component lifecycle + task/pipeline execution + repository data queries as tools | `mcp`, `uvicorn` |
 | `ui/server.py`, `ui/topology.py`, `ui/keys.py`, `ui/data.py`, `ui/arguments.py`, `ui/layout.py`, `ui/extensions.py`, `ui/themes.py` | UI dev server | `fastapi`, `uvicorn` |
-| `ui/static/` | The UI itself: `index.html` + `app.js` shared by every theme, `icons/` holding the built-in topology icons (one file per picker group, plus `shared.js`), and `themes/<name>/` holding each theme's `theme.css`, `favicon.svg` and optional `theme.js` | (Leaflet from a CDN; no build step) |
+| `ui/static/` | The UI itself: `index.html` + `app.js` shared by every theme, `icons/` holding the built-in topology icons (one file per picker group, plus `shared.js`), `grids/` holding the
+non-isometric topology grids picked by `[ui] grid` (`flat.js`), and `themes/<name>/` holding each theme's `theme.css`, `favicon.svg` and optional `theme.js` | (Leaflet from a CDN; no build step) |
 | `ui/notebooks.py`, `ui/notebook_contents.py`, `ui/proxy.py` | Jupyter Notebook launched on demand (on `127.0.0.1` only) to edit notebooks in the document view; `notebook_contents.py` is its contents manager, loaded only inside that Jupyter subprocess, reading and saving records through the UI's HTTP API; `proxy.py` forwards `/proxy/<name>/` (HTTP and WebSockets) to such an embedded app, so the browser reaches Jupyter on the UI's own origin | `notebook`, `websockets` (optional) |
 | `chat/engine.py` | Chat window backing a `Server`'s UI | `ollama` |
 
@@ -84,6 +85,11 @@ it registers through `ODF.registerIcon` with that file's `group` and draws
 with the `ODF.iconKit` helpers from `icons/shared.js`. Icon keys are stored
 in projects' `layout.json`, so renaming one resets it to the type default
 there.
+
+The topology's projection and node drawing go through `GRID` in `app.js`,
+whose built-in entry is the isometric grid. Another grid is its own file
+under `ui/static/grids/`, registering through `ODF.registerGrid`; keep its
+logic there, not in `app.js` or a theme.
 
 None of `ui`/`mcp`/`chat` are imported eagerly by `odf/__init__.py` or
 `odf/server.py` (keep it that way — `import odf` alone must not pull in

@@ -30,6 +30,19 @@ the grid are saved to `layout.json` in the working directory, or the file named
 by `[project] layout-file`. Commit it to share a layout. Icons are stored by key,
 so a node whose icon key no longer exists falls back to its type's default.
 
+### Flat grid
+
+`[ui] grid = "flat"` draws the topology as a flat, top-down schematic instead of
+the isometric grid: square cells marked by a faint dot where a node snaps, and
+every node the same rounded square in its type's color, which keeps a large
+topology readable. Columns run right and rows down, so a node keeps its cell in
+both grids and switching never moves anything.
+
+Nodes can't be customized on the flat grid: **Customize** is hidden and color
+overrides are ignored, so a node's color always shows its type. Icons and colors
+set on the isometric grid stay in `layout.json` and come back when you switch
+back. The theme still applies through its colors and icon face style.
+
 ### Run activity
 
 The topology shows what the project is doing as it happens, whoever started
@@ -298,6 +311,7 @@ Every key `odf` reads from `config.toml`:
 | Key | Default | Description |
 |---|---|---|
 | `[ui] theme` | `"default"` | UI theme; `--theme` / `theme=` override it |
+| `[ui] grid` | `"iso"` | Topology grid: `"iso"` or `"flat"` (see [Flat grid](#flat-grid)); any other value raises a `ValueError` |
 | `[ui] icon-scripts` | `[]` | `.js` files registering extra icons |
 | `[ui.colors]` | — | Named color swatches added to the color picker |
 | `[ui] favicon`, `[ui] logo` | built-in | Image files replacing the favicon and header logo |

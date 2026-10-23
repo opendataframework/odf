@@ -336,7 +336,7 @@ function saveLayerColor(name, hex) {
 }
 
 // ── Camera (pan / zoom) ──────────────────────────────────────────────────
-// World-space coords are whatever iso() returns; the camera is a separate
+// World-space coords are whatever gridPos() returns; the camera is a separate
 // translate+scale applied at draw time, so all scene math stays untouched.
 
 let panX = 0, panY = 0, zoom = 1;
@@ -416,8 +416,7 @@ function saveGridExpand() {
 function updateOrigin() {
   const midCol = (GRID_MIN_COL + GRID_MAX_COL) / 2;
   const midRow = (GRID_MIN_ROW + GRID_MAX_ROW) / 2;
-  ORIGIN_X = CW / 2 - (midCol - midRow) * TW2;
-  ORIGIN_Y = CH / 2 - (midCol + midRow) * TH2;
+  GRID.origin(midCol, midRow);
 }
 
 // Isometric projection — returns CSS-pixel screen coords
@@ -434,6 +433,62 @@ function isoInverse(x, y) {
   const Y = (y - ORIGIN_Y) / TH2;
   return { col: Math.round((X + Y) / 2), row: Math.round((Y - X) / 2) };
 }
+
+// ── Grids ─────────────────────────────────────────────────────────────────
+// How the topology grid is projected and its nodes drawn. 'iso' below is the
+// built-in isometric view; other grids (grids/flat.js) register through
+// ODF.registerGrid, and `[ui] grid` in config picks one (see
+// loadUiExtensions()). Everything outside this section goes through GRID.
+//
+// project/cell — (col, row) → world point at the cell's center, and back
+// origin       — sets ORIGIN_X/ORIGIN_Y so (midCol, midRow) is mid-canvas
+// tilePath     — builds the outline of the cell at (sx, sy), scaled by s
+// emptyCell    — draws an empty cell at (sx, sy)
+// drawNode     — draws a node standing on its cell at (sx, sy)
+// extents      — {top, bottom, half}: how far a node drawn at (sx, sy)
+//                reaches up, down and to each side, for labels, run badges,
+//                hit testing and the inspector popup
+// gridArrows   — [glyph, title] per grid-control button, keyed nw/ne/se/sw
+//                like gridExpand
+// customizable — whether a node's icon and color can be changed; when
+//                false, Customize is hidden and nodes take their type colors
+const GRIDS = {
+  iso: {
+    project: iso,
+    cell: isoInverse,
+    origin(midCol, midRow) {
+      ORIGIN_X = CW / 2 - (midCol - midRow) * TW2;
+      ORIGIN_Y = CH / 2 - (midCol + midRow) * TH2;
+    },
+    tilePath(sx, sy, s) {
+      ctx.beginPath();
+      ctx.moveTo(sx,           sy - TH2 * s);
+      ctx.lineTo(sx + TW2 * s, sy);
+      ctx.lineTo(sx,           sy + TH2 * s);
+      ctx.lineTo(sx - TW2 * s, sy);
+      ctx.closePath();
+    },
+    emptyCell: drawEmptyTile,
+    drawNode(node, sx, sy, lit) {
+      drawIcon(iconKey(node), sx, sy, nodeAccent(node), lit);
+    },
+    extents(node) {
+      const e = ICONS[iconKey(node)];
+      return { top: e.topExtent, bottom: TH2, half: e.widthExtent };
+    },
+    gridArrows: {
+      nw: ['↖', 'Add cells (top-left edge)'],
+      ne: ['↗', 'Add cells (top-right edge)'],
+      sw: ['↙', 'Add cells (bottom-left edge)'],
+      se: ['↘', 'Add cells (bottom-right edge)'],
+    },
+    customizable: true,
+  },
+};
+let GRID = GRIDS.iso;
+
+function gridPos(col, row) { return GRID.project(col, row); }
+function gridCell(x, y) { return GRID.cell(x, y); }
 
 function clamp(v, lo, hi) { return Math.min(hi, Math.max(lo, v)); }
 
@@ -479,13 +534,9 @@ function hashSeed(s) {
   return (h % 1000) / 1000;
 }
 
-function tilePath(sx, sy) {
-  ctx.beginPath();
-  ctx.moveTo(sx,       sy - TH2);
-  ctx.lineTo(sx + TW2, sy);
-  ctx.lineTo(sx,       sy + TH2);
-  ctx.lineTo(sx - TW2, sy);
-  ctx.closePath();
+// The outline of the cell at (sx, sy), scaled by s, in the current grid.
+function tilePath(sx, sy, s = 1) {
+  GRID.tilePath(sx, sy, s);
 }
 
 function drawEmptyTile(sx, sy) {
@@ -907,14 +958,20 @@ window.ODF = {
     readTheme();
     vignetteDirty = true;
   },
+  // Called by a grid script under grids/ to add a grid `[ui] grid` can
+  // pick. Entries it leaves out are the isometric grid's; see "Grids".
+  registerGrid(name, impl) {
+    GRIDS[name] = { ...GRIDS.iso, ...impl };
+  },
 };
 
 // Resolves a node's effective accent color for canvas drawing: its color
 // override, or its exec-type default. ACCENT is already a literal hex string
 // (refreshed by readTheme() on every theme toggle), so this stays correct
-// across themes without any extra bookkeeping.
+// across themes without any extra bookkeeping. A grid that isn't
+// customizable ignores the override, so color always reads as type there.
 function nodeAccent(node) {
-  return node.color || ACCENT[node.type];
+  return (GRID.customizable && node.color) || ACCENT[node.type];
 }
 
 // Resolves a node's effective accent color for DOM `style="color:...` use.
@@ -922,16 +979,16 @@ function nodeAccent(node) {
 // for free on theme toggle (matching today's behavior); only a node with an
 // explicit override gets pinned to a literal value.
 function nodeAccentCss(node) {
-  return node.color || `var(--accent-${node.type})`;
+  return (GRID.customizable && node.color) || `var(--accent-${node.type})`;
 }
 
 // ── Edges — grid-aligned wires, with a traveling glow pulse while a call
 // goes through them (see "Run state") ─────────────────────────────────────
 
 function edgePath(fromNode, toNode) {
-  const f = iso(fromNode.col, fromNode.row);
-  const bend = iso(toNode.col, fromNode.row);
-  const t = iso(toNode.col, toNode.row);
+  const f = gridPos(fromNode.col, fromNode.row);
+  const bend = gridPos(toNode.col, fromNode.row);
+  const t = gridPos(toNode.col, toNode.row);
   return [[f.x, f.y], [bend.x, bend.y], [t.x, t.y]];
 }
 
@@ -1023,12 +1080,7 @@ function drawRunRing(node, sx, sy, run) {
   const pulse = run.state === 'running' && !reduceMotion ? (Math.sin(animT * 5) + 1) / 2 : 0;
   const s = 1.08 + 0.06 * pulse;
   ctx.save();
-  ctx.beginPath();
-  ctx.moveTo(sx,           sy - TH2 * s);
-  ctx.lineTo(sx + TW2 * s, sy);
-  ctx.lineTo(sx,           sy + TH2 * s);
-  ctx.lineTo(sx - TW2 * s, sy);
-  ctx.closePath();
+  tilePath(sx, sy, s);
   ctx.strokeStyle = rgba(color, (run.state === 'running' ? 0.55 + 0.35 * pulse : 0.85) * alpha);
   ctx.lineWidth = THEME_STYLE.runRingLine;
   THEME_STYLE.runRingShadow(run.state, color);
@@ -1041,7 +1093,7 @@ function drawRunBadge(node, sx, sy, run) {
   const alpha = runMarkAlpha(run);
   if (alpha <= 0) return;
   const color = runMarkColor(node, run);
-  const by = sy - ICONS[iconKey(node)].topExtent - 30;
+  const by = sy - GRID.extents(node).top - 30;
   const failed = run.state === 'failed';
   const text = failed ? (run.count > 1 ? `! ×${run.count}` : '!') : '✓';
 
@@ -1065,7 +1117,7 @@ function drawRunBadge(node, sx, sy, run) {
 
 function drawLabel(node, sx, sy, lit) {
   const accent = nodeAccent(node);
-  const ly = sy - ICONS[iconKey(node)].topExtent - 8;
+  const ly = sy - GRID.extents(node).top - 8;
   const text = node.label.toUpperCase();
 
   ctx.save();
@@ -1155,7 +1207,7 @@ function render() {
   // 1 — Grid tiles (drawn with a one-tile empty border around the loaded nodes)
   for (let c = GRID_MIN_COL - 1; c <= GRID_MAX_COL + 1; c++) {
     for (let r = GRID_MIN_ROW - 1; r <= GRID_MAX_ROW + 1; r++) {
-      const {x, y} = iso(c, r);
+      const {x, y} = gridPos(c, r);
       if (x < viewL || x > viewR || y < viewT || y > viewB) continue;
       const key  = `${c},${r}`;
       const node = nodeAtTile[key];
@@ -1163,14 +1215,14 @@ function render() {
         const lit = node.id === hoverId || node.id === selectId || node === dragNode;
         drawOccupiedTile(x, y, nodeAccent(node), lit);
       } else {
-        drawEmptyTile(x, y);
+        GRID.emptyCell(x, y);
       }
     }
   }
 
   // 1.5 — Drop-target ring for the node currently being dragged
   if (dragNode) {
-    const {x, y} = iso(dragNode.col, dragNode.row);
+    const {x, y} = gridPos(dragNode.col, dragNode.row);
     const ok = !nodeAtCell(dragNode.col, dragNode.row, dragNode);
     const ringColor = ok ? ACCENT.task : ACCENT.alert;
     tilePath(x, y);
@@ -1187,7 +1239,7 @@ function render() {
   for (const id of Object.keys(nodeRun)) {
     const node = nodeMap[id];
     if (!node) continue;
-    const {x, y} = iso(node.col, node.row);
+    const {x, y} = gridPos(node.col, node.row);
     if (x < viewL || x > viewR || y < viewT || y > viewB) continue;
     drawRunRing(node, x, y, nodeRun[id]);
   }
@@ -1199,15 +1251,15 @@ function render() {
 
   // 3 — Buildings (back to front, per-type silhouette)
   for (const node of byDepth) {
-    const {x, y} = iso(node.col, node.row);
+    const {x, y} = gridPos(node.col, node.row);
     if (x < viewL || x > viewR || y < viewT || y > viewB) continue;
     const lit = node.id === hoverId || node.id === selectId || node === dragNode;
-    drawIcon(iconKey(node), x, y, nodeAccent(node), lit);
+    GRID.drawNode(node, x, y, lit);
   }
 
   // 4 — Labels (always on top)
   for (const node of byDepth) {
-    const {x, y} = iso(node.col, node.row);
+    const {x, y} = gridPos(node.col, node.row);
     if (x < viewL || x > viewR || y < viewT || y > viewB) continue;
     const lit = node.id === hoverId || node.id === selectId || node === dragNode;
     drawLabel(node, x, y, lit);
@@ -1233,10 +1285,10 @@ function hitTest(mx, my) {
   // front-to-back order
   for (let i = byDepth.length - 1; i >= 0; i--) {
     const node = byDepth[i];
-    const {x, y} = iso(node.col, node.row);
-    const ic = ICONS[iconKey(node)], te = ic.topExtent, we = ic.widthExtent;
-    if (mx >= x - we - 2 && mx <= x + we + 2 &&
-        my >= y - te - 2 && my <= y + TH2 + 2) {
+    const {x, y} = gridPos(node.col, node.row);
+    const { top, bottom, half } = GRID.extents(node);
+    if (mx >= x - half - 2 && mx <= x + half + 2 &&
+        my >= y - top - 2 && my <= y + bottom + 2) {
       return node.id;
     }
   }
@@ -1282,7 +1334,7 @@ canvas.addEventListener('mousedown', e => {
 canvas.addEventListener('mousemove', e => {
   const p = canvasPoint(e);
   const w = screenToWorld(p.x, p.y);
-  updateCoordReadout(isoInverse(w.x, w.y));
+  updateCoordReadout(gridCell(w.x, w.y));
   if (isDragging) return; // dragging/panning is driven by the window listener below
   const hit = hitTest(w.x, w.y);
   if (hit !== hoverId) {
@@ -1300,7 +1352,7 @@ window.addEventListener('mousemove', e => {
   if (dragNode) {
     if (!dragMoved) return; // require a small nudge before lifting the building
     const w = screenToWorld(p.x, p.y);
-    const cell = isoInverse(w.x, w.y);
+    const cell = gridCell(w.x, w.y);
     dragNode.col = clamp(cell.col, GRID_MIN_COL - 1, GRID_MAX_COL + 1);
     dragNode.row = clamp(cell.row, GRID_MIN_ROW - 1, GRID_MAX_ROW + 1);
     updateCoordReadout({ col: dragNode.col, row: dragNode.row });
@@ -1422,10 +1474,10 @@ function selectNode(id) {
   if (node.details) {
     actions.push({ id: 'show-details-btn', label: 'Details', kind: '', run: () => showDetailsView(id) });
   }
-  actions.push(
-    { id: 'show-logs-btn', label: 'Show Logs', kind: '', run: () => showLogsView(id) },
-    { id: 'customize-btn', label: 'Customize', kind: '', run: e => openStylePicker(node, e.currentTarget) },
-  );
+  actions.push({ id: 'show-logs-btn', label: 'Show Logs', kind: '', run: () => showLogsView(id) });
+  if (GRID.customizable) {
+    actions.push({ id: 'customize-btn', label: 'Customize', kind: '', run: e => openStylePicker(node, e.currentTarget) });
+  }
   const actionHtml = a =>
     `<button class="detail-action ${a.kind}" id="${a.id}"><span>${a.label}</span><span class="detail-action-arrow">&rarr;</span></button>`;
 
@@ -1455,10 +1507,10 @@ function showInspectorPopup(node) {
   const popup = document.getElementById('inspector-popup');
   popup.classList.add('open');
 
-  const w = iso(node.col, node.row);
+  const w = gridPos(node.col, node.row);
   const sx = w.x * zoom + panX;
   const sy = w.y * zoom + panY;
-  const extent = ICONS[iconKey(node)].topExtent * zoom;
+  const extent = GRID.extents(node).top * zoom;
 
   const pw = popup.offsetWidth, ph = popup.offsetHeight;
   let left = sx - pw / 2;
@@ -6154,6 +6206,15 @@ async function loadUiExtensions() {
   }
   annotationsEnabled = Boolean(ext.annotations);
   notebooksEnabled = Boolean(ext.notebooks);
+
+  // An unknown grid name falls back to the isometric one, as a stale icon
+  // key falls back to the type default.
+  GRID = GRIDS[ext.grid] || GRIDS.iso;
+  for (const [dir, [glyph, title]] of Object.entries(GRID.gridArrows)) {
+    const btn = document.getElementById(`grid-${dir}`);
+    btn.textContent = glyph;
+    btn.title = title;
+  }
 
   if (ext.logo) {
     const mark = document.getElementById('brand-mark');

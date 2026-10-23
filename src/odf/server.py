@@ -142,7 +142,10 @@ class Server:
                 components). A notebook in a document view can be edited in
                 place, in an embedded Jupyter Notebook, when the ``notebook``
                 extra is installed (``pip install odf[notebook]``);
-                ``[ui] notebooks = false`` turns that off.
+                ``[ui] notebooks = false`` turns that off. ``[ui] grid =
+                "flat"`` draws the topology as a flat, top-down schematic
+                instead of the default isometric grid (``"iso"``), with
+                every node the same shape in its type's color.
             ui_host: Interface for the UI server to bind to.
             ui_port: Port for the UI server to bind to.
             theme: Which UI theme (visual file-set) to serve —
@@ -183,7 +186,8 @@ class Server:
                 ``chat=True`` is passed without ``ui=True``, if
                 ``theme``/``[ui] theme`` names a UI theme that doesn't
                 exist, if ``[ui.topology]`` has an unknown key or a value
-                of the wrong type, or if ``[ui] notebooks`` isn't a boolean.
+                of the wrong type, if ``[ui] notebooks`` isn't a boolean, or
+                if ``[ui] grid`` isn't ``"iso"`` or ``"flat"``.
             ImportError: If ``ui=True``/``mcp=True``/``chat=True`` but the
                 corresponding extra is not installed, or if ``[ui] notebooks
                 = true`` but the ``notebook`` extra is not.
@@ -257,6 +261,9 @@ class Server:
             edit_notebooks = ui_cfg.get("notebooks", notebooks.available())
             if not isinstance(edit_notebooks, bool):
                 raise ValueError(f"[ui] notebooks must be true or false, got {edit_notebooks!r}.")
+            grid = ui_cfg.get("grid", "iso")
+            if grid not in ("iso", "flat"):
+                raise ValueError(f'[ui] grid must be "iso" or "flat", got {grid!r}.')
             if edit_notebooks and not notebooks.available():
                 raise ImportError(
                     "[ui] notebooks = true requires Jupyter Notebook and websockets in "
@@ -287,6 +294,7 @@ class Server:
                 theme=resolved_theme,
                 topology=topology,
                 notebooks=edit_notebooks,
+                grid=grid,
             )
             self._ui_server.start()
         self._running = True

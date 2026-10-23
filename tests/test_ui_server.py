@@ -2028,6 +2028,22 @@ def test_ui_extensions_reports_configured_brand():
     assert r.json()["brand"] == "Beacon Watch"
 
 
+def test_ui_extensions_reports_iso_grid_by_default():
+    with Context(namespaces=set()) as ctx:
+        client = TestClient(UiServer(ctx, "proj")._app)
+        r = client.get("/api/ui/extensions")
+
+    assert r.json()["grid"] == "iso"
+
+
+def test_ui_extensions_reports_configured_grid():
+    with Context(namespaces=set()) as ctx:
+        client = TestClient(UiServer(ctx, "proj", grid="flat")._app)
+        r = client.get("/api/ui/extensions")
+
+    assert r.json()["grid"] == "flat"
+
+
 # --- themes --------------------------------------------------------------------
 
 
@@ -2318,6 +2334,38 @@ def test_index_loads_every_icon_group_script_between_app_and_theme():
     assert html.index('src="/app.js"') < positions["shared.js"]
     assert all(positions["shared.js"] <= pos for pos in positions.values())
     assert max(positions.values()) < html.index('src="/theme.js"')
+
+
+GRID_SCRIPTS = sorted(p.name for p in (themes.STATIC_DIR / "grids").glob("*.js"))
+
+
+@pytest.mark.parametrize("name", GRID_SCRIPTS)
+def test_serves_every_grid_script(name):
+    with Context(namespaces=set()) as ctx:
+        client = TestClient(UiServer(ctx, "proj")._app)
+        r = client.get(f"/grids/{name}")
+
+    assert r.status_code == 200
+    assert "javascript" in r.headers["content-type"]
+    assert r.headers["cache-control"] == "no-cache"
+    assert r.text == (themes.STATIC_DIR / "grids" / name).read_text()
+
+
+def test_unknown_grid_script_is_404():
+    with Context(namespaces=set()) as ctx:
+        client = TestClient(UiServer(ctx, "proj")._app)
+        r = client.get("/grids/nope.js")
+
+    assert r.status_code == 404
+
+
+def test_index_loads_every_grid_script_between_app_and_theme():
+    html = (themes.STATIC_DIR / "index.html").read_text()
+    positions = [html.index(f'src="/grids/{name}"') for name in GRID_SCRIPTS]
+
+    assert "flat.js" in GRID_SCRIPTS
+    assert html.index('src="/app.js"') < min(positions)
+    assert max(positions) < html.index('src="/theme.js"')
 
 
 def test_icon_group_scripts_register_unique_keys():

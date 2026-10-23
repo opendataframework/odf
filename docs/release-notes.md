@@ -4,6 +4,11 @@
 
 ### Added
 
+- **UI**: `[ui] grid = "flat"` in `config.toml` draws the topology as a flat, top-down
+  schematic instead of the isometric grid: faint dots where nodes snap, and every node the
+  same rounded square in its type's color, for large topologies. Node positions are shared
+  by both grids; customizing icons and colors is off on the flat one. See
+  [UI](ui.md#flat-grid).
 - **UI**: Jupyter notebooks in a document view open as their cells and saved outputs
   (Markdown rendered, images inline, HTML outputs sanitized) instead of raw JSON, with
   **View source** for the JSON. With the `notebook` package installed in the project
