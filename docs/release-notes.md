@@ -62,6 +62,14 @@
   `[ui] theme = "y2k"` in `config.toml`. Themes can now fill opaque icon faces their own
   way, such as a gradient spanning the whole icon, with
   `ODF.registerTheme({ faceFill })`. See [UI](ui.md#themes-icons-and-branding).
+- **UI**: `ledger` theme, utility-first: square corners and hairline rules, surfaces
+  told apart by tone over near-black in dark mode and white paper in light mode, dense
+  striped tables with aligned numbers and a header that stays in view, and a visible
+  focus ring everywhere. Kind colors are muted and one blue marks focus and selection,
+  so run states are what stands out. The topology draws icons as flat silhouettes
+  outlined in ink on a hairline grid, with no glows. Select it with
+  `odf run --theme ledger` or `[ui] theme = "ledger"` in `config.toml`. See
+  [UI](ui.md#themes-icons-and-branding).
 
 ### Changed
 

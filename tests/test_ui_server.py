@@ -2133,6 +2133,20 @@ def test_serves_y2k_theme_files():
     assert "faceFill(side, accent, lit, t, frame)" in responses["/theme.js"].text
 
 
+def test_list_themes_finds_the_built_in_ledger_theme():
+    assert "ledger" in themes.list_themes()
+
+
+def test_serves_ledger_theme_files():
+    with Context(namespaces=set()) as ctx:
+        client = TestClient(UiServer(ctx, "proj", theme="ledger")._app)
+        responses = {path: client.get(path) for path in ("/theme.css", "/theme.js", "/favicon.svg")}
+
+    for path, r in responses.items():
+        assert r.status_code == 200, path
+    assert "ODF.registerTheme(" in responses["/theme.js"].text
+
+
 def test_theme_can_fill_faces_across_the_whole_icon():
     script = (themes.STATIC_DIR / "app.js").read_text()
 
