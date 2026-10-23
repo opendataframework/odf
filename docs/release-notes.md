@@ -78,6 +78,13 @@
   on hover. Select it with `odf run --theme clay` or `[ui] theme = "clay"` in
   `config.toml`. Themes can now draw on the floor under each icon with
   `ODF.registerTheme({ groundShadow })`. See [UI](ui.md#themes-icons-and-branding).
+- **UI**: `meadow` theme, a sunny hillside: an open blue sky with drifting clouds behind
+  the app (stars at dusk in dark mode), a glossy blue title bar, a gradient side pane,
+  rounded panels edged in sky blue, glossy buttons with a green run button, and zebra
+  striped tables. The topology is a freshly mown lawn in diagonal stripes, with icons
+  drawn as glossy, saturated solids, each on a soft shadow on the grass. Select it with
+  `odf run --theme meadow` or `[ui] theme = "meadow"` in `config.toml`. See
+  [UI](ui.md#themes-icons-and-branding).
 
 ### Changed
 

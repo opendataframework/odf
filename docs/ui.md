@@ -254,8 +254,8 @@ and
 
 ## Themes, icons and branding
 
-The UI ships nine themes: `default`, `glitch`, `neo`, `emerald`, `onyx`,
-`terminal`, `y2k`, `ledger` and `clay`.
+The UI ships ten themes: `default`, `glitch`, `neo`, `emerald`, `onyx`,
+`terminal`, `y2k`, `ledger`, `clay` and `meadow`.
 Pick one with `odf run --theme <name>`, `server.start(theme=...)`, or
 `[ui] theme` in config. A theme only restyles the UI; markup and behavior are
 the same in every theme. An unknown theme name raises a `ValueError` at start.
@@ -266,8 +266,9 @@ lit icon, `glitch` draws near-black solids with bright edges, `neo` flat
 solid faces in three tones outlined in ink, `onyx` tonal solids with no
 outlines at all, `terminal` glowing phosphor line art on a dotted grid,
 `y2k` liquid chrome solids, `ledger` flat silhouettes outlined in ink,
-with nothing glowing, on a hairline grid, and `clay` matte solids lit from
-the top-left, each standing on a soft contact shadow. A theme's `theme.js` sets this through
+with nothing glowing, on a hairline grid, `clay` matte solids lit from
+the top-left, each standing on a soft contact shadow, and `meadow` glossy
+solids on a striped lawn under an open sky, each on a soft shadow. A theme's `theme.js` sets this through
 `ODF.registerTheme({ faces: {...} })`, whose knobs are listed on
 `THEME_STYLE.faces` in `app.js`. It can also replace how empty grid tiles are
 drawn with `emptyTile(sx, sy)`, and fill opaque faces with its own style, such
