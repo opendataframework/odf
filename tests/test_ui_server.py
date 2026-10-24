@@ -2207,6 +2207,21 @@ def test_serves_beacon_theme_files():
     assert "groundShadow(x, y, e, accent, lit)" in responses["/theme.js"].text
 
 
+def test_list_themes_finds_the_built_in_workbench_theme():
+    assert "workbench" in themes.list_themes()
+
+
+def test_serves_workbench_theme_files():
+    with Context(namespaces=set()) as ctx:
+        client = TestClient(UiServer(ctx, "proj", theme="workbench")._app)
+        responses = {path: client.get(path) for path in ("/theme.css", "/theme.js", "/favicon.svg")}
+
+    for path, r in responses.items():
+        assert r.status_code == 200, path
+    assert "--syn-key" in responses["/theme.css"].text
+    assert "emptyTile(sx, sy)" in responses["/theme.js"].text
+
+
 def test_theme_can_draw_a_ground_shadow_under_icons():
     script = (themes.STATIC_DIR / "app.js").read_text()
 

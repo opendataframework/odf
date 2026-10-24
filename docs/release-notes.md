@@ -99,6 +99,14 @@
   every few tiles, with icons drawn as translucent holograms that glow when lit, each
   inside a segmented marker ring. Select it with `odf run --theme beacon` or
   `[ui] theme = "beacon"` in `config.toml`. See [UI](ui.md#themes-icons-and-branding).
+- **UI**: `workbench` theme, a code editor's look: charcoal panes butting on hairlines
+  around a lighter canvas, a side rail styled as an activity bar, list selections and a
+  1px focus ring in one blue, filled blue primary buttons, the system UI face for the
+  chrome and a coding mono for values, and JSON in syntax colors. Kind and layer colors
+  come from the same syntax palette, on charcoal in dark mode and white in light mode.
+  The topology draws icons as flat solids outlined in ink on a hairline grid, with no
+  glows. Select it with `odf run --theme workbench` or `[ui] theme = "workbench"` in
+  `config.toml`. See [UI](ui.md#themes-icons-and-branding).
 - **Examples**: [`23-reverse-proxy`](https://github.com/opendataframework/odf/tree/main/examples/23-reverse-proxy)
   deploys a project with `docker compose up`: `odf run` in one container with its ports
   exposed only to the compose network, and Traefik in front of it with HTTPS (a
