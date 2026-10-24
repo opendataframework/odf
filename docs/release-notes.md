@@ -150,6 +150,12 @@
 - **Chat**: the default `[project.chat] model` is now `gpt-oss:20b` instead of `gpt-oss`.
   See [Chat](chat.md).
 
+### Fixed
+
+- **CLI**: the `SQLite` storage of every `odf init` template, and of the examples built on
+  them, closes its connection in `on_stop()` when the project stops, instead of leaving it
+  open. See [Examples](examples.md).
+
 ## 0.3.0
 
 ### Added

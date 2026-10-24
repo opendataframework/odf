@@ -43,12 +43,13 @@ def config(tmp_path) -> Config:
 @pytest.fixture
 def repos(config) -> dict:
     sqlite = SQLite(config)
-    return {
+    yield {
         "runs": Runs(sqlite),
         "params": Params(sqlite),
         "metrics": Metrics(sqlite),
         "artifacts": Artifacts(sqlite),
     }
+    sqlite.on_stop()
 
 
 def test_train_records_a_run_with_params_metrics_a_summary_and_a_model(repos):

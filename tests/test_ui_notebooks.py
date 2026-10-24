@@ -83,6 +83,7 @@ def contents():
 
         manager._request = request
         yield manager, notes
+        manager.notary.close()
 
 
 def test_contents_lists_document_repositories_and_their_notebook_records(contents):
@@ -244,6 +245,8 @@ def test_jupyter_s_token_stays_with_the_ui_so_a_basic_auth_login_works(running_u
     assert without.value.code == 403
     assert browser_token.value.code == 403
     assert with_ui_s.status == 200
+    for response in (without.value, browser_token.value, with_ui_s):
+        response.close()
 
 
 def test_proxy_drops_the_browser_s_authorization_and_adds_the_app_s_credentials():
@@ -364,6 +367,7 @@ def test_notebook_kernels_run_over_a_websocket_through_the_ui(running_ui):
             message = json.loads(await asyncio.wait_for(conn.read_message(), 60))
             if message["msg_type"] == "kernel_info_reply":
                 conn.close()
+                await conn.read_message()  # None once the close handshake is done
                 return message
 
     reply = asyncio.run(kernel_info())
@@ -422,6 +426,7 @@ def test_notebook_server_refuses_another_site_through_the_ui(running_ui):
 
     assert http.value.code in (403, 404)
     assert websocket.value.code == 403
+    http.value.close()
 
 
 def test_jupyter_is_unavailable_through_the_ui_until_it_starts():

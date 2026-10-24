@@ -37,3 +37,8 @@ class SQLite:
             )
         """)
         self.conn.commit()
+
+    def on_stop(self) -> None:
+        """Close the connection when the project stops."""
+        with self.lock:
+            self.conn.close()
