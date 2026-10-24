@@ -12,6 +12,13 @@ A request without an ``Origin`` passes: browsers send one with every
 cross-origin request that could change something and with every WebSocket,
 so one without comes from a script, curl, or the Jupyter subprocess saving
 notebooks through the UI.
+
+A page can also rebind its own name to ``127.0.0.1``, and then its requests
+to a UI on this machine are, to the browser, same-origin ones, which
+``OriginCheck`` lets through. ``HostCheck`` refuses those: a UI bound to a
+loopback address only answers requests whose ``Host`` is a loopback name,
+as FastMCP does for the MCP server. A reverse proxy in front of such a UI
+passes the browser's host on as ``X-Forwarded-Host``.
 """
 
 from urllib.parse import urlsplit
@@ -23,6 +30,9 @@ from starlette.websockets import WebSocket
 
 _SAFE_METHODS = {"GET", "HEAD", "OPTIONS"}
 
+# The names a server bound to a loopback address is reached by, without the port.
+_LOOPBACK = {"127.0.0.1", "localhost", "::1"}
+
 
 def public_hosts(headers: Headers) -> set[str]:
     """The hosts the browser reached the UI by.
@@ -32,6 +42,14 @@ def public_hosts(headers: Headers) -> set[str]:
     """
     hosts = {headers.get("host"), *headers.get("x-forwarded-host", "").split(",")}
     return {h.strip().lower() for h in hosts if h and h.strip()}
+
+
+async def _refuse(scope: Scope, receive: Receive, send: Send, status: int, detail: str) -> None:
+    """Answer ``status`` with ``detail``, or close a WebSocket before it's accepted."""
+    if scope["type"] == "websocket":
+        await WebSocket(scope, receive, send).close(code=1008)
+    else:
+        await JSONResponse({"detail": detail}, status_code=status)(scope, receive, send)
 
 
 class OriginCheck:
@@ -55,14 +73,44 @@ class OriginCheck:
             headers = Headers(scope=scope)
             origin = headers.get("origin")
             if origin is not None and urlsplit(origin).netloc.lower() not in public_hosts(headers):
-                if scope["type"] == "websocket":
-                    await WebSocket(scope, receive, send).close(code=1008)
-                    return
                 detail = (
                     f"Cross-site request refused: Origin {origin!r} isn't the host the UI "
                     f"was reached by ({headers.get('host')!r}). Behind a reverse proxy, pass "
-                    "the browser's Host header on, or set X-Forwarded-Host."
+                    "the browser's host on as X-Forwarded-Host."
                 )
-                await JSONResponse({"detail": detail}, status_code=403)(scope, receive, send)
+                await _refuse(scope, receive, send, 403, detail)
+                return
+        await self.app(scope, receive, send)
+
+
+class HostCheck:
+    """ASGI middleware refusing requests for another host, when bound to loopback.
+
+    With ``host`` a loopback address, an HTTP request answers 421, and a
+    WebSocket is closed before it's accepted, when its ``Host`` (whatever
+    the port) isn't a loopback name. Bound to any other address, everything
+    passes.
+
+    Args:
+        app: The app to wrap.
+        host: The address the server binds to.
+    """
+
+    def __init__(self, app: ASGIApp, host: str) -> None:
+        """Wrap ``app`` (see class docstring for args)."""
+        self.app = app
+        self._active = host in _LOOPBACK
+
+    async def __call__(self, scope: Scope, receive: Receive, send: Send) -> None:
+        """Pass the request on to the app, unless it's refused."""
+        if self._active and scope["type"] in ("http", "websocket"):
+            host = Headers(scope=scope).get("host")
+            if not host or urlsplit(f"//{host}").hostname not in _LOOPBACK:
+                detail = (
+                    f"Host {host!r} refused: the UI is bound to a loopback address, so it "
+                    "only answers 127.0.0.1, localhost and [::1]. Behind a reverse proxy, "
+                    "leave Host to the proxy and pass the browser's host as X-Forwarded-Host."
+                )
+                await _refuse(scope, receive, send, 421, detail)
                 return
         await self.app(scope, receive, send)

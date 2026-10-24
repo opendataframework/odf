@@ -41,7 +41,7 @@ from opendataframework.view import (
 
 from odf.ui import annotations, arguments, data, events, keys, layout, media, themes
 from odf.ui.notebooks import NotebookServer, local_host
-from odf.ui.origin import OriginCheck
+from odf.ui.origin import HostCheck, OriginCheck
 from odf.ui.topology import TopologyView, build_topology
 
 if TYPE_CHECKING:
@@ -834,7 +834,9 @@ class UiServer:
     def start(self) -> None:
         """Start serving in a background daemon thread. Returns immediately."""
         self._events.start()
-        config = uvicorn.Config(self._app, host=self._host, port=self._port, log_level="warning")
+        config = uvicorn.Config(
+            HostCheck(self._app, self._host), host=self._host, port=self._port, log_level="warning"
+        )
         self._server = uvicorn.Server(config)
         self._thread = threading.Thread(target=self._server.run, daemon=True)
         self._thread.start()

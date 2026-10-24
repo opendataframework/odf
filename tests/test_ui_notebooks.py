@@ -261,7 +261,7 @@ def browser_cookies(ui) -> str:
     return "; ".join(f"{c.name}={c.value}" for c in jar)
 
 
-def kernel_channels(ui, kernel_id, origin):
+def kernel_channels(ui, kernel_id, origin, headers=None):
     """Connect to a kernel's channels through the UI, as a browser on ``origin`` would."""
     from tornado.httpclient import HTTPRequest
     from tornado.websocket import websocket_connect
@@ -269,7 +269,7 @@ def kernel_channels(ui, kernel_id, origin):
     return websocket_connect(
         HTTPRequest(
             f"ws://127.0.0.1:18778/proxy/jupyter/api/kernels/{kernel_id}/channels",
-            headers={"Cookie": browser_cookies(ui), "Origin": origin},
+            headers={"Cookie": browser_cookies(ui), "Origin": origin, **(headers or {})},
         )
     )
 
@@ -310,6 +310,27 @@ def test_notebook_kernels_run_over_a_websocket_through_the_ui(running_ui):
 
     assert reply["parent_header"]["msg_id"] == msg_id
     assert reply["content"]["status"] == "ok"
+
+
+@pytest.mark.timeout(120)
+def test_notebook_kernels_connect_through_a_reverse_proxy_in_front_of_the_ui(running_ui):
+    import asyncio
+
+    ui, _ = running_ui
+    ui._notebooks.start()
+    kernel = jupyter(ui, "POST", "api/kernels", {})
+
+    async def connect():
+        # As nginx sends it: Host left to the proxy, the browser's host forwarded.
+        conn = await kernel_channels(
+            ui,
+            kernel["id"],
+            "https://odf.example.com",
+            headers={"X-Forwarded-Host": "odf.example.com"},
+        )
+        conn.close()
+
+    asyncio.run(connect())
 
 
 @pytest.mark.timeout(120)

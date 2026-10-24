@@ -320,9 +320,10 @@ embedded Jupyter is served through the UI on the same origin (see
 Jupyter-specific in the proxy.
 
 The proxy has to pass WebSocket upgrades on (Jupyter's kernels use them),
-keep the `Host` the browser sent (Jupyter refuses WebSockets otherwise, and so
-does the UI, see below), and accept request bodies as large as your
-notebooks, since saving one sends it whole. With nginx:
+pass the host the browser asked for on as `X-Forwarded-Host` while leaving
+`Host` to the proxy (the UI refuses saves, Runs and Jupyter's WebSockets
+otherwise, see below), and accept request bodies as large as your notebooks,
+since saving one sends it whole. With nginx:
 
 ```nginx
 location / {
@@ -330,10 +331,13 @@ location / {
     proxy_http_version 1.1;
     proxy_set_header Upgrade $http_upgrade;
     proxy_set_header Connection "upgrade";
-    proxy_set_header Host $http_host;
+    proxy_set_header X-Forwarded-Host $http_host;
     client_max_body_size 100m;
 }
 ```
+
+In a container, with `--ui-host 0.0.0.0`, `proxy_pass` names the UI's
+container instead (`http://odf:4747`); the rest stays the same.
 
 `GET /api/events` is a long-lived stream. The UI sends `X-Accel-Buffering: no`
 with it, so nginx passes events on as they happen with no extra setting. Other
@@ -383,7 +387,7 @@ Authelia, Authentik and Cloudflare Access work the same way, as do
 Traefik's `ForwardAuth` and Caddy's `forward_auth` in place of nginx's
 `auth_request`.
 
-### Cross-site requests
+### Cross-site requests and DNS rebinding
 
 A login at the proxy is a cookie, or credentials the browser remembers, which
 the browser sends with every request to the UI, including requests a page on
@@ -392,14 +396,50 @@ something (any method but `GET`, `HEAD` and `OPTIONS`, and every WebSocket,
 Jupyter's included) when its `Origin` isn't the host the UI was reached by:
 the `Host` header, or `X-Forwarded-Host` if the proxy sets it. HTTP requests
 get a 403, WebSockets are closed before they open. Requests with no `Origin`,
-from scripts or `curl`, aren't affected. Behind a proxy that rewrites `Host`,
-every save and every Run is refused until it passes the browser's `Host` on
-(as `proxy_set_header Host $http_host` does) or sets `X-Forwarded-Host`.
+from scripts or `curl`, aren't affected.
+
+A page can also point its own name at your machine (DNS rebinding), so that
+to the browser its requests to a local UI are same-origin ones. So a UI bound
+to a loopback address (`127.0.0.1`, the default) only answers requests whose
+`Host` is `127.0.0.1`, `localhost` or `[::1]`, on any port; any other answers
+421. Bound to any other address, as in a container, the UI answers every
+`Host`. Behind a proxy on the same machine this is why the proxy leaves `Host`
+alone, as nginx's `proxy_pass` does by default, and passes the browser's host
+as `X-Forwarded-Host` instead.
 
 ### MCP
 
-The [MCP server](mcp.md) listens on its own port, not through the UI, so none
-of the above covers it, and it has no login either. Keep it on `127.0.0.1`.
+The [MCP server](mcp.md) listens on its own port and has no login either, but
+the same proxy can serve it next to the UI, on the same certificate, at
+`https://odf.example.com/mcp`:
+
+```nginx
+location /mcp {
+    proxy_pass http://127.0.0.1:4748;
+    proxy_http_version 1.1;
+    proxy_buffering off;    # responses can be event streams
+    proxy_read_timeout 1h;  # and a client's event stream stays open
+    auth_basic "odf MCP";
+    auth_basic_user_file /etc/nginx/.htpasswd;
+}
+```
+
+`Host` is left to nginx (`127.0.0.1:4748`), which the MCP server accepts: like
+the UI, bound to a loopback address it only answers loopback hosts. MCP
+clients can't go through a browser login, so this `location` checks a header
+the client sends itself instead. With Basic auth, as above, that's
+credentials configured in the client:
+
+```bash
+claude mcp add --transport http my-project https://odf.example.com/mcp \
+  --header "Authorization: Basic $(printf 'alice:secret' | base64)"
+```
+
+With oauth2-proxy, use `auth_request /oauth2/auth;` here too, with no
+`error_page`, and start oauth2-proxy with `--skip-jwt-bearer-tokens`, so a
+client sending a token from your identity provider
+(`Authorization: Bearer ...`) is let through. In a container, with
+`--mcp-host 0.0.0.0`, `proxy_pass` names the MCP server's container instead.
 
 ## HTTP API
 

@@ -105,10 +105,15 @@
   at a reverse proxy can't be used from there: any request but `GET`, `HEAD` and
   `OPTIONS`, and every WebSocket (Jupyter's included), answers 403 when its `Origin`
   isn't the host the UI was reached by (`Host`, or `X-Forwarded-Host`). Requests without
-  an `Origin`, from scripts or `curl`, are unaffected. A proxy has to pass the browser's
-  `Host` on, as the documented nginx setup does. The UI docs gain a deployment section:
-  keeping the port off the network, the nginx settings, and adding a login with nginx's
-  Basic auth or an identity provider through oauth2-proxy. See [UI](ui.md#deploying).
+  an `Origin`, from scripts or `curl`, are unaffected. Bound to a loopback address (the
+  default), the UI also answers only requests whose `Host` is `127.0.0.1`, `localhost`
+  or `[::1]` (421 otherwise), so a page that points its own name at your machine (DNS
+  rebinding) can't reach it. A proxy in front leaves `Host` alone and passes the
+  browser's host as `X-Forwarded-Host`, as the documented nginx setup does. The UI docs
+  gain a deployment section: keeping the port off the network, the nginx settings,
+  adding a login with nginx's Basic auth or an identity provider through oauth2-proxy,
+  and serving the MCP server behind the same proxy at `/mcp`, with a login the client
+  sends as a header. See [UI](ui.md#deploying).
 - **UI**: each theme draws topology icons its own way instead of all as wireframes:
   `emerald` as tinted glass, `glitch` as dark solids with bright edges, `neo` as flat
   solid faces outlined in ink, `onyx` as tonal solids without outlines, while `default`
