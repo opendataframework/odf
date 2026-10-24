@@ -318,78 +318,90 @@ the same machine, or a port only the proxy's container network reaches. The
 embedded Jupyter is served through the UI on the same origin (see
 [Notebooks](#notebooks)), so the login covers it too, with nothing
 Jupyter-specific in the proxy.
+[`examples/23-reverse-proxy`](https://github.com/opendataframework/odf/tree/main/examples/23-reverse-proxy)
+runs all of this with `docker compose up`: odf in one container, Traefik in
+front of it with HTTPS, a login, and MCP at `/mcp`.
 
-Serve the UI at the root of a host, `location /` below: it can't run under a
-subpath such as `example.com/odf/` yet. If the domain serves other things,
-give odf its own subdomain, such as `odf.example.com`.
+Serve the UI at the root of a host: it can't run under a subpath such as
+`example.com/odf/` yet. If the domain serves other things, give odf its own
+subdomain, such as `odf.example.com`.
 
 The proxy has to pass WebSocket upgrades on (Jupyter's kernels use them),
-pass the host the browser asked for on as `X-Forwarded-Host` while leaving
-`Host` to the proxy (the UI refuses saves, Runs and Jupyter's WebSockets
-otherwise, see below), and accept request bodies as large as your notebooks,
-since saving one sends it whole. With nginx:
+pass the host the browser asked for on as `X-Forwarded-Host` (the UI refuses
+saves, Runs and Jupyter's WebSockets otherwise, see below), stream responses
+as they come (`GET /api/events` is a long-lived stream), and accept request
+bodies as large as your notebooks, since saving one sends it whole.
+[Traefik](https://doc.traefik.io/traefik/) does all of that by default, so a
+route to the UI is all it needs, here in its file provider's TOML:
 
-```nginx
-location / {
-    proxy_pass http://127.0.0.1:4747;
-    proxy_http_version 1.1;
-    proxy_set_header Upgrade $http_upgrade;
-    proxy_set_header Connection "upgrade";
-    proxy_set_header X-Forwarded-Host $http_host;
-    client_max_body_size 100m;
-}
+```toml
+[http.routers.odf]
+rule = "Host(`odf.example.com`)"
+entryPoints = ["websecure"]
+service = "odf"
+[http.routers.odf.tls]
+
+[http.services.odf.loadBalancer]
+passHostHeader = false
+[[http.services.odf.loadBalancer.servers]]
+url = "http://127.0.0.1:4747"
 ```
 
-In a container, with `--ui-host 0.0.0.0`, `proxy_pass` names the UI's
-container instead (`http://odf:4747`); the rest stays the same.
-
-`GET /api/events` is a long-lived stream. The UI sends `X-Accel-Buffering: no`
-with it, so nginx passes events on as they happen with no extra setting. Other
-proxies need response buffering turned off for that path.
+`passHostHeader = false` leaves `Host` to the upstream's own,
+`127.0.0.1:4747`, with the browser's host in `X-Forwarded-Host`: a UI bound to
+a loopback address only answers loopback hosts (see below). In a container,
+with `--ui-host 0.0.0.0`, the server's `url` names the UI's container instead
+(`http://odf:4747`); the rest stays the same.
 
 ### Adding a login
 
 The simplest login is the proxy's own Basic auth, a browser prompt checked
-against a password file (`htpasswd -c /etc/nginx/.htpasswd alice`). Add to the
-`location` above:
+against a password file (`htpasswd -cB /etc/traefik/users alice`). Add a
+`basicAuth` middleware to the router above:
 
-```nginx
-    auth_basic "odf";
-    auth_basic_user_file /etc/nginx/.htpasswd;
+```toml
+[http.routers.odf]
+# ...
+middlewares = ["login"]
+
+[http.middlewares.login.basicAuth]
+usersFile = "/etc/traefik/users"
 ```
 
 For a login with your identity provider (any OpenID Connect one: Google,
 GitHub, Microsoft Entra, Keycloak, ...), run an authenticating proxy such as
-[oauth2-proxy](https://oauth2-proxy.github.io/oauth2-proxy/) next to nginx and
-have nginx ask it about every request, here with oauth2-proxy at
-`oauth2-proxy:4180`:
+[oauth2-proxy](https://oauth2-proxy.github.io/oauth2-proxy/) next to Traefik,
+here at `oauth2-proxy:4180` started with `--reverse-proxy` and
+`--upstream=static://202`. Traefik asks it about every request with
+`forwardAuth`, shows its sign-in page to a browser that isn't signed in, and
+routes its own pages to it:
 
-```nginx
-location /oauth2/ {
-    proxy_pass http://oauth2-proxy:4180;
-    proxy_set_header Host $http_host;
-    proxy_set_header X-Scheme $scheme;
-    proxy_set_header X-Auth-Request-Redirect $request_uri;
-}
+```toml
+[http.routers.odf]
+# ...
+middlewares = ["sign-in", "login"]
 
-location = /oauth2/auth {
-    proxy_pass http://oauth2-proxy:4180;
-    proxy_set_header Host $http_host;
-    proxy_set_header X-Scheme $scheme;
-    proxy_set_header Content-Length "";
-    proxy_pass_request_body off;
-}
+[http.routers.oauth2]
+rule = "Host(`odf.example.com`) && PathPrefix(`/oauth2/`)"
+entryPoints = ["websecure"]
+service = "oauth2-proxy"
+[http.routers.oauth2.tls]
 
-location / {
-    auth_request /oauth2/auth;
-    error_page 401 = /oauth2/sign_in;
-    # ...and the settings from the block above
-}
+[http.middlewares.login.forwardAuth]
+address = "http://oauth2-proxy:4180/oauth2/auth"
+
+[http.middlewares.sign-in.errors]
+status = ["401"]
+service = "oauth2-proxy"
+query = "/oauth2/sign_in?rd={url}"
+
+[[http.services.oauth2-proxy.loadBalancer.servers]]
+url = "http://oauth2-proxy:4180"
 ```
 
-Authelia, Authentik and Cloudflare Access work the same way, as do
-Traefik's `ForwardAuth` and Caddy's `forward_auth` in place of nginx's
-`auth_request`.
+Only 401, the login's answer, gets the sign-in page, so the UI's own 403s
+(below) pass through as they are. Authelia, Authentik and Cloudflare Access
+work the same way.
 
 ### Cross-site requests and DNS rebinding
 
@@ -408,8 +420,8 @@ to a loopback address (`127.0.0.1`, the default) only answers requests whose
 `Host` is `127.0.0.1`, `localhost` or `[::1]`, on any port; any other answers
 421. Bound to any other address, as in a container, the UI answers every
 `Host`. Behind a proxy on the same machine this is why the proxy leaves `Host`
-alone, as nginx's `proxy_pass` does by default, and passes the browser's host
-as `X-Forwarded-Host` instead.
+to the upstream, as `passHostHeader = false` does, and passes the browser's
+host as `X-Forwarded-Host` instead.
 
 ### MCP
 
@@ -417,21 +429,25 @@ The [MCP server](mcp.md) listens on its own port and has no login either, but
 the same proxy can serve it next to the UI, on the same certificate, at
 `https://odf.example.com/mcp`:
 
-```nginx
-location /mcp {
-    proxy_pass http://127.0.0.1:4748;
-    proxy_http_version 1.1;
-    proxy_buffering off;    # responses can be event streams
-    proxy_read_timeout 1h;  # and a client's event stream stays open
-    auth_basic "odf MCP";
-    auth_basic_user_file /etc/nginx/.htpasswd;
-}
+```toml
+[http.routers.mcp]
+rule = "Host(`odf.example.com`) && PathPrefix(`/mcp`)"
+entryPoints = ["websecure"]
+middlewares = ["login"]
+service = "mcp"
+[http.routers.mcp.tls]
+
+[http.services.mcp.loadBalancer]
+passHostHeader = false
+[[http.services.mcp.loadBalancer.servers]]
+url = "http://127.0.0.1:4748"
 ```
 
-`Host` is left to nginx (`127.0.0.1:4748`), which the MCP server accepts: like
-the UI, bound to a loopback address it only answers loopback hosts. MCP
-clients can't go through a browser login, so this `location` checks a header
-the client sends itself instead. With Basic auth, as above, that's
+Traefik streams the MCP server's event streams with no setting of its own.
+`Host` is left to the upstream (`127.0.0.1:4748`), which the MCP server
+accepts: like the UI, bound to a loopback address it only answers loopback
+hosts. MCP clients can't go through a browser login, so this router checks a
+header the client sends itself instead. With Basic auth, as above, that's
 credentials configured in the client:
 
 ```bash
@@ -439,11 +455,52 @@ claude mcp add --transport http my-project https://odf.example.com/mcp \
   --header "Authorization: Basic $(printf 'alice:secret' | base64)"
 ```
 
-With oauth2-proxy, use `auth_request /oauth2/auth;` here too, with no
-`error_page`, and start oauth2-proxy with `--skip-jwt-bearer-tokens`, so a
-client sending a token from your identity provider
-(`Authorization: Bearer ...`) is let through. In a container, with
-`--mcp-host 0.0.0.0`, `proxy_pass` names the MCP server's container instead.
+With oauth2-proxy, use the `login` middleware here too, without `sign-in`,
+and start oauth2-proxy with `--skip-jwt-bearer-tokens`, so a client sending a
+token from your identity provider (`Authorization: Bearer ...`) is let
+through. In a container, with `--mcp-host 0.0.0.0`, the server's `url` names
+the MCP server's container instead.
+
+### nginx and other proxies
+
+Other proxies need set by hand what Traefik does by default. With nginx, the
+UI's `location` passes upgrades on, sets `X-Forwarded-Host` (`proxy_pass`
+already leaves `Host` to the upstream) and raises the request body limit:
+
+```nginx
+location / {
+    proxy_pass http://127.0.0.1:4747;
+    proxy_http_version 1.1;
+    proxy_set_header Upgrade $http_upgrade;
+    proxy_set_header Connection "upgrade";
+    proxy_set_header X-Forwarded-Host $http_host;
+    client_max_body_size 100m;
+    auth_basic "odf";
+    auth_basic_user_file /etc/nginx/.htpasswd;
+}
+```
+
+`GET /api/events` needs nothing more: the UI sends `X-Accel-Buffering: no`
+with it, so nginx passes events on as they happen. The MCP server's `location`
+turns buffering off itself, since its responses can be event streams, and
+keeps a client's stream open:
+
+```nginx
+location /mcp {
+    proxy_pass http://127.0.0.1:4748;
+    proxy_http_version 1.1;
+    proxy_buffering off;
+    proxy_read_timeout 1h;
+    auth_basic "odf MCP";
+    auth_basic_user_file /etc/nginx/.htpasswd;
+}
+```
+
+nginx's `auth_request` to oauth2-proxy takes the place of `forwardAuth`, with
+`error_page 401 = /oauth2/sign_in;` as the sign-in page. Caddy
+(`forward_auth`) and other proxies need the same: upgrades, `X-Forwarded-Host`
+with `Host` left to the upstream, no buffering on the event streams, and a
+body limit as large as your notebooks.
 
 ## HTTP API
 

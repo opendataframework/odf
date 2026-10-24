@@ -1,0 +1,57 @@
+services:
+  odf:
+    build:
+      context: .
+      args:
+        ODF_INDEX_URL: ${ODF_INDEX_URL:-}
+      extra_hosts:
+        - host.docker.internal:host-gateway
+    # Reachable from Traefik only: no published ports.
+    expose:
+      - "4747"
+      - "4748"
+    volumes:
+      - ./notebooks:/srv/odf/notebooks
+
+  # Runs once before Traefik: a self-signed certificate on first start, and
+  # the password file for the login.
+  setup:
+    image: alpine:3.20
+    environment:
+      ODF_LOGIN: basic
+      ODF_USER: ${ODF_USER:-odf}
+      ODF_PASSWORD: ${ODF_PASSWORD:-}
+    volumes:
+      - ./secrets:/secrets
+    command:
+      - sh
+      - -ec
+      - |
+        apk add --no-cache --quiet openssl apache2-utils
+        if [ ! -f /secrets/odf.crt ]; then
+          openssl req -x509 -newkey rsa:2048 -nodes -days 365 -subj /CN=localhost \
+            -addext subjectAltName=DNS:localhost,IP:127.0.0.1 \
+            -keyout /secrets/odf.key -out /secrets/odf.crt
+        fi
+        if [ "$$ODF_LOGIN" = basic ]; then
+          if [ -z "$$ODF_PASSWORD" ]; then
+            echo "Set ODF_PASSWORD, in .env or the environment (see .env.example)." >&2
+            exit 1
+          fi
+          htpasswd -Bbc /secrets/users "$$ODF_USER" "$$ODF_PASSWORD"
+        fi
+
+  traefik:
+    image: traefik:v3.3
+    ports:
+      - "443:443"
+      - "80:80"
+    volumes:
+      - ./traefik/traefik.toml:/etc/traefik/traefik.toml:ro
+      - ./traefik/dynamic.toml:/etc/traefik/dynamic.toml:ro
+      - ./secrets:/etc/traefik/secrets:ro
+    depends_on:
+      setup:
+        condition: service_completed_successfully
+      odf:
+        condition: service_started

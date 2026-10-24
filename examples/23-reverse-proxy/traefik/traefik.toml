@@ -1,0 +1,16 @@
+# Traefik's static config: where it listens, and where its routes are.
+
+[entryPoints.web]
+address = ":80"
+
+[entryPoints.web.http.redirections.entryPoint]
+to = "websecure"
+scheme = "https"
+
+[entryPoints.websecure]
+address = ":443"
+
+# Routes come from a file rather than Docker labels, so Traefik needs no
+# access to the Docker socket.
+[providers.file]
+filename = "/etc/traefik/dynamic.toml"

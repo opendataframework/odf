@@ -98,6 +98,14 @@
   every few tiles, with icons drawn as translucent holograms that glow when lit, each
   inside a segmented marker ring. Select it with `odf run --theme beacon` or
   `[ui] theme = "beacon"` in `config.toml`. See [UI](ui.md#themes-icons-and-branding).
+- **Examples**: [`23-reverse-proxy`](https://github.com/opendataframework/odf/tree/main/examples/23-reverse-proxy)
+  deploys a project with `docker compose up`: `odf run` in one container with its ports
+  exposed only to the compose network, and Traefik in front of it with HTTPS (a
+  self-signed certificate generated on first start), a Basic auth login, and the MCP
+  server at `/mcp`. **Edit in Jupyter** works through it with nothing Jupyter-specific
+  in the proxy. `compose.oidc.yaml` swaps the login for an identity provider through
+  oauth2-proxy, and `ODF_INDEX_URL` installs odf from a local package index for trying
+  unreleased builds. See [UI](ui.md#deploying).
 
 ### Changed
 
@@ -108,12 +116,14 @@
   an `Origin`, from scripts or `curl`, are unaffected. Bound to a loopback address (the
   default), the UI also answers only requests whose `Host` is `127.0.0.1`, `localhost`
   or `[::1]` (421 otherwise), so a page that points its own name at your machine (DNS
-  rebinding) can't reach it. A proxy in front leaves `Host` alone and passes the
-  browser's host as `X-Forwarded-Host`, as the documented nginx setup does. The UI docs
-  gain a deployment section: keeping the port off the network, the nginx settings,
-  adding a login with nginx's Basic auth or an identity provider through oauth2-proxy,
-  and serving the MCP server behind the same proxy at `/mcp`, with a login the client
-  sends as a header. See [UI](ui.md#deploying).
+  rebinding) can't reach it. A proxy in front leaves `Host` to the upstream and passes
+  the browser's host as `X-Forwarded-Host`, as the documented Traefik setup does
+  (`passHostHeader = false`). The UI docs gain a deployment section: keeping the port
+  off the network, serving at a host's root (not under a subpath), the Traefik route,
+  adding a login with Basic auth or an identity provider through oauth2-proxy, serving
+  the MCP server behind the same proxy at `/mcp` with a login the client sends as a
+  header, and the settings nginx and other proxies need by hand. See
+  [UI](ui.md#deploying).
 - **UI**: each theme draws topology icons its own way instead of all as wireframes:
   `emerald` as tinted glass, `glitch` as dark solids with bright edges, `neo` as flat
   solid faces outlined in ink, `onyx` as tonal solids without outlines, while `default`

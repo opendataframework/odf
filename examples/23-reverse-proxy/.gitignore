@@ -1,0 +1,3 @@
+# Generated on first start by compose.yaml's setup service.
+secrets/
+.env

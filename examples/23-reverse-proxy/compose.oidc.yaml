@@ -1,0 +1,36 @@
+# Logs in with an identity provider in place of the password file:
+#
+#   docker compose -f compose.yaml -f compose.oidc.yaml up
+#
+# The provider's details come from .env (see .env.example).
+
+services:
+  setup:
+    environment:
+      ODF_LOGIN: oidc
+
+  oauth2-proxy:
+    image: quay.io/oauth2-proxy/oauth2-proxy:v7.7.1
+    expose:
+      - "4180"
+    environment:
+      OAUTH2_PROXY_HTTP_ADDRESS: 0.0.0.0:4180
+      OAUTH2_PROXY_REVERSE_PROXY: "true"
+      OAUTH2_PROXY_UPSTREAMS: static://202
+      OAUTH2_PROXY_PROVIDER: oidc
+      OAUTH2_PROXY_OIDC_ISSUER_URL: ${OIDC_ISSUER_URL:?set OIDC_ISSUER_URL in .env}
+      OAUTH2_PROXY_CLIENT_ID: ${OIDC_CLIENT_ID:?set OIDC_CLIENT_ID in .env}
+      OAUTH2_PROXY_CLIENT_SECRET: ${OIDC_CLIENT_SECRET:?set OIDC_CLIENT_SECRET in .env}
+      OAUTH2_PROXY_COOKIE_SECRET: ${OAUTH2_PROXY_COOKIE_SECRET:?set OAUTH2_PROXY_COOKIE_SECRET in .env}
+      OAUTH2_PROXY_REDIRECT_URL: https://localhost/oauth2/callback
+      OAUTH2_PROXY_EMAIL_DOMAINS: ${OIDC_EMAIL_DOMAINS:-*}
+      # Lets MCP clients in with a token from the provider
+      # (Authorization: Bearer ...), since they can't go through a browser login.
+      OAUTH2_PROXY_SKIP_JWT_BEARER_TOKENS: "true"
+
+  traefik:
+    volumes:
+      - ./traefik/dynamic.oidc.toml:/etc/traefik/dynamic.toml:ro
+    depends_on:
+      oauth2-proxy:
+        condition: service_started
