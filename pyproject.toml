@@ -101,12 +101,3 @@ exclude_lines = [
     "pragma: no cover",
     "if TYPE_CHECKING:",
 ]
-
-[[tool.poetry.source]]
-name = "local-pypi"
-url = "http://localhost:8080/simple/"
-priority = "explicit"
-
-
-[tool.poetry.dependencies]
-opendataframework = {source = "local-pypi"}
