@@ -319,6 +319,10 @@ embedded Jupyter is served through the UI on the same origin (see
 [Notebooks](#notebooks)), so the login covers it too, with nothing
 Jupyter-specific in the proxy.
 
+Serve the UI at the root of a host, `location /` below: it can't run under a
+subpath such as `example.com/odf/` yet. If the domain serves other things,
+give odf its own subdomain, such as `odf.example.com`.
+
 The proxy has to pass WebSocket upgrades on (Jupyter's kernels use them),
 pass the host the browser asked for on as `X-Forwarded-Host` while leaving
 `Host` to the proxy (the UI refuses saves, Runs and Jupyter's WebSockets
