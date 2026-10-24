@@ -2,7 +2,8 @@
 
 Loaded only inside the Jupyter subprocess ``odf.ui.notebooks.NotebookServer``
 launches, which names ``RepositoryContentsManager`` as its contents manager;
-this is the one module in ``odf`` that imports Jupyter.
+this and ``odf.ui.notebook_identity`` are the modules in ``odf`` that import
+Jupyter.
 
 Each notebook record is a file in a directory of its own, so it keeps the
 name its repository declares for it::

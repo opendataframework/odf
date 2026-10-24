@@ -175,12 +175,12 @@ def running_ui():
 
 
 def jupyter(ui, method, path, body=None, headers=None):
-    """Request Jupyter's ``path`` through the UI, with its token, as JSON."""
+    """Request Jupyter's ``path`` through the UI, as JSON."""
     request = urllib.request.Request(
         f"{ui.local_url}/proxy/jupyter/{path}",
         data=json.dumps(body).encode() if body is not None else None,
         method=method,
-        headers={"Authorization": f"token {ui._notebooks.token}", **(headers or {})},
+        headers=headers or {},
     )
     with urllib.request.urlopen(request, timeout=30) as res:
         return json.load(res)
@@ -194,17 +194,77 @@ def test_notebook_server_serves_records_through_the_ui(running_ui):
     port = ui._notebooks.start()
     model = jupyter(ui, "GET", "api/contents/notes/1/analysis.ipynb")
     page = urllib.request.urlopen(
-        f"{ui.local_url}/proxy/jupyter/notebooks/notes/1/analysis.ipynb?token={session['token']}",
-        timeout=30,
+        f"{ui.local_url}/proxy/jupyter/notebooks/notes/1/analysis.ipynb", timeout=30
     )
 
-    assert session == {"url": "/proxy/jupyter/", "token": ui._notebooks.token}
+    assert session == {"url": "/proxy/jupyter/"}
     assert ui._notebooks.origin == f"http://127.0.0.1:{port}"
     assert model["content"]["cells"][0]["source"] == "1 + 1"
     assert page.status == 200
     assert "frame-ancestors 'self'" in page.headers["Content-Security-Policy"]
     ui.stop()
     assert ui._notebooks._process is None
+
+
+@pytest.mark.timeout(120)
+def test_jupyter_s_token_stays_with_the_ui_so_a_basic_auth_login_works(running_ui):
+    import urllib.error
+
+    ui, _ = running_ui
+    port = ui._notebooks.start()
+    token = ui._notebooks.credentials[notebooks.TOKEN_HEADER]
+    # As a browser behind a proxy with Basic auth sends it, with the login's
+    # credentials, and as Jupyter's own frontend would with a token.
+    basic = {"Authorization": "Basic b2RmOnNlY3JldA=="}
+    page = urllib.request.urlopen(
+        urllib.request.Request(
+            f"{ui.local_url}/proxy/jupyter/notebooks/notes/1/analysis.ipynb", headers=basic
+        ),
+        timeout=30,
+    ).read()
+    status = jupyter(ui, "GET", "api/status", headers=basic)
+    direct = f"http://127.0.0.1:{port}/proxy/jupyter/api/status"
+
+    with pytest.raises(urllib.error.HTTPError) as without:
+        urllib.request.urlopen(direct, timeout=30)
+    with pytest.raises(urllib.error.HTTPError) as browser_token:
+        urllib.request.urlopen(
+            urllib.request.Request(direct, headers={"Authorization": f"token {token}"}),
+            timeout=30,
+        )
+    with_ui_s = urllib.request.urlopen(
+        urllib.request.Request(direct, headers=ui._notebooks.credentials), timeout=30
+    )
+
+    # The page hands the frontend no token, so it never sends an
+    # Authorization of its own in place of the browser's login.
+    assert token.encode() not in page
+    assert b'"token": ""' in page
+    assert "started" in status
+    assert without.value.code == 403
+    assert browser_token.value.code == 403
+    assert with_ui_s.status == 200
+
+
+def test_proxy_drops_the_browser_s_authorization_and_adds_the_app_s_credentials():
+    from odf.ui.proxy import _forwarded_headers
+
+    browser = {
+        "Authorization": "Basic b2RmOnNlY3JldA==",
+        "X-Odf-Jupyter-Token": "guessed",
+        "Cookie": "_xsrf=1",
+        "Host": "odf.example.com",
+    }
+
+    forwarded = _forwarded_headers(
+        browser, "http://127.0.0.1:9", {notebooks.TOKEN_HEADER: "the-ui-s"}
+    )
+
+    assert forwarded == {
+        "cookie": "_xsrf=1",
+        "host": "127.0.0.1:9",
+        "x-odf-jupyter-token": "the-ui-s",
+    }
 
 
 @pytest.mark.timeout(120)
@@ -252,12 +312,12 @@ def test_notebook_server_only_listens_on_loopback(running_ui):
 
 
 def browser_cookies(ui) -> str:
-    """The ``Cookie`` header of a browser that opened Jupyter through the UI with its token."""
+    """The ``Cookie`` header of a browser that opened Jupyter through the UI."""
     import http.cookiejar
 
     jar = http.cookiejar.CookieJar()
     opener = urllib.request.build_opener(urllib.request.HTTPCookieProcessor(jar))
-    opener.open(f"{ui.local_url}/proxy/jupyter/tree?token={ui._notebooks.token}", timeout=30)
+    opener.open(f"{ui.local_url}/proxy/jupyter/tree", timeout=30)
     return "; ".join(f"{c.name}={c.value}" for c in jar)
 
 

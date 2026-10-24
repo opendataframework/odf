@@ -16,7 +16,8 @@
   Notebook's own editor in the reader. Jupyter starts on the first edit, with kernels in
   the project directory, listens on `127.0.0.1` only and is served through the UI at
   `/proxy/jupyter/`, so it works behind an HTTPS reverse proxy with no setup of its own.
-  It saves each notebook back through the repository's `save()`
+  Its token stays with the UI, which adds it to each request it forwards, so the
+  browser never holds one and a proxy's Basic auth login isn't replaced by it. It saves each notebook back through the repository's `save()`
   via the new `PUT /api/repositories/{name}/records/{key}/media`. `[ui] notebooks = false`
   in `config.toml` turns editing off. See [UI](ui.md#notebooks) and the
   [`21-notebook-view`](https://github.com/opendataframework/odf/tree/main/examples/21-notebook-view)

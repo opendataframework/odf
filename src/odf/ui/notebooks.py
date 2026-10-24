@@ -10,7 +10,9 @@ own record media endpoints, and so through the repository's ``save()``.
 
 Jupyter only listens on the loopback interface, under a ``base_url`` the UI
 forwards to it (see ``odf.ui.proxy``), so the browser reaches it on the UI's
-own origin, through whatever reverse proxy the UI is behind.
+own origin, through whatever reverse proxy the UI is behind. Jupyter's token
+never reaches the browser: the UI's proxy adds it to each request it forwards,
+and Jupyter accepts no other (see ``odf.ui.notebook_identity``).
 
 Nothing here imports Jupyter: whether it is installed is only looked up, and
 it runs in its own process. Only launching it imports ``zmq``, to check that
@@ -44,6 +46,10 @@ _START_TIMEOUT = 60.0
 # change not yet saved, so notebooks autosave every few seconds rather than
 # every two minutes.
 _SETTING_DEFAULTS = {"@jupyterlab/docmanager-extension:plugin": {"autosaveInterval": 5}}
+
+# The header Jupyter's token is sent in. Not ``Authorization``, which is the
+# browser's, for whatever login stands in front of the UI.
+TOKEN_HEADER = "X-Odf-Jupyter-Token"  # nosec B105 - a header's name, not a secret
 
 
 def available() -> bool:
@@ -90,9 +96,9 @@ class NotebookServer:
         self._lock = threading.Lock()
 
     @property
-    def token(self) -> str:
-        """The token that authenticates a browser to Jupyter."""
-        return self._token
+    def credentials(self) -> dict[str, str]:
+        """The headers that authenticate a request to Jupyter, which only the UI sends."""
+        return {TOKEN_HEADER: self._token}
 
     @property
     def origin(self) -> str | None:
@@ -178,7 +184,7 @@ class NotebookServer:
         request = urllib.request.Request(
             f"http://{_HOST}:{self._port}{self._base_url}api/shutdown",
             method="POST",
-            headers={"Authorization": f"token {self._token}"},
+            headers=self.credentials,
         )
         try:
             with urllib.request.urlopen(request, timeout=5):  # nosec B310 - local http URL
@@ -199,6 +205,7 @@ class NotebookServer:
                 "open_browser": False,
                 "root_dir": str(self._root_dir),
                 "contents_manager_class": ("odf.ui.notebook_contents.RepositoryContentsManager"),
+                "identity_provider_class": "odf.ui.notebook_identity.ProxyIdentityProvider",
                 "tornado_settings": {
                     # Reached through the UI, so framed by the UI's own pages only.
                     "headers": {"Content-Security-Policy": "frame-ancestors 'self'"}
@@ -207,7 +214,7 @@ class NotebookServer:
             # Every Jupyter app logs on its own: Jupyter's start-up chatter would
             # otherwise fill the terminal odf runs in.
             "Application": {"log_level": "ERROR"},
-            "IdentityProvider": {"token": self._token},
+            "ProxyIdentityProvider": {"proxy_token": self._token},
             "RepositoryContentsManager": {"ui_url": self._ui_url},
         }
         # Kernels talk to Jupyter over local TCP; encrypt that (CurveZMQ) for
@@ -220,7 +227,7 @@ class NotebookServer:
     def _wait_until_ready(self) -> None:
         """Block until Jupyter answers its status endpoint, or raise ``RuntimeError``."""
         url = f"http://{_HOST}:{self._port}{self._base_url}api/status"
-        request = urllib.request.Request(url, headers={"Authorization": f"token {self._token}"})
+        request = urllib.request.Request(url, headers=self.credentials)
         deadline = time.monotonic() + _START_TIMEOUT
         while time.monotonic() < deadline:
             if self._process.poll() is not None:

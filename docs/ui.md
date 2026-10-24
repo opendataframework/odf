@@ -190,7 +190,10 @@ holding its notebook. `[ui] notebooks = false` turns editing off. See
 [`examples/21-notebook-view`](https://github.com/opendataframework/odf/tree/main/examples/21-notebook-view).
 
 Behind a reverse proxy (HTTPS, a login), Jupyter needs nothing of its own: a
-login in front of the UI covers it too. See [Deploying](#deploying) for what
+login in front of the UI covers it too. Jupyter's token never reaches the
+browser: the UI adds it to each request it forwards to Jupyter, and Jupyter
+accepts no other, so its pages send no `Authorization` header of their own
+that would replace a Basic auth login's. See [Deploying](#deploying) for what
 the proxy has to pass on.
 
 Since Jupyter's pages share the UI's origin, script output of a notebook
@@ -517,7 +520,7 @@ registered name:
 | `GET /api/functions/{name}/parameters`, `POST .../call` | an `@Function` |
 | `/api/repositories/{name}/records`, `.../stream`, ... | a `@Repository`'s data |
 | `PUT /api/repositories/{name}/records/{key}/media` | replacing a document file through `save()` (see [Notebooks](#notebooks)) |
-| `POST /api/notebooks/session` | starting Jupyter for notebook editing; returns the `url` it is served at through the UI (`/proxy/jupyter/`) and its `token` |
+| `POST /api/notebooks/session` | starting Jupyter for notebook editing; returns the `url` it is served at through the UI (`/proxy/jupyter/`) |
 | `/proxy/jupyter/...` | Jupyter itself, HTTP and WebSockets, while notebook editing is on |
 | `GET /api/events` | every protocol call the project makes, as server-sent events (see below) |
 

@@ -174,7 +174,9 @@ class UiServer:
             from odf.ui import proxy
 
             self._notebooks = NotebookServer(self.local_url, proxy.prefix("jupyter"), Path.cwd())
-            proxy.mount_proxy(app, "jupyter", lambda: self._notebooks.origin)
+            proxy.mount_proxy(
+                app, "jupyter", lambda: self._notebooks.origin, lambda: self._notebooks.credentials
+            )
 
         @app.get("/api/topology")
         def topology() -> dict:
@@ -401,7 +403,7 @@ class UiServer:
                 self._notebooks.start()
             except RuntimeError as exc:
                 raise HTTPException(status_code=503, detail=str(exc)) from exc
-            return {"url": "/proxy/jupyter/", "token": self._notebooks.token}
+            return {"url": "/proxy/jupyter/"}
 
         @app.get("/api/repositories/{repo_id}/annotations")
         def repository_annotations(repo_id: str) -> dict:

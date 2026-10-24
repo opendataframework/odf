@@ -13,6 +13,10 @@ cross-origin checks stay in charge: ``Host`` becomes the app's, and
 ``Origin``/``Referer`` are rewritten to the app's origin only when they are
 the UI's own, so a cross-site request still reaches the app as one.
 
+The browser's ``Authorization`` is for the login in front of the UI, so it
+isn't forwarded; the app's own credentials, if it takes any, are added here
+instead, so the browser never holds them.
+
 Forwarding uses tornado's clients, which run on asyncio, so this module is
 only imported when an app is proxied (tornado comes with Jupyter).
 """
@@ -41,6 +45,8 @@ _HOP_HEADERS = {
     "upgrade",
     "host",
     "content-length",
+    # The browser's credentials for the login in front of the UI.
+    "authorization",
 }
 
 # Headers a WebSocket handshake sets itself.
@@ -58,7 +64,12 @@ def prefix(name: str) -> str:
     return f"/proxy/{name}/"
 
 
-def mount_proxy(app: FastAPI, name: str, upstream: Callable[[], str | None]) -> None:
+def mount_proxy(
+    app: FastAPI,
+    name: str,
+    upstream: Callable[[], str | None],
+    credentials: Callable[[], dict[str, str]] = dict,
+) -> None:
     """Forward ``/proxy/<name>/...`` to another server, HTTP and WebSockets.
 
     Args:
@@ -67,6 +78,8 @@ def mount_proxy(app: FastAPI, name: str, upstream: Callable[[], str | None]) -> 
         upstream: Returns the origin the app is served at
             (``http://127.0.0.1:<port>``), or ``None`` while it isn't
             running, which answers 503.
+        credentials: Returns the headers that authenticate a request to the
+            app, added to every request in place of any the browser sent.
     """
     route = prefix(name) + "{path:path}"
 
@@ -82,7 +95,7 @@ def mount_proxy(app: FastAPI, name: str, upstream: Callable[[], str | None]) -> 
                 HTTPRequest(
                     origin + _target(request.scope),
                     method=request.method,
-                    headers=_forwarded_headers(request.headers, origin),
+                    headers=_forwarded_headers(request.headers, origin, credentials()),
                     body=body if request.method not in ("GET", "HEAD") else None,
                     allow_nonstandard_methods=True,
                     follow_redirects=False,
@@ -111,7 +124,7 @@ def mount_proxy(app: FastAPI, name: str, upstream: Callable[[], str | None]) -> 
             return
         headers = {
             key: value
-            for key, value in _forwarded_headers(websocket.headers, origin).items()
+            for key, value in _forwarded_headers(websocket.headers, origin, credentials()).items()
             if key.lower() not in _WEBSOCKET_HEADERS and key.lower() != "sec-websocket-protocol"
         }
         protocols = [
@@ -173,18 +186,21 @@ def _target(scope: dict) -> str:
     return f"{target}?{query}" if query else target
 
 
-def _forwarded_headers(headers, origin: str) -> dict[str, str]:
+def _forwarded_headers(headers, origin: str, credentials: dict[str, str]) -> dict[str, str]:
     """The browser's headers as the app should see them, behind ``origin``.
 
     ``Host`` becomes the app's own, and ``Origin``/``Referer`` too when they
     name the host the browser reached the UI by (``Host``, or
     ``X-Forwarded-Host`` behind a reverse proxy). Any other ``Origin`` or
-    ``Referer`` is left for the app's cross-origin checks to refuse.
+    ``Referer`` is left for the app's cross-origin checks to refuse. The
+    browser's ``Authorization`` is dropped, and ``credentials`` set in place
+    of any headers of the same names it sent.
     """
     public = public_hosts(headers)
+    own = {key.lower() for key in credentials}
     forwarded: dict[str, str] = {}
     for key, value in headers.items():
-        if key.lower() in _HOP_HEADERS:
+        if key.lower() in _HOP_HEADERS or key.lower() in own:
             continue
         if key.lower() in ("origin", "referer"):
             url = urlsplit(value)
@@ -195,4 +211,5 @@ def _forwarded_headers(headers, origin: str) -> dict[str, str]:
         else:
             forwarded[key.lower()] = value
     forwarded["host"] = urlsplit(origin).netloc
+    forwarded.update({key.lower(): value for key, value in credentials.items()})
     return forwarded
