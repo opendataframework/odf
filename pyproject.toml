@@ -1,6 +1,6 @@
 [project]
 name = "odf"
-version = "0.3.0"
+version = "0.4.0"
 description = "Open Data Framework CLI."
 authors = [
     {name = "mykytapavlov",email = "mykytapavlov@users.noreply.github.com"}
