@@ -26,6 +26,8 @@ from starlette.websockets import WebSocketDisconnect
 from tornado.httpclient import AsyncHTTPClient, HTTPClientError, HTTPRequest
 from tornado.websocket import websocket_connect
 
+from odf.ui.origin import public_hosts
+
 # Headers for one hop, never forwarded (RFC 9110 §7.6.1), plus those the
 # forwarding sets itself.
 _HOP_HEADERS = {
@@ -179,8 +181,7 @@ def _forwarded_headers(headers, origin: str) -> dict[str, str]:
     ``X-Forwarded-Host`` behind a reverse proxy). Any other ``Origin`` or
     ``Referer`` is left for the app's cross-origin checks to refuse.
     """
-    public = {headers.get("host"), *headers.get("x-forwarded-host", "").split(",")}
-    public = {h.strip().lower() for h in public if h and h.strip()}
+    public = public_hosts(headers)
     forwarded: dict[str, str] = {}
     for key, value in headers.items():
         if key.lower() in _HOP_HEADERS:

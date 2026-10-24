@@ -189,25 +189,9 @@ Jupyter's file browser each repository is a folder, with a folder per record
 holding its notebook. `[ui] notebooks = false` turns editing off. See
 [`examples/21-notebook-view`](https://github.com/opendataframework/odf/tree/main/examples/21-notebook-view).
 
-Behind a reverse proxy (HTTPS, a login page), Jupyter needs nothing of its
-own: a login in front of the UI covers it too. The proxy only has to pass
-WebSocket upgrades, keep the `Host` the browser sent, and accept request bodies
-as large as your notebooks, since saving one sends it whole. With nginx:
-
-```nginx
-location / {
-    proxy_pass http://127.0.0.1:4747;
-    proxy_http_version 1.1;
-    proxy_set_header Upgrade $http_upgrade;
-    proxy_set_header Connection "upgrade";
-    proxy_set_header Host $http_host;
-    client_max_body_size 100m;
-}
-```
-
-`GET /api/events` is a long-lived stream. The UI sends `X-Accel-Buffering: no`
-with it, so nginx passes events on as they happen with no extra setting. Other
-proxies need response buffering turned off for that path.
+Behind a reverse proxy (HTTPS, a login), Jupyter needs nothing of its own: a
+login in front of the UI covers it too. See [Deploying](#deploying) for what
+the proxy has to pass on.
 
 Since Jupyter's pages share the UI's origin, script output of a notebook
 Jupyter trusts (one you ran yourself) can call the UI's HTTP API. That doesn't
@@ -324,6 +308,98 @@ Every key `odf` reads from `config.toml`:
 | `[project] layout-file` | `"layout.json"` | Where node positions, icons and colors are saved |
 | `[project] annotations-file` | `"annotations.json"` | Where labels and classes are saved |
 | `[project.chat]` | — | Chat model and Ollama host (see [Chat](chat.md#configuration)) |
+
+## Deploying
+
+The UI has no login of its own. To serve a project beyond your machine, put
+it behind a reverse proxy that does HTTPS and the login, and keep the UI's
+port off the network: `--ui-host 127.0.0.1` (the default) with the proxy on
+the same machine, or a port only the proxy's container network reaches. The
+embedded Jupyter is served through the UI on the same origin (see
+[Notebooks](#notebooks)), so the login covers it too, with nothing
+Jupyter-specific in the proxy.
+
+The proxy has to pass WebSocket upgrades on (Jupyter's kernels use them),
+keep the `Host` the browser sent (Jupyter refuses WebSockets otherwise, and so
+does the UI, see below), and accept request bodies as large as your
+notebooks, since saving one sends it whole. With nginx:
+
+```nginx
+location / {
+    proxy_pass http://127.0.0.1:4747;
+    proxy_http_version 1.1;
+    proxy_set_header Upgrade $http_upgrade;
+    proxy_set_header Connection "upgrade";
+    proxy_set_header Host $http_host;
+    client_max_body_size 100m;
+}
+```
+
+`GET /api/events` is a long-lived stream. The UI sends `X-Accel-Buffering: no`
+with it, so nginx passes events on as they happen with no extra setting. Other
+proxies need response buffering turned off for that path.
+
+### Adding a login
+
+The simplest login is the proxy's own Basic auth, a browser prompt checked
+against a password file (`htpasswd -c /etc/nginx/.htpasswd alice`). Add to the
+`location` above:
+
+```nginx
+    auth_basic "odf";
+    auth_basic_user_file /etc/nginx/.htpasswd;
+```
+
+For a login with your identity provider (any OpenID Connect one: Google,
+GitHub, Microsoft Entra, Keycloak, ...), run an authenticating proxy such as
+[oauth2-proxy](https://oauth2-proxy.github.io/oauth2-proxy/) next to nginx and
+have nginx ask it about every request, here with oauth2-proxy at
+`oauth2-proxy:4180`:
+
+```nginx
+location /oauth2/ {
+    proxy_pass http://oauth2-proxy:4180;
+    proxy_set_header Host $http_host;
+    proxy_set_header X-Scheme $scheme;
+    proxy_set_header X-Auth-Request-Redirect $request_uri;
+}
+
+location = /oauth2/auth {
+    proxy_pass http://oauth2-proxy:4180;
+    proxy_set_header Host $http_host;
+    proxy_set_header X-Scheme $scheme;
+    proxy_set_header Content-Length "";
+    proxy_pass_request_body off;
+}
+
+location / {
+    auth_request /oauth2/auth;
+    error_page 401 = /oauth2/sign_in;
+    # ...and the settings from the block above
+}
+```
+
+Authelia, Authentik and Cloudflare Access work the same way, as do
+Traefik's `ForwardAuth` and Caddy's `forward_auth` in place of nginx's
+`auth_request`.
+
+### Cross-site requests
+
+A login at the proxy is a cookie, or credentials the browser remembers, which
+the browser sends with every request to the UI, including requests a page on
+another site makes it send. So the UI refuses a request that could change
+something (any method but `GET`, `HEAD` and `OPTIONS`, and every WebSocket,
+Jupyter's included) when its `Origin` isn't the host the UI was reached by:
+the `Host` header, or `X-Forwarded-Host` if the proxy sets it. HTTP requests
+get a 403, WebSockets are closed before they open. Requests with no `Origin`,
+from scripts or `curl`, aren't affected. Behind a proxy that rewrites `Host`,
+every save and every Run is refused until it passes the browser's `Host` on
+(as `proxy_set_header Host $http_host` does) or sets `X-Forwarded-Host`.
+
+### MCP
+
+The [MCP server](mcp.md) listens on its own port, not through the UI, so none
+of the above covers it, and it has no login either. Keep it on `127.0.0.1`.
 
 ## HTTP API
 

@@ -16,7 +16,9 @@ print(server.mcp_url)  # http://127.0.0.1:4748/mcp
 ```
 
 The server speaks the streamable HTTP transport and binds to
-`--mcp-host`/`--mcp-port` (`127.0.0.1:4748` by default).
+`--mcp-host`/`--mcp-port` (`127.0.0.1:4748` by default). It has no login,
+and a reverse proxy in front of the UI doesn't cover it (see
+[Deploying](ui.md#mcp)), so keep it on `127.0.0.1`.
 
 ## Connecting a client
 

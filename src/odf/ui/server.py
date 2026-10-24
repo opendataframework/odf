@@ -41,6 +41,7 @@ from opendataframework.view import (
 
 from odf.ui import annotations, arguments, data, events, keys, layout, media, themes
 from odf.ui.notebooks import NotebookServer, local_host
+from odf.ui.origin import OriginCheck
 from odf.ui.topology import TopologyView, build_topology
 
 if TYPE_CHECKING:
@@ -166,6 +167,7 @@ class UiServer:
         self._thread: threading.Thread | None = None
 
         app = FastAPI(title="ODF Topology", docs_url=None, redoc_url=None)
+        app.add_middleware(OriginCheck)
 
         if notebooks:
             # Only now: forwarding needs tornado, which comes with Jupyter.

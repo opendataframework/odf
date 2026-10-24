@@ -101,6 +101,14 @@
 
 ### Changed
 
+- **UI**: the UI refuses requests another site's page makes the browser send, so a login
+  at a reverse proxy can't be used from there: any request but `GET`, `HEAD` and
+  `OPTIONS`, and every WebSocket (Jupyter's included), answers 403 when its `Origin`
+  isn't the host the UI was reached by (`Host`, or `X-Forwarded-Host`). Requests without
+  an `Origin`, from scripts or `curl`, are unaffected. A proxy has to pass the browser's
+  `Host` on, as the documented nginx setup does. The UI docs gain a deployment section:
+  keeping the port off the network, the nginx settings, and adding a login with nginx's
+  Basic auth or an identity provider through oauth2-proxy. See [UI](ui.md#deploying).
 - **UI**: each theme draws topology icons its own way instead of all as wireframes:
   `emerald` as tinted glass, `glitch` as dark solids with bright edges, `neo` as flat
   solid faces outlined in ink, `onyx` as tonal solids without outlines, while `default`
