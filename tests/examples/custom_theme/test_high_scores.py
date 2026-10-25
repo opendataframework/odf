@@ -1,5 +1,6 @@
 import tomllib
 
+import pytest
 from app.entities import Score
 from app.repositories import HighScores
 from app.tasks import Tally
@@ -56,10 +57,11 @@ def test_config_selects_the_example_theme_by_path():
     assert config["ui"]["theme"] == "./pixel-theme"
 
 
-def test_example_theme_has_every_required_file(monkeypatch):
+@pytest.mark.parametrize("theme", ["./pixel-theme", "./park-theme"])
+def test_example_theme_has_every_required_file(monkeypatch, theme):
     monkeypatch.chdir(EXAMPLE_DIR)
 
-    path = themes.theme_dir("./pixel-theme")
+    path = themes.theme_dir(theme)
 
     assert (path / "theme.js").is_file()
     assert "pixelSize: 2" in (path / "theme.js").read_text()

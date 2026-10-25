@@ -12,7 +12,7 @@
   `pixelSize` there to draw the topology canvas at a coarser resolution, for pixel art.
   See [UI](ui.md#custom-themes) and the
   [`24-custom-theme`](https://github.com/opendataframework/odf/tree/main/examples/24-custom-theme)
-  example, which ships a pixel-art theme.
+  example, which ships a pixel-art theme and a late-90s theme-park one.
 - **UI**: `[ui] grid = "flat"` in `config.toml` draws the topology as a flat, top-down
   schematic instead of the isometric grid: faint dots where nodes snap, and every node the
   same rounded square in its type's color, for large topologies. Node positions are shared

@@ -1,8 +1,10 @@
 # 24 — Custom Theme
 
-A plain `HighScores` repository and a `Tally` task, shown in a UI theme
+A plain `HighScores` repository and a `Tally` task, shown in UI themes
 that this project ships itself instead of one of `odf`'s built-in themes.
-The theme, "Arcade", is pixel art. It uses a PICO-8 palette in dark mode and a
+It ships two: "Arcade" in `pixel-theme/`, selected by `config.toml`, and a
+late-90s theme park in `park-theme/` (see [A second theme](#a-second-theme)).
+Arcade is pixel art. It uses a PICO-8 palette in dark mode and a
 Game Boy palette in light mode, with pixel fonts, square corners and hard
 offset shadows. The topology canvas is drawn at half resolution and scaled
 back up in hard pixels.
@@ -46,6 +48,34 @@ icons flat three-tone sprites outlined in ink, turns off every glow, and
 draws each empty tile with a dithered checker at its center. Every knob
 it can set is listed on `THEME_STYLE` in `odf`'s `app.js`.
 
+## A second theme
+
+`park-theme/` styles the same project as a late-90s isometric theme-park
+game. Select it with `--theme` instead of editing `config.toml`, since the
+flag takes a path too:
+
+```bash
+odf run --theme ./park-theme
+```
+
+Its `theme.css` started from the same `default` copy, and adds:
+
+- tan windows with a dark outline, a raised 3D bevel and a dark title bar
+  over each panel
+- buttons that sink in while pressed
+- fields that sit sunken
+- a red and cream striped awning along the top
+- Pixelify Sans for the whole UI, with VT323 kept for data, logs and code
+
+Light mode is the park by day and dark mode the park at night.
+
+Its `theme.js` also sets `pixelSize: 2`. Icons are sprite-like solids lit
+from above, and links are drawn as sandy footpaths through the theme's
+`--wire` color. Each empty tile is grass in one of two tones that alternate
+tile by tile. `theme.js` reads those tones from the `--grass-a` and
+`--grass-b` custom properties in its `onReadTheme(v)` hook, which runs
+whenever the colors are read, so day and night each get their own lawn.
+
 ## Structure
 
 ```
@@ -56,6 +86,10 @@ it can set is listed on `THEME_STYLE` in `odf`'s `app.js`.
 │   ├── theme.css        # palette, fonts and every UI rule
 │   ├── theme.js         # ODF.registerTheme({ pixelSize: 2, ... })
 │   └── favicon.svg      # 16×16 pixel sprite
+├── park-theme/          # selected with --theme ./park-theme
+│   ├── theme.css        # bevels, title bars, day and night palettes
+│   ├── theme.js         # pixelSize, sprite faces, two-tone grass tiles
+│   └── favicon.svg      # 16×16 striped tent
 └── app/
     ├── __init__.py      # imports every module so decorators register at startup
     ├── entities.py      # Score(id, player, game, points) — @Entity
@@ -73,5 +107,6 @@ odf run
 Open the UI. The header reads "Arcade" in Silkscreen over a striped top
 bar, the browser tab shows the invader favicon, and `HighScores` and `Tally`
 stand on the grid as chunky pixel sprites. Toggle light mode for the Game
-Boy greens. Run `odf run --theme default` to compare the same project in a
-built-in theme.
+Boy greens. Run `odf run --theme ./park-theme` for the theme park, where
+both nodes stand on a checkered lawn joined by a footpath, or
+`odf run --theme default` to compare the same project in a built-in theme.
