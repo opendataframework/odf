@@ -2184,20 +2184,6 @@ def test_list_themes_finds_the_built_in_onyx_theme():
     assert "onyx" in themes.list_themes()
 
 
-def test_list_themes_finds_the_built_in_terminal_theme():
-    assert "terminal" in themes.list_themes()
-
-
-def test_serves_terminal_theme_files():
-    with Context(namespaces=set()) as ctx:
-        client = TestClient(UiServer(ctx, "proj", theme="terminal")._app)
-        responses = {path: client.get(path) for path in ("/theme.css", "/theme.js", "/favicon.svg")}
-
-    for path, r in responses.items():
-        assert r.status_code == 200, path
-    assert "emptyTile(sx, sy)" in responses["/theme.js"].text
-
-
 def test_theme_can_draw_the_canvas_coarser():
     script = (themes.STATIC_DIR / "app.js").read_text()
 
@@ -2219,20 +2205,6 @@ def test_theme_can_replace_empty_tile_drawing():
 
     assert "emptyTile: null" in script
     assert "THEME_STYLE.emptyTile(sx, sy)" in script
-
-
-def test_list_themes_finds_the_built_in_y2k_theme():
-    assert "y2k" in themes.list_themes()
-
-
-def test_serves_y2k_theme_files():
-    with Context(namespaces=set()) as ctx:
-        client = TestClient(UiServer(ctx, "proj", theme="y2k")._app)
-        responses = {path: client.get(path) for path in ("/theme.css", "/theme.js", "/favicon.svg")}
-
-    for path, r in responses.items():
-        assert r.status_code == 200, path
-    assert "faceFill(side, accent, lit, t, frame)" in responses["/theme.js"].text
 
 
 def test_list_themes_finds_the_built_in_ledger_theme():
@@ -2260,36 +2232,6 @@ def test_serves_clay_theme_files():
 
     for path, r in responses.items():
         assert r.status_code == 200, path
-    assert "groundShadow(x, y, e, accent, lit)" in responses["/theme.js"].text
-
-
-def test_list_themes_finds_the_built_in_meadow_theme():
-    assert "meadow" in themes.list_themes()
-
-
-def test_serves_meadow_theme_files():
-    with Context(namespaces=set()) as ctx:
-        client = TestClient(UiServer(ctx, "proj", theme="meadow")._app)
-        responses = {path: client.get(path) for path in ("/theme.css", "/theme.js", "/favicon.svg")}
-
-    for path, r in responses.items():
-        assert r.status_code == 200, path
-    assert "emptyTile(sx, sy)" in responses["/theme.js"].text
-    assert "groundShadow(x, y, e, accent, lit)" in responses["/theme.js"].text
-
-
-def test_list_themes_finds_the_built_in_beacon_theme():
-    assert "beacon" in themes.list_themes()
-
-
-def test_serves_beacon_theme_files():
-    with Context(namespaces=set()) as ctx:
-        client = TestClient(UiServer(ctx, "proj", theme="beacon")._app)
-        responses = {path: client.get(path) for path in ("/theme.css", "/theme.js", "/favicon.svg")}
-
-    for path, r in responses.items():
-        assert r.status_code == 200, path
-    assert "emptyTile(sx, sy)" in responses["/theme.js"].text
     assert "groundShadow(x, y, e, accent, lit)" in responses["/theme.js"].text
 
 

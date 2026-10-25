@@ -57,7 +57,19 @@ def test_config_selects_the_example_theme_by_path():
     assert config["ui"]["theme"] == "./pixel-theme"
 
 
-@pytest.mark.parametrize("theme", ["./pixel-theme", "./park-theme", "./neon-theme"])
+THEMES = [
+    "./pixel-theme",
+    "./park-theme",
+    "./neon-theme",
+    "./terminal-theme",
+    "./y2k-theme",
+    "./meadow-theme",
+    "./beacon-theme",
+]
+PIXEL_ART_THEMES = {"./pixel-theme", "./park-theme"}
+
+
+@pytest.mark.parametrize("theme", THEMES)
 def test_example_theme_has_every_required_file(monkeypatch, theme):
     monkeypatch.chdir(EXAMPLE_DIR)
 
@@ -68,7 +80,7 @@ def test_example_theme_has_every_required_file(monkeypatch, theme):
 
 @pytest.mark.parametrize(
     ("theme", "pixel_size"),
-    [("./pixel-theme", True), ("./park-theme", True), ("./neon-theme", False)],
+    [(theme, theme in PIXEL_ART_THEMES) for theme in THEMES],
 )
 def test_only_the_pixel_art_themes_set_a_pixel_size(theme, pixel_size):
     script = (EXAMPLE_DIR / theme / "theme.js").read_text()

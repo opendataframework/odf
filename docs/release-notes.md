@@ -13,7 +13,9 @@
   and `labelFont`/`labelSize` to keep the node labels drawn on it legible.
   See [UI](ui.md#custom-themes) and the
   [`24-custom-theme`](https://github.com/opendataframework/odf/tree/main/examples/24-custom-theme)
-  example, which ships a pixel-art theme, a late-90s theme-park one and a 1980s neon-coast one.
+  example, which ships seven: a pixel-art theme, a late-90s theme-park one, a 1980s
+  neon-coast one, a green-phosphor terminal, liquid-chrome y2k, a sunny meadow and a
+  tactical-map beacon.
 - **UI**: `[ui] grid = "flat"` in `config.toml` draws the topology as a flat, top-down
   schematic instead of the isometric grid: faint dots where nodes snap, and every node the
   same rounded square in its type's color, for large topologies. Node positions are shared
@@ -64,20 +66,10 @@
   service's Start/Stop button now follows starts and stops made over MCP or chat. The
   new `GET /api/events` streams every protocol call as server-sent events. Requires
   `opendataframework` 0.4.0. See [UI](ui.md#run-activity).
-- **UI**: `terminal` theme, a retro text-mode look: green phosphor on black with
-  scanlines in dark mode, green ink on line-printer paper in light mode, a monospace font
-  throughout, double-ruled panels and `[ bracketed ]` buttons. The topology draws icons as
-  glowing line art on a dotted grid. Select it with `odf run --theme terminal` or
-  `[ui] theme = "terminal"` in `config.toml`. Themes can now replace how empty grid tiles
-  are drawn with `ODF.registerTheme({ emptyTile })`. See
+- **UI**: a theme's `theme.js` can replace how empty grid tiles are drawn with
+  `ODF.registerTheme({ emptyTile })`, and fill opaque icon faces its own way, such as a
+  gradient spanning the whole icon, with `ODF.registerTheme({ faceFill })`. See
   [UI](ui.md#themes-icons-and-branding).
-- **UI**: `y2k` theme, millennium futurism: frosted glass panels, glossy pill buttons,
-  a chrome title and orb, and iridescent blue-violet edges, over midnight blue in dark
-  mode and brushed silver in light mode. The topology draws icons as liquid chrome, with
-  one reflection running across each icon. Select it with `odf run --theme y2k` or
-  `[ui] theme = "y2k"` in `config.toml`. Themes can now fill opaque icon faces their own
-  way, such as a gradient spanning the whole icon, with
-  `ODF.registerTheme({ faceFill })`. See [UI](ui.md#themes-icons-and-branding).
 - **UI**: `ledger` theme, utility-first: square corners and hairline rules, surfaces
   told apart by tone over near-black in dark mode and white paper in light mode, dense
   striped tables with aligned numbers and a header that stays in view, and a visible
@@ -94,21 +86,6 @@
   on hover. Select it with `odf run --theme clay` or `[ui] theme = "clay"` in
   `config.toml`. Themes can now draw on the floor under each icon with
   `ODF.registerTheme({ groundShadow })`. See [UI](ui.md#themes-icons-and-branding).
-- **UI**: `meadow` theme, a sunny hillside: an open blue sky with drifting clouds behind
-  the app (stars at dusk in dark mode), a glossy blue title bar, a gradient side pane,
-  rounded panels edged in sky blue, glossy buttons with a green run button, and zebra
-  striped tables. The topology is a freshly mown lawn in diagonal stripes, with icons
-  drawn as glossy, saturated solids, each on a soft shadow on the grass. Select it with
-  `odf run --theme meadow` or `[ui] theme = "meadow"` in `config.toml`. See
-  [UI](ui.md#themes-icons-and-branding).
-- **UI**: `beacon` theme, a tactical map display: square slate panels framed by orange
-  corner ticks, a header band over an orange rule, condensed uppercase labels, outlined
-  buttons that fill signal orange when engaged, and faint scanlines over the map, on
-  near-black in dark mode and a pale printed map in light mode. The topology is a city
-  seen from above, blocks and building footprints between streets with a wider avenue
-  every few tiles, with icons drawn as translucent holograms that glow when lit, each
-  inside a segmented marker ring. Select it with `odf run --theme beacon` or
-  `[ui] theme = "beacon"` in `config.toml`. See [UI](ui.md#themes-icons-and-branding).
 - **UI**: `workbench` theme, a code editor's look: charcoal panes butting on hairlines
   around a lighter canvas, a side rail styled as an activity bar, list selections and a
   1px focus ring in one blue, filled blue primary buttons, the system UI face for the
