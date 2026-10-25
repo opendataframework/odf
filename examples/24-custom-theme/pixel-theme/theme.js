@@ -6,6 +6,10 @@
 // dithered checker at its center.
 ODF.registerTheme({
   pixelSize: 2,
+  // Silkscreen is drawn on an 8px grid: at 16 CSS pixels it lands on exactly
+  // 8 canvas pixels, so labels stay crisp and legible at half resolution.
+  labelFont: "'Silkscreen', 'Courier New', monospace",
+  labelSize: 16,
   faces: {
     fill: 'shade',
     shade:    { top: 0.2,  left: -0.1, right: -0.35 },

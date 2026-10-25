@@ -11,6 +11,9 @@
 
   ODF.registerTheme({
     pixelSize: 2,
+    // Large enough to stay legible on the half-resolution canvas.
+    labelFont: "'Pixelify Sans', Tahoma, sans-serif",
+    labelSize: 16,
     faces: {
       fill: 'shade',
       shade:    { top: 0.25, left: -0.05, right: -0.3 },

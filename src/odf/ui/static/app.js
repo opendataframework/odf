@@ -128,6 +128,11 @@ const THEME_STYLE = {
   // resolution. A pixel-art theme sets it (say to 2) and upscales the canvas
   // with `image-rendering: pixelated` in its theme.css.
   pixelSize: null,
+  // Font of the node labels and run badges drawn on the canvas, and its size
+  // in CSS pixels. The label chip and badge size themselves from it, so a
+  // theme with a coarse pixelSize can pick a font that stays legible there.
+  labelFont: "'SF Mono', 'Courier New', monospace",
+  labelSize: 9.5,
   emptyTileLine: 0.6,
   tickSize: 1,
   tileLine: lit => lit ? 1.1 : 0.8,
@@ -1104,18 +1109,21 @@ function drawRunBadge(node, sx, sy, run) {
   const alpha = runMarkAlpha(run);
   if (alpha <= 0) return;
   const color = runMarkColor(node, run);
-  const by = sy - GRID.extents(node).top - 30;
+  const size = THEME_STYLE.labelSize;
+  const h = size + 4.5;
+  // Just above the label chip drawLabel() draws while the node is lit.
+  const by = sy - GRID.extents(node).top - 8 - (size + 3.5) - 2 - h / 2;
   const failed = run.state === 'failed';
   const text = failed ? (run.count > 1 ? `! ×${run.count}` : '!') : '✓';
 
   ctx.save();
   ctx.globalAlpha = alpha;
-  ctx.font = "bold 9.5px 'SF Mono', 'Courier New', monospace";
+  ctx.font = `bold ${size}px ${THEME_STYLE.labelFont}`;
   ctx.textAlign = 'center';
   ctx.textBaseline = 'middle';
-  const w = Math.max(14, ctx.measureText(text).width + 8);
+  const w = Math.max(h, ctx.measureText(text).width + 8);
   ctx.beginPath();
-  ctx.rect(sx - w / 2, by - 7, w, 14);
+  ctx.rect(sx - w / 2, by - h / 2, w, h);
   ctx.fillStyle = `rgba(${LABEL_BG_RGB},${LABEL_BG_ALPHA})`;
   ctx.fill();
   ctx.strokeStyle = color;
@@ -1134,7 +1142,10 @@ function drawLabel(node, sx, sy, lit) {
   ctx.save();
   ctx.textAlign    = 'center';
   ctx.textBaseline = 'bottom';
-  ctx.font         = `${lit ? 'bold ' : ''}9.5px 'SF Mono', 'Courier New', monospace`;
+  const size = THEME_STYLE.labelSize;
+  ctx.font         = `${lit ? 'bold ' : ''}${size}px ${THEME_STYLE.labelFont}`;
+  // The chip's top edge, sized from the font (13px above the baseline at 9.5px).
+  const chipTop = ly - size - 3.5;
 
   let tw = 0;
   if (lit) {
@@ -1143,7 +1154,7 @@ function drawLabel(node, sx, sy, lit) {
     ctx.strokeStyle = rgba(accent, 0.55);
     ctx.lineWidth   = 0.8;
     ctx.beginPath();
-    ctx.rect(sx - tw/2, ly - 13, tw, 15);
+    ctx.rect(sx - tw/2, chipTop, tw, size + 5.5);
     ctx.fill();
     ctx.stroke();
     ctx.shadowColor = accent;
@@ -1160,7 +1171,7 @@ function drawLabel(node, sx, sy, lit) {
   if (lit && node.layer) {
     ctx.shadowBlur = 0;
     ctx.beginPath();
-    ctx.arc(sx + tw/2, ly - 13, 3.5, 0, Math.PI * 2);
+    ctx.arc(sx + tw/2, chipTop, 3.5, 0, Math.PI * 2);
     ctx.fillStyle = layerColor(node.layer);
     ctx.fill();
     ctx.lineWidth = 1;

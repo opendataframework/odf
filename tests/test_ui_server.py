@@ -2206,6 +2206,14 @@ def test_theme_can_draw_the_canvas_coarser():
     assert "'pixelSize' in rest" in script
 
 
+def test_theme_can_set_the_canvas_label_font():
+    script = (themes.STATIC_DIR / "app.js").read_text()
+
+    assert "labelFont: \"'SF Mono', 'Courier New', monospace\"" in script
+    assert "labelSize: 9.5," in script
+    assert script.count("px ${THEME_STYLE.labelFont}`") == 2
+
+
 def test_theme_can_replace_empty_tile_drawing():
     script = (themes.STATIC_DIR / "app.js").read_text()
 

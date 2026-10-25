@@ -9,7 +9,8 @@
   the working directory) as well as a built-in theme's name. The directory holds a
   `theme.css` and a `favicon.svg`, plus an optional `theme.js` that sets the icon look
   through `ODF.registerTheme()`, the same files as a built-in theme. A theme can also set
-  `pixelSize` there to draw the topology canvas at a coarser resolution, for pixel art.
+  `pixelSize` there to draw the topology canvas at a coarser resolution, for pixel art,
+  and `labelFont`/`labelSize` to keep the node labels drawn on it legible.
   See [UI](ui.md#custom-themes) and the
   [`24-custom-theme`](https://github.com/opendataframework/odf/tree/main/examples/24-custom-theme)
   example, which ships a pixel-art theme and a late-90s theme-park one.

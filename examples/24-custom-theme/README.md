@@ -43,7 +43,11 @@ network connection, both fall back to the system monospace.
 
 `theme.js` sets `pixelSize: 2`, so the canvas is drawn with one canvas pixel
 per 2×2 CSS pixels, and `theme.css` sets `image-rendering: pixelated` on
-`#canvas` to scale it up without smoothing. The rest of `theme.js` makes
+`#canvas` to scale it up without smoothing. At that resolution the default
+9.5px node labels would be under 5 canvas pixels tall, so `theme.js` also
+sets `labelFont` to Silkscreen and `labelSize` to 16. Silkscreen is drawn on
+an 8px grid, so 16 CSS pixels land on exactly 8 canvas pixels, which keeps
+the labels crisp. The rest of `theme.js` makes
 icons flat three-tone sprites outlined in ink, turns off every glow, and
 draws each empty tile with a dithered checker at its center. Every knob
 it can set is listed on `THEME_STYLE` in `odf`'s `app.js`.
@@ -69,7 +73,8 @@ Its `theme.css` started from the same `default` copy, and adds:
 
 Light mode is the park by day and dark mode the park at night.
 
-Its `theme.js` also sets `pixelSize: 2`. Icons are sprite-like solids lit
+Its `theme.js` also sets `pixelSize: 2`, with node labels in Pixelify Sans
+at 16px so they stay legible. Icons are sprite-like solids lit
 from above, and links are drawn as sandy footpaths through the theme's
 `--wire` color. Each empty tile is grass in one of two tones that alternate
 tile by tile. `theme.js` reads those tones from the `--grass-a` and

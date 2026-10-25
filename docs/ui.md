@@ -311,7 +311,10 @@ For pixel art, `theme.js` can set `ODF.registerTheme({ pixelSize: 2 })` to
 draw the topology canvas with one canvas pixel per 2×2 CSS pixels. Pair it
 with `#canvas { image-rendering: pixelated }` in `theme.css`, so the canvas
 is scaled back up without smoothing. Without `pixelSize`, the canvas is
-drawn at the screen's own resolution. See
+drawn at the screen's own resolution. At a coarse `pixelSize`, the node
+labels drawn on the canvas get hard to read, so a theme can also set
+`labelFont` (a CSS font family) and `labelSize` (in CSS pixels, default
+`9.5`) for them, such as a pixel font at a size it was designed for. See
 [`examples/24-custom-theme`](https://github.com/opendataframework/odf/tree/main/examples/24-custom-theme),
 which ships two themes in its own directories: a pixel-art one in
 `pixel-theme/` and a late-90s theme-park one in `park-theme/`.
