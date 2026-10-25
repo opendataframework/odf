@@ -40,7 +40,7 @@ from opendataframework.view import (
 )
 
 from odf.ui import annotations, arguments, data, events, keys, layout, media, themes
-from odf.ui.notebooks import NotebookServer, local_host
+from odf.ui.notebooks import NotebookServer, local_host, theme_rewrite
 from odf.ui.origin import HostCheck, OriginCheck
 from odf.ui.topology import TopologyView, build_topology
 
@@ -176,7 +176,11 @@ class UiServer:
 
             self._notebooks = NotebookServer(self.local_url, proxy.prefix("jupyter"), Path.cwd())
             proxy.mount_proxy(
-                app, "jupyter", lambda: self._notebooks.origin, lambda: self._notebooks.credentials
+                app,
+                "jupyter",
+                lambda: self._notebooks.origin,
+                lambda: self._notebooks.credentials,
+                lambda request, path: theme_rewrite(path, request.cookies),
             )
 
         @app.get("/api/topology")

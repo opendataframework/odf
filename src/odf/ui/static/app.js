@@ -292,6 +292,8 @@ function applyTheme(theme) {
   vignetteDirty = true;
   render();
   if (mapMode === 'geo') refreshGeoMap();
+  syncNotebookTheme(theme);
+  if (notebookEditing) reloadNotebookFrame();
 }
 
 function initTheme() {
@@ -301,6 +303,7 @@ function initTheme() {
   document.documentElement.setAttribute('data-theme', theme);
   readTheme();
   updateThemeButton(theme);
+  syncNotebookTheme(theme);
 }
 
 // ── Layer colors ─────────────────────────────────────────────────────────
@@ -5219,9 +5222,33 @@ async function editNotebook() {
   }
   if (token !== docLoadToken) return;
   button.disabled = false;
+  // Another tab of the UI may have switched the mode since.
+  syncNotebookTheme(document.documentElement.getAttribute('data-theme'));
   const src = `${session.url}notebooks/${notebookPath(record)}`;
   reader.classList.add('doc-reader-frame');
   reader.innerHTML = `<iframe class="doc-notebook-frame" title="Jupyter Notebook" src="${escapeHtml(src)}"></iframe>`;
+}
+
+// Jupyter's editor opens in JupyterLab Light or Dark as the UI is: the UI's
+// proxy reads the mode from this cookie (see odf.ui.notebooks), and a theme
+// in the user's own Jupyter settings still wins.
+function syncNotebookTheme(theme) {
+  document.cookie = `odf-jupyter-theme=${theme}; path=/proxy/jupyter/; SameSite=Strict`;
+}
+
+// Reloads the open editor in the UI's new mode, saving the notebook first so
+// the last few seconds of edits aren't lost. Its kernel keeps running.
+async function reloadNotebookFrame() {
+  const frame = document.querySelector('#media-lightbox-doc .doc-notebook-frame');
+  const win = frame && frame.contentWindow;
+  if (!win) return; // Jupyter still starting: the editor opens in the new mode
+  try {
+    // Missing while the editor is still loading, with nothing to save yet.
+    if (win.jupyterapp) await win.jupyterapp.commands.execute('docmanager:save');
+  } catch (err) {
+    // Nothing to save, say: reload all the same.
+  }
+  win.location.reload();
 }
 
 // Leaving the editor shows the notebook as Jupyter last saved it.

@@ -190,7 +190,11 @@ every 5 seconds unless your Jupyter settings say otherwise, since closing the
 editor or moving to another record drops it. Notebooks can't be created,
 renamed or deleted from Jupyter; that is done to the records, in the UI. In
 Jupyter's file browser each repository is a folder, with a folder per record
-holding its notebook. `[ui] notebooks = false` turns editing off. See
+holding its notebook. The editor opens in JupyterLab Light or JupyterLab Dark,
+whichever matches the UI's mode, and toggling the mode while it's open saves
+the notebook and reloads the editor in the other one; its kernel keeps
+running. A `theme` in your own Jupyter settings wins over both, and the UI
+saves nothing to them. `[ui] notebooks = false` turns editing off. See
 [`examples/21-notebook-view`](https://github.com/opendataframework/odf/tree/main/examples/21-notebook-view).
 
 Behind a reverse proxy (HTTPS, a login), Jupyter needs nothing of its own: a

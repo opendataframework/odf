@@ -270,6 +270,80 @@ def test_proxy_drops_the_browser_s_authorization_and_adds_the_app_s_credentials(
     }
 
 
+def themes_plugin(raw="{}"):
+    """Jupyter's settings for its themes plugin, as its settings API answers them."""
+    return {
+        "id": "@jupyterlab/apputils-extension:themes",
+        "schema": {"properties": {"theme": {"type": "string", "default": "JupyterLab Light"}}},
+        "raw": raw,
+        "settings": json.loads(raw),
+    }
+
+
+def test_theme_settings_default_jupyter_s_theme_to_the_ui_s_mode():
+    other = {"id": "@jupyterlab/docmanager-extension:plugin", "schema": {"properties": {}}}
+
+    one = json.loads(notebooks.theme_settings(json.dumps(themes_plugin()).encode(), "dark"))
+    listed = json.loads(
+        notebooks.theme_settings(
+            json.dumps({"settings": [other, themes_plugin()]}).encode(), "dark"
+        )
+    )
+
+    assert one["schema"]["properties"]["theme"]["default"] == "JupyterLab Dark"
+    assert listed["settings"][0] == other
+    assert listed["settings"][1]["schema"]["properties"]["theme"]["default"] == "JupyterLab Dark"
+
+
+def test_theme_settings_leave_the_user_s_own_theme_and_everything_else():
+    own = themes_plugin('{"theme": "Solarized"}')
+
+    rewritten = json.loads(notebooks.theme_settings(json.dumps(own).encode(), "dark"))
+
+    # Jupyter applies the user's setting over the default.
+    assert rewritten["settings"] == {"theme": "Solarized"}
+    assert rewritten["raw"] == '{"theme": "Solarized"}'
+    assert notebooks.theme_settings(json.dumps(themes_plugin()).encode(), "sepia") is None
+    assert notebooks.theme_settings(b'{"settings": []}', "dark") is None
+    assert notebooks.theme_settings(b"<html>", "dark") is None
+
+
+def test_only_settings_are_rewritten_and_only_with_the_ui_s_mode():
+    mode = {notebooks.THEME_COOKIE: "dark"}
+
+    assert notebooks.theme_rewrite("lab/api/settings", mode) is not None
+    assert notebooks.theme_rewrite("lab/api/settings/@jupyterlab/x:y", mode) is not None
+    assert notebooks.theme_rewrite("api/contents/notes", mode) is None
+    assert notebooks.theme_rewrite("lab/api/settings", {}) is None
+    assert notebooks.theme_rewrite("lab/api/settings", {notebooks.THEME_COOKIE: "x"}) is None
+
+
+@pytest.mark.timeout(120)
+def test_jupyter_s_theme_follows_the_ui_s_mode_through_the_ui(running_ui):
+    ui, _ = running_ui
+    ui._notebooks.start()
+    path = "lab/api/settings/@jupyterlab/apputils-extension:themes"
+    url = f"{ui.local_url}/proxy/jupyter/{path}"
+    direct = jupyter(ui, "GET", path)
+
+    def default(mode):
+        request = urllib.request.Request(
+            url,
+            # As a reload sends it, with what the browser cached before.
+            headers={"Cookie": f"{notebooks.THEME_COOKIE}={mode}", "If-None-Match": "*"},
+        )
+        with urllib.request.urlopen(request, timeout=30) as res:
+            assert "etag" not in {key.lower() for key in res.headers}
+            return json.load(res)["schema"]["properties"]["theme"]["default"]
+
+    assert direct["schema"]["properties"]["theme"]["default"] == "JupyterLab Light"
+    assert default("dark") == "JupyterLab Dark"
+    assert default("light") == "JupyterLab Light"
+    listed = jupyter(ui, "GET", "lab/api/settings", headers={"Cookie": "odf-jupyter-theme=dark"})
+    themes = next(p for p in listed["settings"] if p["id"].endswith(":themes"))
+    assert themes["schema"]["properties"]["theme"]["default"] == "JupyterLab Dark"
+
+
 @pytest.mark.timeout(120)
 @pytest.mark.skipif(not hasattr(os, "getsid"), reason="POSIX sessions")
 def test_notebook_server_shuts_down_on_its_own_not_on_the_terminal_s_ctrl_c(running_ui):

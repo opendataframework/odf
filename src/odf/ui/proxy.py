@@ -52,6 +52,10 @@ _HOP_HEADERS = {
 # Headers a WebSocket handshake sets itself.
 _WEBSOCKET_HEADERS = {"sec-websocket-key", "sec-websocket-version", "sec-websocket-extensions"}
 
+# Headers that would let the app answer a rewritten response with its own,
+# unchanged one (304, or a compressed body the rewrite can't read).
+_REWRITE_HEADERS = {"if-none-match", "if-modified-since", "accept-encoding"}
+
 # Long enough for a request that starts a kernel.
 _REQUEST_TIMEOUT = 600.0
 
@@ -69,6 +73,7 @@ def mount_proxy(
     name: str,
     upstream: Callable[[], str | None],
     credentials: Callable[[], dict[str, str]] = dict,
+    rewrite: Callable[[Request, str], Callable[[bytes], bytes | None] | None] | None = None,
 ) -> None:
     """Forward ``/proxy/<name>/...`` to another server, HTTP and WebSockets.
 
@@ -80,6 +85,12 @@ def mount_proxy(
             running, which answers 503.
         credentials: Returns the headers that authenticate a request to the
             app, added to every request in place of any the browser sent.
+        rewrite: Called with each ``GET`` and its path under the prefix;
+            returns ``None`` to forward the response as it is, or a function
+            given the body of a successful one, returning the body to send
+            instead (or ``None`` to keep it). Such a response is never
+            answered from the browser's cache, which holds the body the app
+            sent, not the one the browser got.
     """
     route = prefix(name) + "{path:path}"
 
@@ -90,12 +101,16 @@ def mount_proxy(
         if origin is None:
             return Response(f"{name} is not running", status_code=503)
         body = await request.body()
+        transform = rewrite(request, path) if rewrite and request.method == "GET" else None
+        headers = _forwarded_headers(request.headers, origin, credentials())
+        if transform is not None:
+            headers = {k: v for k, v in headers.items() if k not in _REWRITE_HEADERS}
         try:
             res = await AsyncHTTPClient().fetch(
                 HTTPRequest(
                     origin + _target(request.scope),
                     method=request.method,
-                    headers=_forwarded_headers(request.headers, origin, credentials()),
+                    headers=headers,
                     body=body if request.method not in ("GET", "HEAD") else None,
                     allow_nonstandard_methods=True,
                     follow_redirects=False,
@@ -106,9 +121,13 @@ def mount_proxy(
             )
         except OSError as exc:
             return Response(f"{name} is not reachable: {exc}", status_code=502)
-        response = Response(res.body if request.method != "HEAD" else b"", res.code)
+        content = res.body if request.method != "HEAD" else b""
+        rewritten = transform(content) if transform is not None and res.code == 200 else None
+        response = Response(content if rewritten is None else rewritten, res.code)
         for key, value in res.headers.get_all():
             if key.lower() in _HOP_HEADERS:
+                continue
+            if rewritten is not None and key.lower() in ("etag", "last-modified"):
                 continue
             if key.lower() == "location" and value.startswith(origin):
                 value = value[len(origin) :]
