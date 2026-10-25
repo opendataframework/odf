@@ -44,6 +44,8 @@ plus a few symbols: database, cloud, bolt, star, flag, lock, user, chart) and a
 color. The glyph is saved in `layout.json` as `flatIcon`, apart from the
 isometric `icon`, so each grid keeps its own choice. The color is shared by
 both grids. The theme still applies through its colors and icon face style.
+See
+[`examples/25-flat-grid`](https://github.com/opendataframework/odf/tree/main/examples/25-flat-grid).
 
 ### Run activity
 

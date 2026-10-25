@@ -21,7 +21,9 @@
   schematic instead of the isometric grid: faint dots where nodes snap, and every node a
   rounded square in its type's color with its type's glyph, for large topologies. Node
   positions and colors are shared by both grids. **Customize** picks a flat glyph, saved as
-  `flatIcon` apart from the isometric icon. See [UI](ui.md#flat-grid).
+  `flatIcon` apart from the isometric icon. See [UI](ui.md#flat-grid) and the
+  [`25-flat-grid`](https://github.com/opendataframework/odf/tree/main/examples/25-flat-grid)
+  example.
 - **UI**: Jupyter notebooks in a document view open as their cells and saved outputs
   (Markdown rendered, images inline, HTML outputs sanitized) instead of raw JSON, with
   **View source** for the JSON. With the `notebook` package installed in the project
