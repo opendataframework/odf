@@ -1,6 +1,6 @@
 /* Neon coast: a 1980s beach city at sunset, served from this project
-   (`odf run --theme ./neon-theme`). Started, like ../pixel-theme and
-   ../park-theme, as a copy of odf's built-in `default` theme.css, then
+   (`odf run --theme ./themes/neon`). Started, like ../pixel and
+   ../park, as a copy of odf's built-in `default` theme.css, then
    restyled: a sunset stripe along the top, windows edged in pink neon tubing,
    a script brand over a condensed sans, and cyan buttons that light up. Dark
    mode is the strip at night, light mode the Art Deco front by day. Unlike

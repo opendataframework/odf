@@ -113,10 +113,10 @@
   uses `pbcopy`, `wl-copy`, `xclip`, `xsel` or `clip`, and skips the copy when none is
   installed. The URLs are also terminal links.
 - **UI**: the `neo` theme is no longer built in, so `[ui] theme = "neo"` raises a
-  `ValueError`. It lives on as `brutalist-theme/` in the
+  `ValueError`. It lives on as `themes/brutalist/` in the
   [`24-custom-theme`](https://github.com/opendataframework/odf/tree/main/examples/24-custom-theme)
-  example: copy that directory into a project and select it with
-  `[ui] theme = "./brutalist-theme"`. `17-custom-icon` now uses `glitch`.
+  example: copy that directory into a project's `themes/` and select it with
+  `[ui] theme = "./themes/brutalist"`. `17-custom-icon` now uses `glitch`.
 - **Chat**: the default `[project.chat] model` is now `gpt-oss:20b` instead of `gpt-oss`.
   See [Chat](chat.md).
 

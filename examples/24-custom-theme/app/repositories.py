@@ -21,7 +21,7 @@ class HighScores:
     """In-memory ``Score`` repository, pre-seeded with ``_SEED_SCORES``.
 
     Implements no ``data_view()``. The concept this example isolates is the
-    project's own UI theme (see ``../pixel-theme/`` and this project's
+    project's own UI theme (see ``../themes/pixel/`` and this project's
     ``config.toml``), so it renders as the same plain default table as
     ../01-table-view, in the theme's look.
     """

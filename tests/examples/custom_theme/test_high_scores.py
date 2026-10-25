@@ -54,23 +54,23 @@ def test_tally_totals_points_per_player_highest_first():
 def test_config_selects_the_example_theme_by_path():
     config = tomllib.loads((EXAMPLE_DIR / "config.toml").read_text())
 
-    assert config["ui"]["theme"] == "./pixel-theme"
+    assert config["ui"]["theme"] == "./themes/pixel"
 
 
 THEMES = [
-    "./pixel-theme",
-    "./park-theme",
-    "./neon-theme",
-    "./terminal-theme",
-    "./y2k-theme",
-    "./meadow-theme",
-    "./beacon-theme",
-    "./ledger-theme",
-    "./clay-theme",
-    "./workbench-theme",
-    "./brutalist-theme",
+    "./themes/pixel",
+    "./themes/park",
+    "./themes/neon",
+    "./themes/terminal",
+    "./themes/y2k",
+    "./themes/meadow",
+    "./themes/beacon",
+    "./themes/ledger",
+    "./themes/clay",
+    "./themes/workbench",
+    "./themes/brutalist",
 ]
-PIXEL_ART_THEMES = {"./pixel-theme", "./park-theme"}
+PIXEL_ART_THEMES = {"./themes/pixel", "./themes/park"}
 
 
 @pytest.mark.parametrize("theme", THEMES)

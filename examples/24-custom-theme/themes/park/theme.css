@@ -1,5 +1,5 @@
 /* Theme park: a late-90s isometric theme-park look, served from this
-   project (`odf run --theme ./park-theme`). Started, like ../pixel-theme,
+   project (`odf run --theme ./themes/park`). Started, like ../pixel,
    as a copy of odf's built-in `default` theme.css, then restyled: beveled
    tan windows with dark title bars, a pixel sans for the whole UI, a striped
    awning along the top, and a grass lawn with sandy footpaths on the

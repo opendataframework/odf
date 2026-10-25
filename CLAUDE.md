@@ -178,11 +178,11 @@ functions adopted with `@Function`), `21-notebook-view/` (notebooks in a
 repositories, with a grouped `TimeseriesView`), `23-reverse-proxy/`
 (`docker compose up` with Traefik in front: HTTPS, a login, MCP at `/mcp`,
 as `docs/ui.md#deploying` describes) and `24-custom-theme/` (eleven themes of
-the project's own, pixel art selected by `[ui] theme = "./pixel-theme"`,
-a theme park by `--theme ./park-theme`, a neon coast by
-`--theme ./neon-theme`, and `./terminal-theme`, `./y2k-theme`,
-`./meadow-theme`, `./beacon-theme`, `./ledger-theme`, `./clay-theme`,
-`./workbench-theme` and `./brutalist-theme` (formerly `neo`), kept here rather than shipped as built-in themes)
+the project's own, pixel art selected by `[ui] theme = "./themes/pixel"`,
+a theme park by `--theme ./themes/park`, a neon coast by
+`--theme ./themes/neon`, and `./themes/terminal`, `./themes/y2k`,
+`./themes/meadow`, `./themes/beacon`, `./themes/ledger`, `./themes/clay`,
+`./themes/workbench` and `./themes/brutalist` (formerly `neo`), kept here rather than shipped as built-in themes)
 were added here since. Treat new examples here as small and focused, one concept each, matching
 `opendataframework/examples/`'s style rather than `demo/`'s
 everything-at-once approach.

@@ -2,5 +2,5 @@
 name = "custom-theme-example"
 
 [ui]
-theme = "./pixel-theme"
+theme = "./themes/pixel"
 brand = "Arcade"

@@ -5,7 +5,7 @@ built-in one.
 calling start(ui=True). This script does the same two steps directly in
 Python, like ../01-table-view/main.py.
 
-This project's config.toml sets `[ui] theme = "./pixel-theme"`, a path
+This project's config.toml sets `[ui] theme = "./themes/pixel"`, a path
 rather than a built-in theme's name, so Server.start(ui=True) below serves
 that directory's `theme.css`, `theme.js` and `favicon.svg` (see that
 directory for the theme itself). Run `odf run` instead of this script to

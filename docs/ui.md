@@ -309,10 +309,10 @@ labels drawn on the canvas get hard to read, so a theme can also set
 `9.5`) for them, such as a pixel font at a size it was designed for. See
 [`examples/24-custom-theme`](https://github.com/opendataframework/odf/tree/main/examples/24-custom-theme),
 which ships eleven themes in its own directories: a pixel-art one in
-`pixel-theme/`, a late-90s theme-park one in `park-theme/`, a 1980s
-neon-coast one in `neon-theme/`, and `terminal-theme/`, `y2k-theme/`,
-`meadow-theme/`, `beacon-theme/`, `ledger-theme/`, `clay-theme/`,
-`workbench-theme/` and `brutalist-theme/`. Only the first two set `pixelSize`.
+`themes/pixel/`, a late-90s theme-park one in `themes/park/`, a 1980s
+neon-coast one in `themes/neon/`, and `themes/terminal/`, `themes/y2k/`,
+`themes/meadow/`, `themes/beacon/`, `themes/ledger/`, `themes/clay/`,
+`themes/workbench/` and `themes/brutalist/`. Only the first two set `pixelSize`.
 
 A node's icon and color can be changed from its "Customize" popover, which
 lists the built-in isometric icons by group (devices, buildings, charts,

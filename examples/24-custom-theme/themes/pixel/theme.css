@@ -1,5 +1,5 @@
 /* Arcade: a pixel-art theme served from this project rather than from odf
-   (`[ui] theme = "./pixel-theme"` in ../config.toml). Started as a copy of
+   (`[ui] theme = "./themes/pixel"` in ../../config.toml). Started as a copy of
    odf's built-in `default` theme.css, since a theme styles the whole UI on
    its own, then restyled: two pixel fonts, a PICO-8 palette in dark mode and
    a Game Boy palette in light mode, square corners, hard offset shadows,

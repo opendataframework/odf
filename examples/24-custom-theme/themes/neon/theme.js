@@ -3,8 +3,8 @@
 // the floor. Empty tiles are a checkered floor in two tones from
 // `--tile-a`/`--tile-b`, edged in `--tile-grid`, so night gets a dark floor
 // with a pink neon grid and day a pastel terrazzo. `--glow` scales every
-// glow, so day mode keeps only a hint of it. Unlike ../pixel-theme and
-// ../park-theme, this sets no `pixelSize`: the canvas stays at the screen's
+// glow, so day mode keeps only a hint of it. Unlike ../pixel and
+// ../park, this sets no `pixelSize`: the canvas stays at the screen's
 // resolution, where the glows stay smooth.
 (() => {
   let tileA = '#1a0d36';
