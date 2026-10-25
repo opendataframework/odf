@@ -89,9 +89,10 @@
 
 ### Changed
 
-- **UI**: the `default`, `emerald` and `onyx` themes share one logo, a rounded tile of
-  stacked layers in each theme's colors, as their favicon and as the header mark next to
-  "ODF" (`[ui] logo` still replaces the mark, and `[ui] favicon` replaces both).
+- **UI**: every built-in theme shows its favicon as the header mark next to "ODF", and
+  the `default`, `emerald` and `onyx` themes share one logo, a rounded tile of stacked
+  layers in each theme's colors (`[ui] logo` still replaces the mark, and `[ui] favicon`
+  replaces both).
 - **UI**: the UI refuses requests another site's page makes the browser send, so a login
   at a reverse proxy can't be used from there: any request but `GET`, `HEAD` and
   `OPTIONS`, and every WebSocket (Jupyter's included), answers 403 when its `Origin`

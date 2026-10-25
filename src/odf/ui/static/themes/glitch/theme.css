@@ -127,10 +127,8 @@ body{
 
 #hdr{padding:0 16px;height:46px;display:flex;align-items:center;gap:0;flex-shrink:0}
 .brand{display:flex;align-items:center;gap:10px;margin-right:18px;padding-right:18px;border-right:1px solid var(--border)}
-.brand-mark{width:18px;height:18px;flex-shrink:0;border:1.5px solid var(--accent-component);position:relative;transform:rotate(45deg);box-shadow:1.5px 0 0 color-mix(in srgb, var(--split-a) 55%, transparent),-1.5px 0 0 color-mix(in srgb, var(--split-b) 55%, transparent)}
-.brand-mark::after{content:"";position:absolute;inset:4px;background:var(--accent-component);opacity:.85}
-.brand-mark.has-logo{border:none;transform:none}
-.brand-mark.has-logo::after{content:none}
+.brand-mark{width:18px;height:18px;flex-shrink:0;background:url(/favicon.svg) center/contain no-repeat}
+.brand-mark.has-logo{background:none}
 .brand-mark img{width:100%;height:100%;object-fit:contain;display:block}
 .hdr-title{font-family:Inter,'Segoe UI',Roboto,-apple-system,BlinkMacSystemFont,Helvetica,Arial,sans-serif;color:var(--text);font-size:13px;font-weight:600;letter-spacing:.04em;text-shadow:1px 0 color-mix(in srgb, var(--split-a) 50%, transparent),-1px 0 color-mix(in srgb, var(--split-b) 50%, transparent)}
 .hdr-title small{display:block;color:var(--text-dim);font-size:9.5px;font-weight:500;letter-spacing:.09em;text-transform:uppercase;margin-top:2px}
