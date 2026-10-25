@@ -2094,6 +2094,76 @@ def test_selecting_a_different_theme_serves_different_content(tmp_path, monkeypa
     assert "alt theme marker" in r.text
 
 
+def make_theme_dir(path, script=True):
+    path.mkdir()
+    (path / "theme.css").write_text("/* project theme marker */")
+    (path / "favicon.svg").write_text("<svg><title>project favicon</title></svg>")
+    if script:
+        (path / "theme.js").write_text("// project theme script")
+    return path
+
+
+def test_serves_a_project_theme_from_an_absolute_path(tmp_path):
+    theme = make_theme_dir(tmp_path / "my-theme")
+
+    with Context(namespaces=set()) as ctx:
+        client = TestClient(UiServer(ctx, "proj", theme=str(theme))._app)
+        responses = {path: client.get(path) for path in ("/theme.css", "/theme.js", "/favicon.svg")}
+
+    assert "project theme marker" in responses["/theme.css"].text
+    assert "project theme script" in responses["/theme.js"].text
+    assert "project favicon" in responses["/favicon.svg"].text
+
+
+def test_resolves_a_relative_project_theme_path_against_the_working_directory(
+    tmp_path, monkeypatch
+):
+    make_theme_dir(tmp_path / "my-theme")
+    monkeypatch.chdir(tmp_path)
+
+    with Context(namespaces=set()) as ctx:
+        client = TestClient(UiServer(ctx, "proj", theme="./my-theme")._app)
+        r = client.get("/theme.css")
+
+    assert "project theme marker" in r.text
+
+
+def test_project_theme_without_a_script_serves_an_empty_one(tmp_path):
+    theme = make_theme_dir(tmp_path / "my-theme", script=False)
+
+    with Context(namespaces=set()) as ctx:
+        client = TestClient(UiServer(ctx, "proj", theme=str(theme))._app)
+        r = client.get("/theme.js")
+
+    assert r.status_code == 200
+    assert r.text == ""
+
+
+def test_missing_project_theme_directory_raises_value_error(tmp_path):
+    with pytest.raises(ValueError, match="UI theme directory .* does not exist"):
+        themes.theme_dir(str(tmp_path / "nowhere"))
+
+
+def test_project_theme_missing_a_required_file_raises_value_error(tmp_path):
+    theme = make_theme_dir(tmp_path / "my-theme")
+    (theme / "favicon.svg").unlink()
+
+    with pytest.raises(ValueError, match="missing required file 'favicon.svg'"):
+        themes.theme_dir(str(theme))
+
+
+def test_built_in_theme_name_wins_over_a_same_named_directory(tmp_path, monkeypatch):
+    make_theme_dir(tmp_path / "default")
+    monkeypatch.chdir(tmp_path)
+
+    assert themes.theme_dir("default") == themes.STATIC_DIR / "themes" / "default"
+
+
+def test_unknown_theme_error_mentions_theme_paths():
+    with pytest.raises(ValueError, match='path to a theme directory such as "./my-theme"'):
+        themes.theme_dir("bogus")
+
+
 def test_list_themes_finds_the_built_in_default_theme():
     assert "default" in themes.list_themes()
 

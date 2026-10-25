@@ -103,7 +103,8 @@ class UiServer:
             (the default) keeps the built-in ``"ODF"`` label. Distinct from
             ``project`` — that's the specific project being visualized;
             this is the product/tool name wrapping around it.
-        theme: Name of the UI theme (visual file-set) to serve — see
+        theme: Name of the UI theme (visual file-set) to serve, or a path to
+            a theme directory of the project's own — see
             ``odf.ui.themes``. Defaults to ``"default"``. Orthogonal to the
             UI's own client-side light/dark color-mode toggle, which each
             theme keeps working independently.

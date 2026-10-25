@@ -150,8 +150,13 @@ class Server:
             ui_port: Port for the UI server to bind to.
             theme: Which UI theme (visual file-set) to serve —
                 orthogonal to the UI's own client-side light/dark
-                color-mode toggle. An explicit value here wins; otherwise
-                falls back to ``[ui] theme`` in config, then ``"default"``.
+                color-mode toggle. A built-in theme's name, or a path to a
+                theme directory of the project's own (``"./my-theme"``,
+                relative to the current working directory) holding a
+                ``theme.css``, a ``favicon.svg`` and optionally a
+                ``theme.js`` (see ``odf.ui.themes``). An explicit value here
+                wins; otherwise falls back to ``[ui] theme`` in config, then
+                ``"default"``.
             mcp: If ``True``, also start an optional MCP server (backgrounded,
                 like any ``Service``) exposing the same actions available in
                 the UI — component start/stop, task/pipeline execution, log
@@ -185,8 +190,9 @@ class Server:
             ValueError: If a circular dependency is detected, if
                 ``chat=True`` is passed without ``ui=True``, if
                 ``theme``/``[ui] theme`` names a UI theme that doesn't
-                exist, if ``[ui.topology]`` has an unknown key or a value
-                of the wrong type, if ``[ui] notebooks`` isn't a boolean, or
+                exist or a theme directory missing a required file, if
+                ``[ui.topology]`` has an unknown key or a value of the wrong
+                type, if ``[ui] notebooks`` isn't a boolean, or
                 if ``[ui] grid`` isn't ``"iso"`` or ``"flat"``.
             ImportError: If ``ui=True``/``mcp=True``/``chat=True`` but the
                 corresponding extra is not installed, or if ``[ui] notebooks

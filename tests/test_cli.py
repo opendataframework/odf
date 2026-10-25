@@ -134,6 +134,15 @@ def test_run_passes_theme_flag_through_to_start(tmp_path, monkeypatch, fake_proj
     assert FakeServer.instances[0].started_with["theme"] == "default"
 
 
+def test_run_passes_theme_path_through_to_start(tmp_path, monkeypatch, fake_project):
+    make_project_dir(tmp_path, monkeypatch)
+
+    result = runner.invoke(cli.app, ["run", "--theme", "./my-theme"])
+
+    assert result.exit_code == 0, result.output
+    assert FakeServer.instances[0].started_with["theme"] == "./my-theme"
+
+
 def test_run_reports_unknown_theme_as_clean_error(tmp_path, monkeypatch):
     make_project_dir(tmp_path, monkeypatch)
 

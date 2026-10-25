@@ -4,6 +4,12 @@
 
 ### Added
 
+- **UI**: a project can ship its own theme: `[ui] theme`, `odf run --theme` and
+  `server.start(theme=...)` take a path to a theme directory (`"./my-theme"`, relative to
+  the working directory) as well as a built-in theme's name. The directory holds a
+  `theme.css` and a `favicon.svg`, plus an optional `theme.js` that sets the icon look
+  through `ODF.registerTheme()`, the same files as a built-in theme. See
+  [UI](ui.md#custom-themes).
 - **UI**: `[ui] grid = "flat"` in `config.toml` draws the topology as a flat, top-down
   schematic instead of the isometric grid: faint dots where nodes snap, and every node the
   same rounded square in its type's color, for large topologies. Node positions are shared

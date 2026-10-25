@@ -281,6 +281,32 @@ as a gradient spanning the whole icon, with
 such as a shadow, with `groundShadow(x, y, e, accent, lit)`, where `e` is the
 icon's registry entry (its `widthExtent` and `scale` give the footprint).
 
+### Custom themes
+
+A project can bring its own theme by giving `[ui] theme` (or `--theme` /
+`theme=`) a path to a directory instead of a name:
+
+```toml
+[ui]
+theme = "./my-theme"
+```
+
+The value counts as a path when it contains a `/` or `\`, or starts with `.`
+or `~`. A built-in theme's name always selects that built-in theme. A relative
+path is resolved against the working directory, like `[ui] favicon` and
+`[ui] logo`. The directory holds the same files as a built-in theme:
+
+| File | Required | Contents |
+|---|---|---|
+| `theme.css` | yes | The whole stylesheet. Themes share no styles, so it has to style everything |
+| `favicon.svg` | yes | The theme's favicon (`[ui] favicon` still overrides it) |
+| `theme.js` | no | Canvas styling through `ODF.registerTheme()`, as described above |
+
+The easiest start is to copy a built-in theme, such as
+[`themes/default/`](https://github.com/opendataframework/odf/tree/main/src/odf/ui/static/themes/default),
+and edit it. A missing directory or required file raises a `ValueError` at
+start.
+
 A node's icon and color can be changed from its "Customize" popover, which
 lists the built-in isometric icons by group (devices, buildings, charts,
 research, ML, shop). Icons and colors can be extended beyond the built-in
@@ -300,7 +326,7 @@ Every key `odf` reads from `config.toml`:
 
 | Key | Default | Description |
 |---|---|---|
-| `[ui] theme` | `"default"` | UI theme; `--theme` / `theme=` override it |
+| `[ui] theme` | `"default"` | UI theme name, or a path to a theme directory (see [Custom themes](#custom-themes)); `--theme` / `theme=` override it |
 | `[ui] grid` | `"iso"` | Topology grid: `"iso"` or `"flat"` (see [Flat grid](#flat-grid)); any other value raises a `ValueError` |
 | `[ui] icon-scripts` | `[]` | `.js` files registering extra icons |
 | `[ui.colors]` | — | Named color swatches added to the color picker |

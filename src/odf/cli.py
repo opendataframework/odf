@@ -280,8 +280,9 @@ def run(
         None,
         "--theme",
         help=(
-            "UI theme (visual file-set) to serve. Defaults to config.toml's "
-            '[ui] theme, or "default".'
+            "UI theme (visual file-set) to serve: a built-in theme's name, or a "
+            'path to a theme directory such as "./my-theme". Defaults to '
+            'config.toml\'s [ui] theme, or "default".'
         ),
     ),
     mcp: bool = typer.Option(False, help="Start the MCP server."),
