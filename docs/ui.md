@@ -181,8 +181,9 @@ the UI. The browser never reaches that port: the UI forwards `/proxy/jupyter/`
 to Jupyter, HTTP and WebSockets, so the editor is served on the UI's own
 address, and Jupyter is never exposed on the network, whatever host the UI
 binds to. Kernels' traffic to Jupyter is encrypted (CurveZMQ) when pyzmq and
-the kernel support it, as they do with `odf[notebook]`'s Python kernel. Kernels start in the directory `odf run` was started from, so a cell
-can `import app` or open `data/...` the same way the project does.
+the kernel support it, as they do with `odf[notebook]`'s Python kernel.
+Kernels start in the directory `odf run` was started from, so a cell can
+`import app` or open `data/...` the same way the project does.
 
 Jupyter reads and saves each notebook through the repository, as
 `PUT /api/repositories/{name}/records/{key}/media`, which calls `save()` with
@@ -301,7 +302,7 @@ path is resolved against the working directory, like `[ui] favicon` and
 | File | Required | Contents |
 |---|---|---|
 | `theme.css` | yes | The whole stylesheet. Themes share no styles, so it has to style everything |
-| `favicon.svg` | yes | The theme's favicon (`[ui] favicon` still overrides it) |
+| `favicon.svg` | yes | The theme's favicon, also shown as the header mark next to the brand (`[ui] favicon` still overrides it) |
 | `theme.js` | no | Canvas styling through `ODF.registerTheme()`, as described above |
 
 The easiest start is to copy a built-in theme, such as
@@ -336,7 +337,8 @@ research, ML, shop). Icons and colors can be extended beyond the built-in
 set via `[ui] icon-scripts` / `[ui.colors]` in config, or by packages
 registering into `odf.ui.extensions`. The favicon, header logo, and "ODF" brand
 label can likewise be overridden with `[ui] favicon` / `[ui] logo` /
-`[ui] brand`. A custom icon drawn with `ODF.iconKit`'s solids (`block`,
+`[ui] brand`. The header logo is the favicon unless `[ui] logo` is set, so
+`[ui] favicon` alone replaces both. A custom icon drawn with `ODF.iconKit`'s solids (`block`,
 `stepped`, `gable`, `wedge`, `cylinder`) or with `paintFace()` takes on each
 theme's icon look; details drawn on a solid's wall inside `iconKit.onFace()`
 use the theme's face ink (`faceInk(accent)`), so they stay visible on opaque
@@ -353,7 +355,7 @@ Every key `odf` reads from `config.toml`:
 | `[ui] grid` | `"iso"` | Topology grid: `"iso"` or `"flat"` (see [Flat grid](#flat-grid)); any other value raises a `ValueError` |
 | `[ui] icon-scripts` | `[]` | `.js` files registering extra icons |
 | `[ui.colors]` | — | Named color swatches added to the color picker |
-| `[ui] favicon`, `[ui] logo` | built-in | Image files replacing the favicon and header logo |
+| `[ui] favicon`, `[ui] logo` | built-in | Image files replacing the favicon (also the header logo) and the header logo alone |
 | `[ui] brand` | `"ODF"` | Brand label in the header |
 | `[ui] annotations` | `true` | Allow labelling data in the views |
 | `[ui] notebooks` | `true` if `notebook` is installed | Edit notebooks in the document view with Jupyter (see [Notebooks](#notebooks)); `true` without `notebook` installed raises an `ImportError` |
