@@ -39,8 +39,9 @@ picker alongside the 12 built-in ones.
 `layout.json` is what actually assigns the icon/color to `Beacons`,
 rather than leaving that to a manual click. It's the same file the UI
 itself writes to (via `PUT /api/layout`) whenever you drag a node or pick
-a new icon/color — `{"beacons": {"col": 0, "row": 0, "icon": "lighthouse",
-"color": "#f2c14e"}}` here just pre-seeds that persisted state, so the
+a new icon/color — `{"repository.beacons": {"col": 0, "row": 0, "icon":
+"lighthouse", "color": "#f2c14e"}}` here just pre-seeds that persisted
+state, keyed by the node's id (its `<namespace>.<name>` key), so the
 node already renders with the lighthouse tower and amber tint on first
 load. `col`/`row` still have to be given even though they don't move
 anything here — they're only useful if you delete this file and see where

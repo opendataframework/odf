@@ -1,6 +1,10 @@
+import json
+
 from app.entities import Beacon
 from app.repositories import Beacons
 from opendataframework.view import DataViewProtocol
+
+from examples.custom_icon.conftest import EXAMPLE_DIR
 
 # Deliberately builds Beacons directly rather than going through Project/
 # Context — same reason as the other examples' tests, see
@@ -45,3 +49,9 @@ def test_beacons_implements_no_data_view():
     beacons = Beacons()
 
     assert not isinstance(beacons, DataViewProtocol)
+
+
+def test_layout_is_keyed_by_the_beacons_node_id():
+    layout = json.loads((EXAMPLE_DIR / "layout.json").read_text())
+
+    assert layout["repository.beacons"]["icon"] == "lighthouse"
