@@ -95,7 +95,7 @@ function resize() {
 // on every toggle.
 
 let BG_CANVAS, TILE_FILL, TILE_STROKE, WIRE, WIRE_GLOW;
-let LABEL_BG_RGB, LABEL_BG_ALPHA, VIGNETTE_RGB, VIGNETTE_ALPHA;
+let LABEL_BG_RGB, LABEL_BG_ALPHA, LABEL_SHADOW, VIGNETTE_RGB, VIGNETTE_ALPHA;
 let TEXT_MUTED, TITLE_ACCENT;
 
 function readTheme() {
@@ -108,6 +108,7 @@ function readTheme() {
   BG_CANVAS      = v('--bg-canvas');
   TILE_FILL      = v('--tile-fill');
   TILE_STROKE    = v('--tile-stroke');
+  LABEL_SHADOW   = v('--label-shadow') || TILE_STROKE;
   WIRE           = v('--wire');
   WIRE_GLOW      = v('--wire-glow');
   LABEL_BG_RGB   = v('--label-bg-rgb');
@@ -138,8 +139,8 @@ const THEME_STYLE = {
   labelBold: true,
   // Alpha of a label while its node isn't lit.
   labelAlpha: 0.45,
-  // A hard one-pixel drop shadow in the tile-stroke color under label text,
-  // so it reads over busy tiles.
+  // A hard one-pixel drop shadow under label text, so it reads over busy
+  // tiles, in `--label-shadow` (the tile-stroke color when unset).
   labelShadow: false,
   // Labels and run badges keep `labelSize` at any zoom and land on whole
   // canvas pixels, so a pixel font at a coarse pixelSize stays crisp. Pick a
@@ -1237,7 +1238,7 @@ function drawLabel(node, sx, sy, lit) {
   if (THEME_STYLE.labelShadow) {
     const shadowBlur = ctx.shadowBlur;
     ctx.shadowBlur = 0;
-    ctx.fillStyle = lit ? TILE_STROKE : rgba(TILE_STROKE, alpha);
+    ctx.fillStyle = lit ? LABEL_SHADOW : rgba(LABEL_SHADOW, alpha);
     ctx.fillText(text, tx + (s.pixel || 1), ty + (s.pixel || 1));
     ctx.shadowBlur = shadowBlur;
   }

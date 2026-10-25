@@ -322,7 +322,8 @@ badges on whole canvas pixels, so a pixel font stays crisp. Pick a
 `labelSize` at which one of the font's pixels is one canvas pixel. Three more
 knobs help labels read over busy tiles: `labelAlpha` (the opacity of a label
 whose node isn't hovered or selected, default `0.45`), `labelShadow: true`
-(a hard one-pixel drop shadow in the tile-stroke color) and
+(a hard one-pixel drop shadow in the theme's `--label-shadow` color, or its
+`--tile-stroke` color when that's unset) and
 `labelBold: false` (no bold for lit labels, for a font without a bold face,
 since a synthesized bold smears it). See
 [`examples/24-custom-theme`](https://github.com/opendataframework/odf/tree/main/examples/24-custom-theme),

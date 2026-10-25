@@ -53,6 +53,7 @@
   --wire-glow: #5a6fb0;
   --tile-fill: #1d2b53;
   --tile-stroke: #2f3f73;
+  --label-shadow: #0f1226;
   --label-bg-rgb: 15,18,38;
   --label-bg-alpha: 0.95;
   --vignette-rgb: 0,0,0;
@@ -98,6 +99,7 @@
   --wire-glow: #4d533c;
   --tile-fill: #d6dfb4;
   --tile-stroke: #a4ae84;
+  --label-shadow: #eef3d6;
   --label-bg-rgb: 214,223,180;
   --label-bg-alpha: 0.95;
   --vignette-rgb: 31,31,31;

@@ -52,7 +52,8 @@ per 2×2 CSS pixels, and `theme.css` sets `image-rendering: pixelated` on
 sets `labelFont` to Silkscreen and `labelSize` to 16. Silkscreen is drawn on
 an 8px grid, so 16 CSS pixels land on exactly 8 canvas pixels. `labelSnap`
 keeps them there: labels keep their size at any zoom and sit on whole canvas
-pixels, so they stay crisp. `labelShadow` adds an ink drop shadow and
+pixels, so they stay crisp. `labelShadow` adds a drop shadow in
+`theme.css`'s `--label-shadow` (ink by night, a pale green by day) and
 `labelAlpha` raises unlit labels' opacity, so they read over the tiles. The
 rest of `theme.js` makes
 icons flat three-tone sprites outlined in ink, turns off every glow, and
