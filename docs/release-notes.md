@@ -21,7 +21,8 @@
   neobrutalist one.
 - **UI**: `[ui] grid = "flat"` in `config.toml` draws the topology as a flat, top-down
   schematic instead of the isometric grid: faint dots where nodes snap, and every node a
-  rounded square in its type's color with its type's glyph, for large topologies. Node
+  rounded square in its type's color with its type's glyph and its label on a faint chip,
+  for large topologies. Node
   positions and colors are shared by both grids. **Customize** picks a flat glyph, saved as
   `flatIcon` apart from the isometric icon. See [UI](ui.md#flat-grid) and the
   [`25-flat-grid`](https://github.com/opendataframework/odf/tree/main/examples/25-flat-grid)

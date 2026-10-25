@@ -206,6 +206,8 @@
       sw: ['↓', 'Add cells (bottom edge)'],
       se: ['→', 'Add cells (right edge)'],
     },
+    // A label often runs past its cell, so it always sits on a chip.
+    labelChip: true,
     icons: GLYPHS,
     iconField: 'flatIcon',
     drawSwatch(key, x, y, accent) {

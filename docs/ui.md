@@ -37,7 +37,9 @@ the isometric grid: square cells marked by a faint dot where a node snaps, and
 every node a rounded square in its type's color with that type's glyph on it
 (sliders for config, a package for a component, a rack for a repository, and so
 on), which keeps a large topology readable. Columns run right and rows down, so
-a node keeps its cell in both grids and switching never moves anything.
+a node keeps its cell in both grids and switching never moves anything. Each
+label sits on a faint chip in the theme's label colors, brighter when hovered, so
+a long name running past its cell stays readable.
 
 **Customize** on the flat grid picks one of the flat glyphs (the type defaults
 plus a few symbols: database, cloud, bolt, star, flag, lock, user, chart) and a

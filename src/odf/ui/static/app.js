@@ -482,6 +482,8 @@ function isoInverse(x, y) {
 //                like gridExpand
 // customizable — whether a node's icon and color can be changed; when
 //                false, Customize is hidden and nodes take their type colors
+// labelChip    — whether a node's label sits on a chip while not lit too (a
+//                fainter one than a lit label's); off when unset
 // icons        — the registry Customize's Shape section lists, keyed like
 //                ICONS ({label, group} per entry) with one entry per exec
 //                type as its default
@@ -1213,16 +1215,20 @@ function drawLabel(node, sx, sy, lit) {
   // When snapping, the baseline sits on a whole pixel, where 'bottom' would.
   const ty = s.pixel ? s.px(ly - m.fontBoundingBoxDescent) : ly;
 
+  // An unlit label on a chip (GRID.labelChip) has the chip to set it apart
+  // from the grid, so it can be brighter than bare text.
+  const chip = lit || GRID.labelChip;
+  const alpha = chip ? Math.max(THEME_STYLE.labelAlpha, 0.8) : THEME_STYLE.labelAlpha;
   let tw = 0, chipLeft = 0;
-  if (lit) {
+  if (chip) {
     tw = s.px(textW + 12);
     chipLeft = tx - s.px(6);
     ctx.fillStyle   = `rgba(${LABEL_BG_RGB},${LABEL_BG_ALPHA})`;
-    ctx.strokeStyle = rgba(accent, 0.55);
+    ctx.strokeStyle = rgba(accent, lit ? 0.55 : 0.2);
     ctx.lineWidth   = 0.8;
     labelChip(s, chipLeft, chipTop, tw, s.px(size + 5.5));
     // A glow would blur snapped text.
-    if (!s.pixel) {
+    if (lit && !s.pixel) {
       ctx.shadowColor = accent;
       ctx.shadowBlur  = 6;
     }
@@ -1231,11 +1237,11 @@ function drawLabel(node, sx, sy, lit) {
   if (THEME_STYLE.labelShadow) {
     const shadowBlur = ctx.shadowBlur;
     ctx.shadowBlur = 0;
-    ctx.fillStyle = lit ? TILE_STROKE : rgba(TILE_STROKE, THEME_STYLE.labelAlpha);
+    ctx.fillStyle = lit ? TILE_STROKE : rgba(TILE_STROKE, alpha);
     ctx.fillText(text, tx + (s.pixel || 1), ty + (s.pixel || 1));
     ctx.shadowBlur = shadowBlur;
   }
-  ctx.fillStyle = lit ? accent : rgba(accent, THEME_STYLE.labelAlpha);
+  ctx.fillStyle = lit ? accent : rgba(accent, alpha);
   ctx.fillText(text, tx, ty);
 
   // Layer badge — a small dot pinned to the label chip's corner, shown only
@@ -1353,13 +1359,17 @@ function render() {
     GRID.drawNode(node, x, y, lit);
   }
 
-  // 4 — Labels (always on top)
-  for (const node of byDepth) {
-    const {x, y} = gridPos(node.col, node.row);
-    if (x < viewL || x > viewR || y < viewT || y > viewB) continue;
-    const lit = node.id === hoverId || node.id === selectId || node === dragNode;
-    drawLabel(node, x, y, lit);
-    if (nodeRun[node.id]) drawRunBadge(node, x, y, nodeRun[node.id]);
+  // 4 — Labels (always on top), lit ones last so a neighbour's label chip
+  // never covers them
+  for (const pass of [false, true]) {
+    for (const node of byDepth) {
+      const {x, y} = gridPos(node.col, node.row);
+      if (x < viewL || x > viewR || y < viewT || y > viewB) continue;
+      const lit = node.id === hoverId || node.id === selectId || node === dragNode;
+      if (lit !== pass) continue;
+      drawLabel(node, x, y, lit);
+      if (nodeRun[node.id]) drawRunBadge(node, x, y, nodeRun[node.id]);
+    }
   }
 
   // 5 — Vignette (fixed to the viewport, unaffected by pan/zoom)

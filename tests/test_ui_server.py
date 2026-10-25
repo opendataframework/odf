@@ -2400,6 +2400,14 @@ def test_flat_grid_has_a_glyph_per_exec_type_saved_as_flat_icon():
     assert "customizable: false" not in script
 
 
+def test_flat_grid_puts_every_label_on_a_chip():
+    script = (themes.STATIC_DIR / "grids" / "flat.js").read_text()
+    app = (themes.STATIC_DIR / "app.js").read_text()
+
+    assert "labelChip: true" in script
+    assert "GRID.labelChip" in app
+
+
 def test_icon_group_scripts_register_unique_keys():
     keys = []
     for name in ICON_SCRIPTS:
