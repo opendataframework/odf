@@ -39,7 +39,7 @@ poetry run odf run
 ```
 
 Requires Python >=3.14, managed with Poetry. `pyproject.toml` depends on
-`opendataframework (>=0.3.0,<0.4.0)` by version, resolved from PyPI. When
+`opendataframework (>=0.4.0,<0.5.0)` by version, resolved from PyPI. When
 developing both repos side by side against unreleased `opendataframework`
 changes, temporarily override the dependency to a local path/git source —
 and revert that override (and regenerate `poetry.lock`) before releasing a

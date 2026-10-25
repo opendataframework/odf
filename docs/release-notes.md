@@ -89,6 +89,8 @@
 
 ### Changed
 
+- **Deps**: requires `opendataframework >=0.4.0,<0.5.0`, which the grouped timeseries
+  view and the run activity above build on.
 - **UI**: every built-in theme shows its favicon as the header mark next to "ODF". The
   `default` theme's logo is the pixel tile of the docs site in neutral grays, and the
   `emerald` and `onyx` themes share a rounded tile of stacked layers in each theme's
