@@ -2207,49 +2207,6 @@ def test_theme_can_replace_empty_tile_drawing():
     assert "THEME_STYLE.emptyTile(sx, sy)" in script
 
 
-def test_list_themes_finds_the_built_in_ledger_theme():
-    assert "ledger" in themes.list_themes()
-
-
-def test_serves_ledger_theme_files():
-    with Context(namespaces=set()) as ctx:
-        client = TestClient(UiServer(ctx, "proj", theme="ledger")._app)
-        responses = {path: client.get(path) for path in ("/theme.css", "/theme.js", "/favicon.svg")}
-
-    for path, r in responses.items():
-        assert r.status_code == 200, path
-    assert "ODF.registerTheme(" in responses["/theme.js"].text
-
-
-def test_list_themes_finds_the_built_in_clay_theme():
-    assert "clay" in themes.list_themes()
-
-
-def test_serves_clay_theme_files():
-    with Context(namespaces=set()) as ctx:
-        client = TestClient(UiServer(ctx, "proj", theme="clay")._app)
-        responses = {path: client.get(path) for path in ("/theme.css", "/theme.js", "/favicon.svg")}
-
-    for path, r in responses.items():
-        assert r.status_code == 200, path
-    assert "groundShadow(x, y, e, accent, lit)" in responses["/theme.js"].text
-
-
-def test_list_themes_finds_the_built_in_workbench_theme():
-    assert "workbench" in themes.list_themes()
-
-
-def test_serves_workbench_theme_files():
-    with Context(namespaces=set()) as ctx:
-        client = TestClient(UiServer(ctx, "proj", theme="workbench")._app)
-        responses = {path: client.get(path) for path in ("/theme.css", "/theme.js", "/favicon.svg")}
-
-    for path, r in responses.items():
-        assert r.status_code == 200, path
-    assert "--syn-key" in responses["/theme.css"].text
-    assert "emptyTile(sx, sy)" in responses["/theme.js"].text
-
-
 def test_theme_can_draw_a_ground_shadow_under_icons():
     script = (themes.STATIC_DIR / "app.js").read_text()
 

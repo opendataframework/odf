@@ -254,8 +254,7 @@ and
 
 ## Themes, icons and branding
 
-The UI ships eight themes: `default`, `glitch`, `neo`, `emerald`, `onyx`,
-`ledger`, `clay` and `workbench`.
+The UI ships five themes: `default`, `glitch`, `neo`, `emerald` and `onyx`.
 Pick one with `odf run --theme <name>`, `server.start(theme=...)`, or
 `[ui] theme` in config. A theme only restyles the UI; markup and behavior are
 the same in every theme. An unknown theme name raises a `ValueError` at start.
@@ -263,11 +262,8 @@ the same in every theme. An unknown theme name raises a `ValueError` at start.
 Each theme also has its own icon look: `default` keeps thin outlines over
 faint faces, `emerald` tints faces more strongly with a soft shadow under a
 lit icon, `glitch` draws near-black solids with bright edges, `neo` flat
-solid faces in three tones outlined in ink, `onyx` tonal solids with no
-outlines at all, `ledger` flat silhouettes outlined in ink,
-with nothing glowing, on a hairline grid, `clay` matte solids lit from
-the top-left, each standing on a soft contact shadow, and `workbench` flat solids in syntax colors
-outlined in ink, with nothing glowing, on a hairline grid. A theme's `theme.js` sets this through
+solid faces in three tones outlined in ink, and `onyx` tonal solids with no
+outlines at all. A theme's `theme.js` sets this through
 `ODF.registerTheme({ faces: {...} })`, whose knobs are listed on
 `THEME_STYLE.faces` in `app.js`. It can also replace how empty grid tiles are
 drawn with `emptyTile(sx, sy)`, and fill opaque faces with its own style, such
@@ -312,10 +308,11 @@ labels drawn on the canvas get hard to read, so a theme can also set
 `labelFont` (a CSS font family) and `labelSize` (in CSS pixels, default
 `9.5`) for them, such as a pixel font at a size it was designed for. See
 [`examples/24-custom-theme`](https://github.com/opendataframework/odf/tree/main/examples/24-custom-theme),
-which ships seven themes in its own directories: a pixel-art one in
+which ships ten themes in its own directories: a pixel-art one in
 `pixel-theme/`, a late-90s theme-park one in `park-theme/`, a 1980s
 neon-coast one in `neon-theme/`, and `terminal-theme/`, `y2k-theme/`,
-`meadow-theme/` and `beacon-theme/`. Only the first two set `pixelSize`.
+`meadow-theme/`, `beacon-theme/`, `ledger-theme/`, `clay-theme/` and
+`workbench-theme/`. Only the first two set `pixelSize`.
 
 A node's icon and color can be changed from its "Customize" popover, which
 lists the built-in isometric icons by group (devices, buildings, charts,

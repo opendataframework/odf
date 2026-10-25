@@ -13,9 +13,9 @@
   and `labelFont`/`labelSize` to keep the node labels drawn on it legible.
   See [UI](ui.md#custom-themes) and the
   [`24-custom-theme`](https://github.com/opendataframework/odf/tree/main/examples/24-custom-theme)
-  example, which ships seven: a pixel-art theme, a late-90s theme-park one, a 1980s
-  neon-coast one, a green-phosphor terminal, liquid-chrome y2k, a sunny meadow and a
-  tactical-map beacon.
+  example, which ships ten: a pixel-art theme, a late-90s theme-park one, a 1980s
+  neon-coast one, a green-phosphor terminal, liquid-chrome y2k, a sunny meadow, a
+  tactical-map beacon, a utility-first ledger, matte clay and a code-editor workbench.
 - **UI**: `[ui] grid = "flat"` in `config.toml` draws the topology as a flat, top-down
   schematic instead of the isometric grid: faint dots where nodes snap, and every node the
   same rounded square in its type's color, for large topologies. Node positions are shared
@@ -67,33 +67,10 @@
   new `GET /api/events` streams every protocol call as server-sent events. Requires
   `opendataframework` 0.4.0. See [UI](ui.md#run-activity).
 - **UI**: a theme's `theme.js` can replace how empty grid tiles are drawn with
-  `ODF.registerTheme({ emptyTile })`, and fill opaque icon faces its own way, such as a
-  gradient spanning the whole icon, with `ODF.registerTheme({ faceFill })`. See
+  `ODF.registerTheme({ emptyTile })`, fill opaque icon faces its own way, such as a
+  gradient spanning the whole icon, with `ODF.registerTheme({ faceFill })`, and draw on
+  the floor under each icon with `ODF.registerTheme({ groundShadow })`. See
   [UI](ui.md#themes-icons-and-branding).
-- **UI**: `ledger` theme, utility-first: square corners and hairline rules, surfaces
-  told apart by tone over near-black in dark mode and white paper in light mode, dense
-  striped tables with aligned numbers and a header that stays in view, and a visible
-  focus ring everywhere. Kind colors are muted and one blue marks focus and selection,
-  so run states are what stands out. The topology draws icons as flat silhouettes
-  outlined in ink on a hairline grid, with no glows. Select it with
-  `odf run --theme ledger` or `[ui] theme = "ledger"` in `config.toml`. See
-  [UI](ui.md#themes-icons-and-branding).
-- **UI**: `clay` theme, graphic realism: matte surfaces under one soft key light,
-  raised cards and buttons on layered shadows that press in when clicked, recessed
-  fields, and a faint film grain, over graphite in dark mode and warm grey in light
-  mode. The topology draws icons as matte painted solids lit from the top-left, darker
-  toward the floor, each on a soft contact shadow that spreads out when the icon lifts
-  on hover. Select it with `odf run --theme clay` or `[ui] theme = "clay"` in
-  `config.toml`. Themes can now draw on the floor under each icon with
-  `ODF.registerTheme({ groundShadow })`. See [UI](ui.md#themes-icons-and-branding).
-- **UI**: `workbench` theme, a code editor's look: charcoal panes butting on hairlines
-  around a lighter canvas, a side rail styled as an activity bar, list selections and a
-  1px focus ring in one blue, filled blue primary buttons, the system UI face for the
-  chrome and a coding mono for values, and JSON in syntax colors. Kind and layer colors
-  come from the same syntax palette, on charcoal in dark mode and white in light mode.
-  The topology draws icons as flat solids outlined in ink on a hairline grid, with no
-  glows. Select it with `odf run --theme workbench` or `[ui] theme = "workbench"` in
-  `config.toml`. See [UI](ui.md#themes-icons-and-branding).
 - **Examples**: [`23-reverse-proxy`](https://github.com/opendataframework/odf/tree/main/examples/23-reverse-proxy)
   deploys a project with `docker compose up`: `odf run` in one container with its ports
   exposed only to the compose network, and Traefik in front of it with HTTPS (a

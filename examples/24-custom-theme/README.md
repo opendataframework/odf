@@ -2,11 +2,12 @@
 
 A plain `HighScores` repository and a `Tally` task, shown in UI themes
 that this project ships itself instead of one of `odf`'s built-in themes.
-It ships seven: "Arcade" in `pixel-theme/`, selected by `config.toml`, a
+It ships ten: "Arcade" in `pixel-theme/`, selected by `config.toml`, a
 late-90s theme park in `park-theme/` (see [A second theme](#a-second-theme)),
 a 1980s neon coast in `neon-theme/` (see [A third theme](#a-third-theme)),
-and four more in `terminal-theme/`, `y2k-theme/`, `meadow-theme/` and
-`beacon-theme/` (see [Four more themes](#four-more-themes)).
+and seven more in `terminal-theme/`, `y2k-theme/`, `meadow-theme/`,
+`beacon-theme/`, `ledger-theme/`, `clay-theme/` and `workbench-theme/`
+(see [More themes](#more-themes)).
 Arcade is pixel art. It uses a PICO-8 palette in dark mode and a
 Game Boy palette in light mode, with pixel fonts, square corners and hard
 offset shadows. The topology canvas is drawn at half resolution and scaled
@@ -115,7 +116,7 @@ Empty tiles are a checkered floor in `--tile-a` and `--tile-b`, edged in
 terrazzo. `onReadTheme(v)` also reads `--glow`, which scales every glow,
 so day mode keeps only a hint of it.
 
-## Four more themes
+## More themes
 
 Each of these is selected with `--theme` too, and none sets `pixelSize`:
 
@@ -125,6 +126,9 @@ Each of these is selected with `--theme` too, and none sets `pixelSize`:
 | Y2K | `odf run --theme ./y2k-theme` | Frosted glass panels, glossy pill buttons and iridescent edges, over midnight blue at night and brushed silver by day. Icons are liquid chrome, one reflection across each, filled by `faceFill(side, accent, lit, t, frame)` |
 | Meadow | `odf run --theme ./meadow-theme` | An open blue sky with drifting clouds (stars at dusk), a glossy title bar and rounded panels edged in sky blue. Icons are glossy solids on a lawn in diagonal stripes, each on a soft shadow from `groundShadow(x, y, e, accent, lit)` |
 | Beacon | `odf run --theme ./beacon-theme` | A tactical map: square slate panels framed by orange corner ticks, condensed uppercase labels and faint scanlines. Icons are translucent holograms over a grid of city blocks, each inside a segmented marker ring |
+| Ledger | `odf run --theme ./ledger-theme` | Utility-first: square corners and hairline rules, surfaces told apart by tone, dense striped tables and a visible focus ring, over near-black at night and white paper by day. Muted kind colors and one blue for focus. Icons are flat silhouettes outlined in ink on a hairline grid, with no glows |
+| Clay | `odf run --theme ./clay-theme` | Matte surfaces under one soft key light: raised cards and buttons that press in when clicked, recessed fields and a faint film grain, over graphite at night and warm grey by day. Icons are matte solids lit from the top-left, each on a soft contact shadow |
+| Workbench | `odf run --theme ./workbench-theme` | A code editor: charcoal panes on hairlines, a side rail styled as an activity bar, one blue for selection and focus, and JSON in syntax colors, which the kind and layer colors come from too. Icons are flat solids outlined in ink on a hairline grid |
 
 ## Structure
 
@@ -148,6 +152,9 @@ Each of these is selected with `--theme` too, and none sets `pixelSize`:
 ├── y2k-theme/           # selected with --theme ./y2k-theme
 ├── meadow-theme/        # selected with --theme ./meadow-theme
 ├── beacon-theme/        # selected with --theme ./beacon-theme
+├── ledger-theme/        # selected with --theme ./ledger-theme
+├── clay-theme/          # selected with --theme ./clay-theme
+├── workbench-theme/     # selected with --theme ./workbench-theme
 └── app/
     ├── __init__.py      # imports every module so decorators register at startup
     ├── entities.py      # Score(id, player, game, points) — @Entity
@@ -168,5 +175,5 @@ stand on the grid as chunky pixel sprites. Toggle light mode for the Game
 Boy greens. Run `odf run --theme ./park-theme` for the theme park, where
 both nodes stand on a checkered lawn joined by a footpath,
 `odf run --theme ./neon-theme` for the neon coast, where they glow in pink
-and cyan on a dark floor, any of the [four more themes](#four-more-themes),
+and cyan on a dark floor, any of the [more themes](#more-themes),
 or `odf run --theme default` to compare the same project in a built-in theme.
