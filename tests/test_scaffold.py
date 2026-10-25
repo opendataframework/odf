@@ -1,6 +1,8 @@
 import json
+import os
 import subprocess  # nosec B404 — runs this interpreter on a scaffolded project
 import sys
+from pathlib import Path
 
 import pytest
 
@@ -95,16 +97,23 @@ print(json.dumps({"best": best["run"], "folder": folder}))
 def test_ml_template_sweeps_and_exports_a_run_with_the_standard_library(tmp_path):
     target = tmp_path / "trainer"
     scaffold.copy_template("ml", target, "trainer")
+    # pytest's `pythonpath = ["src"]` doesn't reach the subprocess, and CI
+    # installs with `--no-root`, so point it at this checkout's `odf`.
+    src = str(Path(scaffold.__file__).parents[1])
+    env = os.environ | {
+        "PYTHONPATH": os.pathsep.join(filter(None, [src, os.environ.get("PYTHONPATH")]))
+    }
 
     result = subprocess.run(  # nosec B603 — fixed arguments, this interpreter
         [sys.executable, "-c", _SWEEP_AND_EXPORT],
         cwd=target,
+        env=env,
         capture_output=True,
         text=True,
-        check=True,
         timeout=25,
     )
 
+    assert result.returncode == 0, result.stderr
     out = json.loads(result.stdout.strip().splitlines()[-1])
     assert out["best"] == "lr=0.1"
     folder = target / out["folder"]
