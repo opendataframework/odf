@@ -316,8 +316,9 @@ labels drawn on the canvas get hard to read, so a theme can also set
 `labelFont` (a CSS font family) and `labelSize` (in CSS pixels, default
 `9.5`) for them, such as a pixel font at a size it was designed for. See
 [`examples/24-custom-theme`](https://github.com/opendataframework/odf/tree/main/examples/24-custom-theme),
-which ships two themes in its own directories: a pixel-art one in
-`pixel-theme/` and a late-90s theme-park one in `park-theme/`.
+which ships three themes in its own directories: a pixel-art one in
+`pixel-theme/`, a late-90s theme-park one in `park-theme/` and a 1980s
+neon-coast one in `neon-theme/`, the last without `pixelSize`.
 
 A node's icon and color can be changed from its "Customize" popover, which
 lists the built-in isometric icons by group (devices, buildings, charts,

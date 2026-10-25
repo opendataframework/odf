@@ -2,8 +2,9 @@
 
 A plain `HighScores` repository and a `Tally` task, shown in UI themes
 that this project ships itself instead of one of `odf`'s built-in themes.
-It ships two: "Arcade" in `pixel-theme/`, selected by `config.toml`, and a
-late-90s theme park in `park-theme/` (see [A second theme](#a-second-theme)).
+It ships three: "Arcade" in `pixel-theme/`, selected by `config.toml`, a
+late-90s theme park in `park-theme/` (see [A second theme](#a-second-theme))
+and a 1980s neon coast in `neon-theme/` (see [A third theme](#a-third-theme)).
 Arcade is pixel art. It uses a PICO-8 palette in dark mode and a
 Game Boy palette in light mode, with pixel fonts, square corners and hard
 offset shadows. The topology canvas is drawn at half resolution and scaled
@@ -81,6 +82,37 @@ tile by tile. `theme.js` reads those tones from the `--grass-a` and
 `--grass-b` custom properties in its `onReadTheme(v)` hook, which runs
 whenever the colors are read, so day and night each get their own lawn.
 
+## A third theme
+
+`neon-theme/` styles the project as a 1980s beach city at sunset:
+
+```bash
+odf run --theme ./neon-theme
+```
+
+Its `theme.css` started from the same `default` copy, and adds:
+
+- a sunset stripe along the top, gold into pink into violet
+- windows edged in pink neon tubing, which glows at night
+- buttons edged in cyan that light up on hover
+- a setting sun cut into bands in place of the brand mark
+- the brand and panel headings in Yellowtail, a pink script, over Rajdhani
+  for the UI and Share Tech Mono for data, logs and code
+
+Dark mode is the strip at night, in hot pink and cyan over a violet dusk.
+Light mode is the Art Deco front by day, in salmon, mint and turquoise.
+
+It is the one theme here that is not pixel art. Its `theme.js` sets no
+`pixelSize`, so the canvas stays at the screen's resolution and the glows
+stay smooth. Instead it turns the glow knobs the other two switch off up:
+`litShadow`, `runRingShadow` and `flowLine` all glow in the node's accent.
+Icons are drawn as neon tubing, bright outlines over a faint tint, and
+`groundShadow` lays a soft pool of each icon's light on the floor under it.
+Empty tiles are a checkered floor in `--tile-a` and `--tile-b`, edged in
+`--tile-grid`, so night gets a dark floor with a pink grid and day a pastel
+terrazzo. `onReadTheme(v)` also reads `--glow`, which scales every glow,
+so day mode keeps only a hint of it.
+
 ## Structure
 
 ```
@@ -95,6 +127,10 @@ whenever the colors are read, so day and night each get their own lawn.
 │   ├── theme.css        # bevels, title bars, day and night palettes
 │   ├── theme.js         # pixelSize, sprite faces, two-tone grass tiles
 │   └── favicon.svg      # 16×16 striped tent
+├── neon-theme/          # selected with --theme ./neon-theme
+│   ├── theme.css        # neon edges, sunset stripe, night and day palettes
+│   ├── theme.js         # no pixelSize: glows, light pools, checkered floor
+│   └── favicon.svg      # a palm against a setting sun
 └── app/
     ├── __init__.py      # imports every module so decorators register at startup
     ├── entities.py      # Score(id, player, game, points) — @Entity
@@ -113,5 +149,7 @@ Open the UI. The header reads "Arcade" in Silkscreen over a striped top
 bar, the browser tab shows the invader favicon, and `HighScores` and `Tally`
 stand on the grid as chunky pixel sprites. Toggle light mode for the Game
 Boy greens. Run `odf run --theme ./park-theme` for the theme park, where
-both nodes stand on a checkered lawn joined by a footpath, or
-`odf run --theme default` to compare the same project in a built-in theme.
+both nodes stand on a checkered lawn joined by a footpath,
+`odf run --theme ./neon-theme` for the neon coast, where they glow in pink
+and cyan on a dark floor, or `odf run --theme default` to compare the same
+project in a built-in theme.
