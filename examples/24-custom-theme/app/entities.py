@@ -7,17 +7,17 @@ from opendataframework import Entity
 
 @Entity
 @dataclass
-class Score:
-    """One finished game on the arcade's high score table.
+class Account:
+    """One customer account of a subscription product.
 
     Attributes:
-        id: Primary key, ``None`` until ``HighScores.save()`` assigns one.
-        player: The player's three-letter initials.
-        game: The cabinet the game was played on.
-        points: The final score.
+        id: Primary key, ``None`` until ``Accounts.save()`` assigns one.
+        name: The customer's company name.
+        plan: The subscription plan: ``"Free"``, ``"Pro"`` or ``"Enterprise"``.
+        mrr: Monthly recurring revenue, in whole dollars.
     """
 
     id: int | None
-    player: str
-    game: str
-    points: int
+    name: str
+    plan: str
+    mrr: int

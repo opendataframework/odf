@@ -327,11 +327,8 @@ whose node isn't hovered or selected, default `0.45`), `labelShadow: true`
 `labelBold: false` (no bold for lit labels, for a font without a bold face,
 since a synthesized bold smears it). See
 [`examples/24-custom-theme`](https://github.com/opendataframework/odf/tree/main/examples/24-custom-theme),
-which ships eleven themes in its own directories: a pixel-art one in
-`themes/pixel/`, a late-90s theme-park one in `themes/park/`, a 1980s
-neon-coast one in `themes/neon/`, and `themes/terminal/`, `themes/y2k/`,
-`themes/meadow/`, `themes/beacon/`, `themes/ledger/`, `themes/clay/`,
-`themes/workbench/` and `themes/brutalist/`. Only the first two set `pixelSize`.
+which ships a monochrome SaaS-dashboard theme of its own in `themes/mono/`,
+started from a copy of `emerald`.
 
 A node's icon and color can be changed from its "Customize" popover, which
 lists the built-in isometric icons by group (devices, buildings, charts,

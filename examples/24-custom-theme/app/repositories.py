@@ -2,64 +2,64 @@
 
 from opendataframework import Repository, Storage
 
-from app.entities import Score
+from app.entities import Account
 
-# (player, game, points): a few games to look at without hand-typing
-# records through the UI first.
-_SEED_SCORES: tuple[tuple[str, str, int], ...] = (
-    ("AAA", "Star Raiders", 48200),
-    ("JMP", "Star Raiders", 31750),
-    ("AAA", "Block Drop", 12900),
-    ("ZED", "Block Drop", 20400),
-    ("JMP", "Maze Muncher", 9850),
+# (name, plan, mrr): a few accounts to look at without hand-typing records
+# through the UI first.
+_SEED_ACCOUNTS: tuple[tuple[str, str, int], ...] = (
+    ("Northwind Labs", "Enterprise", 4800),
+    ("Brightline", "Pro", 490),
+    ("Kestrel Analytics", "Enterprise", 3200),
+    ("Fieldnote", "Free", 0),
+    ("Parallel Studio", "Pro", 290),
 )
 
 
 @Storage
-@Repository(Score)
-class HighScores:
-    """In-memory ``Score`` repository, pre-seeded with ``_SEED_SCORES``.
+@Repository(Account)
+class Accounts:
+    """In-memory ``Account`` repository, pre-seeded with ``_SEED_ACCOUNTS``.
 
     Implements no ``data_view()``. The concept this example isolates is the
-    project's own UI theme (see ``../themes/pixel/`` and this project's
+    project's own UI theme (see ``../themes/mono/`` and this project's
     ``config.toml``), so it renders as the same plain default table as
     ../01-table-view, in the theme's look.
     """
 
     def __init__(self) -> None:
-        """Seed the in-memory score list from ``_SEED_SCORES``."""
-        self._scores: list[Score] = [
-            Score(id=score_id, player=player, game=game, points=points)
-            for score_id, (player, game, points) in enumerate(_SEED_SCORES, start=1)
+        """Seed the in-memory account list from ``_SEED_ACCOUNTS``."""
+        self._accounts: list[Account] = [
+            Account(id=account_id, name=name, plan=plan, mrr=mrr)
+            for account_id, (name, plan, mrr) in enumerate(_SEED_ACCOUNTS, start=1)
         ]
-        self._next_id = len(self._scores) + 1
+        self._next_id = len(self._accounts) + 1
 
-    def all(self) -> list[Score]:
-        """Return every score."""
-        return list(self._scores)
+    def all(self) -> list[Account]:
+        """Return every account."""
+        return list(self._accounts)
 
-    def save(self, score: Score) -> None:
-        """Create or update a score.
+    def save(self, account: Account) -> None:
+        """Create or update an account.
 
         Args:
-            score: The score to persist. An unset ``id`` creates a new record
-                and has one assigned; a set ``id`` updates the matching
-                record in place.
+            account: The account to persist. An unset ``id`` creates a new
+                record and has one assigned; a set ``id`` updates the
+                matching record in place.
         """
-        if score.id is None:
-            score.id = self._next_id
+        if account.id is None:
+            account.id = self._next_id
             self._next_id += 1
-            self._scores.append(score)
+            self._accounts.append(account)
             return
-        for i, existing in enumerate(self._scores):
-            if existing.id == score.id:
-                self._scores[i] = score
+        for i, existing in enumerate(self._accounts):
+            if existing.id == account.id:
+                self._accounts[i] = account
                 return
 
-    def delete(self, score_id: int) -> None:
-        """Delete the score matching ``score_id``, if one exists.
+    def delete(self, account_id: int) -> None:
+        """Delete the account matching ``account_id``, if one exists.
 
         Args:
-            score_id: The ``id`` of the score to remove.
+            account_id: The ``id`` of the account to remove.
         """
-        self._scores = [s for s in self._scores if s.id != score_id]
+        self._accounts = [a for a in self._accounts if a.id != account_id]

@@ -16,10 +16,8 @@
   `labelBold` to make them read over busy tiles.
   See [UI](ui.md#custom-themes) and the
   [`24-custom-theme`](https://github.com/opendataframework/odf/tree/main/examples/24-custom-theme)
-  example, which ships eleven: a pixel-art theme, a late-90s theme-park one, a 1980s
-  neon-coast one, a green-phosphor terminal, liquid-chrome y2k, a sunny meadow, a
-  tactical-map beacon, a utility-first ledger, matte clay, a code-editor workbench and a
-  neobrutalist one.
+  example, which ships a monochrome SaaS-dashboard theme, white on black by night and
+  black on white by day.
 - **UI**: `[ui] grid = "flat"` in `config.toml` draws the topology as a flat, top-down
   schematic instead of the isometric grid: faint dots where nodes snap, and every node a
   rounded square in its type's color with its type's glyph and its label on a faint chip,
@@ -124,10 +122,9 @@
   uses `pbcopy`, `wl-copy`, `xclip`, `xsel` or `clip`, and skips the copy when none is
   installed. The URLs are also terminal links.
 - **UI**: the `neo` theme is no longer built in, so `[ui] theme = "neo"` raises a
-  `ValueError`. It lives on as `themes/brutalist/` in the
+  `ValueError`. A project can ship a theme of its own instead, as the
   [`24-custom-theme`](https://github.com/opendataframework/odf/tree/main/examples/24-custom-theme)
-  example: copy that directory into a project's `themes/` and select it with
-  `[ui] theme = "./themes/brutalist"`. `17-custom-icon` now uses `glitch`.
+  example does. `17-custom-icon` now uses `glitch`.
 - **Chat**: the default `[project.chat] model` is now `gpt-oss:20b` instead of `gpt-oss`.
   See [Chat](chat.md).
 

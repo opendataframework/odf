@@ -2,28 +2,28 @@
 
 from opendataframework import Task
 
-from app.repositories import HighScores
+from app.repositories import Accounts
 
 
 @Task
-class Tally:
-    """Totals every player's points across all games.
+class Revenue:
+    """Totals monthly recurring revenue per plan.
 
-    Gives the topology a second node, wired to ``HighScores``, so the
-    theme's icons and links have something to show.
+    Gives the topology a second node, wired to ``Accounts``, so the theme's
+    icons and links have something to show.
     """
 
-    def __init__(self, scores: HighScores) -> None:
-        """Wire up the score table to total.
+    def __init__(self, accounts: Accounts) -> None:
+        """Wire up the accounts to total.
 
         Args:
-            scores: The repository to read scores from.
+            accounts: The repository to read accounts from.
         """
-        self.scores = scores
+        self.accounts = accounts
 
     def execute(self) -> dict[str, int]:
-        """Return each player's total points, highest first."""
+        """Return each plan's total MRR, highest first."""
         totals: dict[str, int] = {}
-        for score in self.scores.all():
-            totals[score.player] = totals.get(score.player, 0) + score.points
+        for account in self.accounts.all():
+            totals[account.plan] = totals.get(account.plan, 0) + account.mrr
         return dict(sorted(totals.items(), key=lambda item: item[1], reverse=True))
