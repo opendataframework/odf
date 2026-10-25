@@ -68,6 +68,7 @@ THEMES = [
     "./ledger-theme",
     "./clay-theme",
     "./workbench-theme",
+    "./brutalist-theme",
 ]
 PIXEL_ART_THEMES = {"./pixel-theme", "./park-theme"}
 

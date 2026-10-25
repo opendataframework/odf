@@ -13,9 +13,10 @@
   and `labelFont`/`labelSize` to keep the node labels drawn on it legible.
   See [UI](ui.md#custom-themes) and the
   [`24-custom-theme`](https://github.com/opendataframework/odf/tree/main/examples/24-custom-theme)
-  example, which ships ten: a pixel-art theme, a late-90s theme-park one, a 1980s
+  example, which ships eleven: a pixel-art theme, a late-90s theme-park one, a 1980s
   neon-coast one, a green-phosphor terminal, liquid-chrome y2k, a sunny meadow, a
-  tactical-map beacon, a utility-first ledger, matte clay and a code-editor workbench.
+  tactical-map beacon, a utility-first ledger, matte clay, a code-editor workbench and a
+  neobrutalist one.
 - **UI**: `[ui] grid = "flat"` in `config.toml` draws the topology as a flat, top-down
   schematic instead of the isometric grid: faint dots where nodes snap, and every node the
   same rounded square in its type's color, for large topologies. Node positions are shared
@@ -98,8 +99,8 @@
   header, and the settings nginx and other proxies need by hand. See
   [UI](ui.md#deploying).
 - **UI**: each theme draws topology icons its own way instead of all as wireframes:
-  `emerald` as tinted glass, `glitch` as dark solids with bright edges, `neo` as flat
-  solid faces outlined in ink, `onyx` as tonal solids without outlines, while `default`
+  `emerald` as tinted glass, `glitch` as dark solids with bright edges, `onyx` as tonal
+  solids without outlines, while `default`
   keeps its outlines but hides the lines behind each icon. Icons within each group
   have more varied shapes and heights: a setback tower, pitched roofs, round tanks,
   drums and turrets, sloped consoles, and five kinds of stand for the charts. Icon keys
@@ -111,6 +112,11 @@
   start, marked `(copied)`, to paste into another browser or an MCP client's config. It
   uses `pbcopy`, `wl-copy`, `xclip`, `xsel` or `clip`, and skips the copy when none is
   installed. The URLs are also terminal links.
+- **UI**: the `neo` theme is no longer built in, so `[ui] theme = "neo"` raises a
+  `ValueError`. It lives on as `brutalist-theme/` in the
+  [`24-custom-theme`](https://github.com/opendataframework/odf/tree/main/examples/24-custom-theme)
+  example: copy that directory into a project and select it with
+  `[ui] theme = "./brutalist-theme"`. `17-custom-icon` now uses `glitch`.
 - **Chat**: the default `[project.chat] model` is now `gpt-oss:20b` instead of `gpt-oss`.
   See [Chat](chat.md).
 

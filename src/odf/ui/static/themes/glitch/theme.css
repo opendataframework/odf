@@ -42,7 +42,7 @@
   /* Chromatic-split "signal glitch" channel colors — glitch-theme-local,
      not part of the cross-theme variable contract. Reused throughout for
      a thin RGB-misregistration fringe on shadows/rings/text instead of
-     neo's thick-border brutalism. */
+     thick-border brutalism. */
   --split-a: #00b7c2;
   --split-b: #e91e8c;
   --tag-shadow: 1px 0 0 color-mix(in srgb, var(--split-a) 50%, transparent), -1px 0 0 color-mix(in srgb, var(--split-b) 50%, transparent);
