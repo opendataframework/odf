@@ -18,10 +18,10 @@
   tactical-map beacon, a utility-first ledger, matte clay, a code-editor workbench and a
   neobrutalist one.
 - **UI**: `[ui] grid = "flat"` in `config.toml` draws the topology as a flat, top-down
-  schematic instead of the isometric grid: faint dots where nodes snap, and every node the
-  same rounded square in its type's color, for large topologies. Node positions are shared
-  by both grids; customizing icons and colors is off on the flat one. See
-  [UI](ui.md#flat-grid).
+  schematic instead of the isometric grid: faint dots where nodes snap, and every node a
+  rounded square in its type's color with its type's glyph, for large topologies. Node
+  positions and colors are shared by both grids. **Customize** picks a flat glyph, saved as
+  `flatIcon` apart from the isometric icon. See [UI](ui.md#flat-grid).
 - **UI**: Jupyter notebooks in a document view open as their cells and saved outputs
   (Markdown rendered, images inline, HTML outputs sanitized) instead of raw JSON, with
   **View source** for the JSON. With the `notebook` package installed in the project

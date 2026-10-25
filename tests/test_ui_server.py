@@ -2219,7 +2219,8 @@ def test_theme_can_fill_faces_across_the_whole_icon():
     # Both the topology and the icon picker's swatches draw through drawIcon,
     # so a face fill spans the icon in both.
     assert "ICONS[iconKey(node)].draw(" not in script
-    assert "drawIcon(key, canvasEl.width / 2" in script
+    assert "GRID.drawSwatch(key, canvasEl.width / 2" in script
+    assert "drawIcon(key, x, y, accent, false)" in script
 
 
 def test_ui_has_the_collapsible_sidebar_rail():
@@ -2377,6 +2378,15 @@ def test_index_loads_every_grid_script_between_app_and_theme():
     assert "flat.js" in GRID_SCRIPTS
     assert html.index('src="/app.js"') < min(positions)
     assert max(positions) < html.index('src="/theme.js"')
+
+
+def test_flat_grid_has_a_glyph_per_exec_type_saved_as_flat_icon():
+    script = (themes.STATIC_DIR / "grids" / "flat.js").read_text()
+    glyphs = re.findall(r"^    ([a-z]+): \{ label: '[^']+', group: 'Defaults'", script, re.M)
+
+    assert set(glyphs) == DEFAULT_ICONS
+    assert "iconField: 'flatIcon'" in script
+    assert "customizable: false" not in script
 
 
 def test_icon_group_scripts_register_unique_keys():

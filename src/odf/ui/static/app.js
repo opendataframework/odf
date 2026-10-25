@@ -467,6 +467,12 @@ function isoInverse(x, y) {
 //                like gridExpand
 // customizable — whether a node's icon and color can be changed; when
 //                false, Customize is hidden and nodes take their type colors
+// icons        — the registry Customize's Shape section lists, keyed like
+//                ICONS ({label, group} per entry) with one entry per exec
+//                type as its default
+// iconField    — the node (and layout.json) property holding the icon
+//                override picked from `icons`, so each grid keeps its own
+// drawSwatch   — draws icon `key` for a picker swatch, standing on (x, y)
 const GRIDS = {
   iso: {
     project: iso,
@@ -498,6 +504,12 @@ const GRIDS = {
       se: ['↘', 'Add cells (bottom-right edge)'],
     },
     customizable: true,
+    // A getter, since ICONS is declared further down.
+    get icons() { return ICONS; },
+    iconField: 'icon',
+    drawSwatch(key, x, y, accent) {
+      drawIcon(key, x, y, accent, false);
+    },
   },
 };
 let GRID = GRIDS.iso;
@@ -925,13 +937,14 @@ function drawIcon(key, x, y, accent, lit) {
   }
 }
 
-// Resolves which registry entry to draw for a node: its icon override, or
-// its exec-type default. Falls back to the type default if the stored icon
-// key is unrecognized (e.g. stale after a future rename), so render() and
-// friends never index the registry with an unknown key.
+// Resolves which GRID.icons entry to draw for a node: its icon override for
+// this grid (GRID.iconField), or its exec-type default. Falls back to the
+// type default if the stored icon key is unrecognized (e.g. stale after a
+// future rename), so render() and friends never index the registry with an
+// unknown key.
 function iconKey(node) {
-  const key = node.icon || node.type;
-  return ICONS[key] ? key : node.type;
+  const key = node[GRID.iconField] || node.type;
+  return GRID.icons[key] ? key : node.type;
 }
 
 // Curated swatch palette for the color picker — distinct from the 7 exec-type
@@ -1423,6 +1436,7 @@ window.addEventListener('mouseup', e => {
 function saveLayoutOverride(node) {
   const entry = { col: node.col, row: node.row };
   if (node.icon) entry.icon = node.icon; // omitted entirely once reset, so it doesn't linger as a stale key
+  if (node.flatIcon) entry.flatIcon = node.flatIcon; // the flat grid's own icon (see GRID.iconField)
   if (node.color) entry.color = node.color; // ditto for a reset color override
   layoutOverrides[node.id] = entry;
   fetch('/api/layout', {
@@ -1562,20 +1576,20 @@ function renderIconSwatch(canvasEl, key, accent) {
   const saved = ctx;
   ctx = canvasEl.getContext('2d');
   ctx.clearRect(0, 0, canvasEl.width, canvasEl.height);
-  drawIcon(key, canvasEl.width / 2, canvasEl.height * 0.8, accent, false);
+  GRID.drawSwatch(key, canvasEl.width / 2, canvasEl.height * 0.8, accent);
   ctx = saved;
 }
 
-// The icon picker's tabs: every group an icon is registered under, in
-// first-registered order, with 'Custom' kept last.
+// The icon picker's tabs: every group a GRID.icons entry is registered
+// under, in first-registered order, with 'Custom' kept last.
 function iconGroups() {
-  const groups = [...new Set(Object.values(ICONS).map(e => e.group))];
+  const groups = [...new Set(Object.values(GRID.icons).map(e => e.group))];
   return groups.sort((a, b) => (a === 'Custom') - (b === 'Custom'));
 }
 
 // Builds the group tabs and the swatches of `group` — the group of the
 // node's current icon unless a tab click passes another.
-function buildIconPicker(node, group = ICONS[iconKey(node)].group) {
+function buildIconPicker(node, group = GRID.icons[iconKey(node)].group) {
   const tabs = document.getElementById('icon-picker-tabs');
   tabs.innerHTML = '';
   for (const name of iconGroups()) {
@@ -1593,18 +1607,19 @@ function buildIconPicker(node, group = ICONS[iconKey(node)].group) {
   grid.innerHTML = '';
   const accent = nodeAccent(node);
   const current = iconKey(node);
+  const field = GRID.iconField;
 
-  for (const key of Object.keys(ICONS)) {
-    if (ICONS[key].group !== group) continue;
+  for (const [key, entry] of Object.entries(GRID.icons)) {
+    if (entry.group !== group) continue;
     const btn = document.createElement('button');
-    btn.className = 'icon-swatch' + (current === key && node.icon ? ' selected' : '');
-    btn.title = ICONS[key].label;
+    btn.className = 'icon-swatch' + (current === key && node[field] ? ' selected' : '');
+    btn.title = entry.label;
     const mini = document.createElement('canvas');
     mini.width = 40; mini.height = 40;
     renderIconSwatch(mini, key, accent);
     btn.appendChild(mini);
     btn.addEventListener('click', () => {
-      node.icon = key;
+      node[field] = key;
       saveLayoutOverride(node);
       closeStylePicker();
     });
@@ -1615,7 +1630,7 @@ function buildIconPicker(node, group = ICONS[iconKey(node)].group) {
   resetBtn.className = 'icon-swatch reset';
   resetBtn.textContent = 'Reset to default';
   resetBtn.addEventListener('click', () => {
-    delete node.icon;
+    delete node[field];
     saveLayoutOverride(node);
     closeStylePicker();
   });
@@ -6305,6 +6320,7 @@ async function init() {
   for (const [id, pos] of Object.entries(layoutOverrides)) {
     if (!nodeMap[id]) continue;
     if (pos.icon) nodeMap[id].icon = pos.icon;
+    if (pos.flatIcon) nodeMap[id].flatIcon = pos.flatIcon;
     if (pos.color) nodeMap[id].color = pos.color;
   }
   byDepth = [...nodes];

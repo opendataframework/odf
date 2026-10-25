@@ -52,6 +52,18 @@ def test_save_then_load_round_trips_with_color_override(tmp_path):
     assert layout.load(path) == positions
 
 
+def test_save_then_load_round_trips_with_flat_icon_override(tmp_path):
+    positions = {
+        "users": {"col": 2, "row": 1, "icon": "gateway", "flatIcon": "cloud"},
+        "postgres": {"col": 0, "row": 0},
+    }
+    path = tmp_path / "layout.json"
+
+    layout.save(path, positions)
+
+    assert layout.load(path) == positions
+
+
 def test_save_creates_parent_directories(tmp_path):
     path = tmp_path / "nested" / "dir" / "layout.json"
     layout.save(path, {"a": {"col": 1, "row": 1}})

@@ -34,14 +34,16 @@ so a node whose icon key no longer exists falls back to its type's default.
 
 `[ui] grid = "flat"` draws the topology as a flat, top-down schematic instead of
 the isometric grid: square cells marked by a faint dot where a node snaps, and
-every node the same rounded square in its type's color, which keeps a large
-topology readable. Columns run right and rows down, so a node keeps its cell in
-both grids and switching never moves anything.
+every node a rounded square in its type's color with that type's glyph on it
+(sliders for config, a package for a component, a rack for a repository, and so
+on), which keeps a large topology readable. Columns run right and rows down, so
+a node keeps its cell in both grids and switching never moves anything.
 
-Nodes can't be customized on the flat grid: **Customize** is hidden and color
-overrides are ignored, so a node's color always shows its type. Icons and colors
-set on the isometric grid stay in `layout.json` and come back when you switch
-back. The theme still applies through its colors and icon face style.
+**Customize** on the flat grid picks one of the flat glyphs (the type defaults
+plus a few symbols: database, cloud, bolt, star, flag, lock, user, chart) and a
+color. The glyph is saved in `layout.json` as `flatIcon`, apart from the
+isometric `icon`, so each grid keeps its own choice. The color is shared by
+both grids. The theme still applies through its colors and icon face style.
 
 ### Run activity
 
