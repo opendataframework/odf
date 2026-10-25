@@ -327,7 +327,7 @@ whose node isn't hovered or selected, default `0.45`), `labelShadow: true`
 `labelBold: false` (no bold for lit labels, for a font without a bold face,
 since a synthesized bold smears it). See
 [`examples/24-custom-theme`](https://github.com/opendataframework/odf/tree/main/examples/24-custom-theme),
-which ships a monochrome SaaS-dashboard theme of its own in `themes/mono/`,
+which ships a monochrome SaaS-dashboard theme of its own in `themes/ink/`,
 started from a copy of `emerald`.
 
 A node's icon and color can be changed from its "Customize" popover, which

@@ -2,7 +2,7 @@
 
 A plain `Accounts` repository and a `Revenue` task, shown in a UI theme that
 this project ships itself instead of one of `odf`'s built-in themes:
-"Mono", in `themes/mono/`, a monochrome SaaS-dashboard look. Dark mode is
+"Ink", in `themes/ink/`, a monochrome SaaS-dashboard look. Dark mode is
 white on black and light mode black on white, with grey borders and
 surfaces, and white (black by day) kept for the active, focused and primary
 state.
@@ -11,15 +11,15 @@ state.
 
 ```toml
 [ui]
-theme = "./themes/mono"
+theme = "./themes/ink"
 ```
 
 A value with a `/` or `\` in it, or starting with `.` or `~`, is a path to
 a theme directory, relative to the directory `odf run` is started from,
 like `[ui] favicon` and `[ui] logo`. A built-in theme's name, such as
 `default` or `emerald`, still selects that built-in theme. The same path
-works as `odf run --theme ./themes/mono` and
-`server.start(theme="./themes/mono")`.
+works as `odf run --theme ./themes/ink` and
+`server.start(theme="./themes/ink")`.
 
 ## The theme directory
 
@@ -55,10 +55,10 @@ is drawn at the screen's own resolution. Every knob it can set is listed on
 
 ```
 24-custom-theme/
-├── config.toml          # [ui] theme = "./themes/mono", brand
+├── config.toml          # [ui] theme = "./themes/ink", brand
 ├── main.py              # entry point — starts the UI, same shape as 01-table-view
 ├── themes/
-│   └── mono/
+│   └── ink/
 │       ├── theme.css    # palette and every UI rule
 │       ├── theme.js     # ODF.registerTheme({ faces, litShadow })
 │       └── favicon.svg  # stacked layers on a black tile

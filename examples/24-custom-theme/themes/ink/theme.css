@@ -605,7 +605,7 @@ button.media-tile:hover,button.media-tile:focus-visible{border-color:var(--title
 .ts-mark-label{max-width:160px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;padding:1px 5px;background:var(--box-color);color:#111;font-size:10.5px;font-weight:600;line-height:1.4;cursor:pointer}
 .ts-mark-delete{width:18px;padding:0;border:0;border-left:1px solid rgba(0,0,0,.25);background:var(--box-color);color:#111;font-family:inherit;font-size:13px;line-height:1;cursor:pointer}
 
-/* ---- mono: monochrome SaaS-dashboard chrome ------------------------------
+/* ---- ink: monochrome SaaS-dashboard chrome -------------------------------
    Sans-serif sentence-case UI labels (mono is kept for data: values, ids,
    tables, logs, JSON), soft radii, no decorative top bar or corner brackets,
    and white (black by day) reserved for the active/focused/primary state. */
