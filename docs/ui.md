@@ -307,6 +307,14 @@ The easiest start is to copy a built-in theme, such as
 and edit it. A missing directory or required file raises a `ValueError` at
 start.
 
+For pixel art, `theme.js` can set `ODF.registerTheme({ pixelSize: 2 })` to
+draw the topology canvas with one canvas pixel per 2×2 CSS pixels. Pair it
+with `#canvas { image-rendering: pixelated }` in `theme.css`, so the canvas
+is scaled back up without smoothing. Without `pixelSize`, the canvas is
+drawn at the screen's own resolution. See
+[`examples/24-custom-theme`](https://github.com/opendataframework/odf/tree/main/examples/24-custom-theme),
+which ships a pixel-art theme in its own `pixel-theme/` directory.
+
 A node's icon and color can be changed from its "Customize" popover, which
 lists the built-in isometric icons by group (devices, buildings, charts,
 research, ML, shop). Icons and colors can be extended beyond the built-in

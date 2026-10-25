@@ -2198,6 +2198,14 @@ def test_serves_terminal_theme_files():
     assert "emptyTile(sx, sy)" in responses["/theme.js"].text
 
 
+def test_theme_can_draw_the_canvas_coarser():
+    script = (themes.STATIC_DIR / "app.js").read_text()
+
+    assert "pixelSize: null" in script
+    assert "const dpr = canvasScale();" in script
+    assert "'pixelSize' in rest" in script
+
+
 def test_theme_can_replace_empty_tile_drawing():
     script = (themes.STATIC_DIR / "app.js").read_text()
 

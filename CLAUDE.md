@@ -159,7 +159,7 @@ not per commit; format mirrors `opendataframework`'s release notes).
 
 ## Examples
 
-`examples/` has 23 examples. `01-table-view/` (a repository with no
+`examples/` has 24 examples. `01-table-view/` (a repository with no
 `data_view()` at all, so the UI falls back to the implicit default table)
 and `06-location-view/` (`data_view() -> LocationView` overriding that
 default with a map) are the two ends of the `data_view()` concept.
@@ -175,8 +175,10 @@ invoked from the UI, over MCP and from chat), `20-function/` (plain
 functions adopted with `@Function`), `21-notebook-view/` (notebooks in a
 `DocumentView`, edited in an embedded Jupyter), `22-ml/` (mirrors
 `odf init --template ml`: runs, params, metrics and artifacts as
-repositories, with a grouped `TimeseriesView`) and `23-reverse-proxy/`
+repositories, with a grouped `TimeseriesView`), `23-reverse-proxy/`
 (`docker compose up` with Traefik in front: HTTPS, a login, MCP at `/mcp`,
-as `docs/ui.md#deploying` describes) were added here since. Treat new examples here as small and focused, one concept each, matching
+as `docs/ui.md#deploying` describes) and `24-custom-theme/` (a pixel-art
+theme of the project's own, selected by `[ui] theme = "./pixel-theme"`)
+were added here since. Treat new examples here as small and focused, one concept each, matching
 `opendataframework/examples/`'s style rather than `demo/`'s
 everything-at-once approach.

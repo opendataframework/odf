@@ -1,0 +1,77 @@
+# 24 — Custom Theme
+
+A plain `HighScores` repository and a `Tally` task, shown in a UI theme
+that this project ships itself instead of one of `odf`'s built-in themes.
+The theme, "Arcade", is pixel art. It uses a PICO-8 palette in dark mode and a
+Game Boy palette in light mode, with pixel fonts, square corners and hard
+offset shadows. The topology canvas is drawn at half resolution and scaled
+back up in hard pixels.
+
+`config.toml` selects the theme by path rather than by name:
+
+```toml
+[ui]
+theme = "./pixel-theme"
+```
+
+A value with a `/` or `\` in it, or starting with `.` or `~`, is a path to
+a theme directory, relative to the directory `odf run` is started from,
+like `[ui] favicon` and `[ui] logo`. A built-in theme's name, such as
+`default` or `neo`, still selects that built-in theme. The same path works
+as `odf run --theme ./pixel-theme` and `server.start(theme="./pixel-theme")`.
+
+## The theme directory
+
+A project's theme has the same files as a built-in one:
+
+| File | Required | What it does here |
+|---|---|---|
+| `theme.css` | yes | The whole stylesheet: colors as CSS custom properties for dark (`:root`) and light (`[data-theme="light"]`) mode, then every rule the UI's shared markup needs |
+| `favicon.svg` | yes | A 16×16 pixel sprite, drawn with `<rect>`s and `shape-rendering="crispEdges"` |
+| `theme.js` | no | How the topology canvas is drawn, through `ODF.registerTheme()` |
+
+Themes share no stylesheet, so `theme.css` has to style the whole UI. This
+one started as a copy of `odf`'s built-in
+[`default` theme](https://github.com/opendataframework/odf/tree/main/src/odf/ui/static/themes/default)
+and was restyled from there. The palette is the two blocks of custom
+properties at the top. The pixel-art rules are in the section at the bottom.
+Its first line imports two pixel fonts from Google Fonts: Silkscreen for
+headings, tags and buttons, and VT323 for everything else. Without a
+network connection, both fall back to the system monospace.
+
+`theme.js` sets `pixelSize: 2`, so the canvas is drawn with one canvas pixel
+per 2×2 CSS pixels, and `theme.css` sets `image-rendering: pixelated` on
+`#canvas` to scale it up without smoothing. The rest of `theme.js` makes
+icons flat three-tone sprites outlined in ink, turns off every glow, and
+draws each empty tile with a dithered checker at its center. Every knob
+it can set is listed on `THEME_STYLE` in `odf`'s `app.js`.
+
+## Structure
+
+```
+24-custom-theme/
+├── config.toml          # [ui] theme = "./pixel-theme", brand
+├── main.py              # entry point — starts the UI, same shape as 01-table-view
+├── pixel-theme/
+│   ├── theme.css        # palette, fonts and every UI rule
+│   ├── theme.js         # ODF.registerTheme({ pixelSize: 2, ... })
+│   └── favicon.svg      # 16×16 pixel sprite
+└── app/
+    ├── __init__.py      # imports every module so decorators register at startup
+    ├── entities.py      # Score(id, player, game, points) — @Entity
+    ├── repositories.py  # HighScores — @Storage @Repository(Score), in-memory, pre-seeded
+    └── tasks.py         # Tally — @Task totalling each player's points
+```
+
+## Run it
+
+```bash
+cd examples/24-custom-theme
+odf run
+```
+
+Open the UI. The header reads "Arcade" in Silkscreen over a striped top
+bar, the browser tab shows the invader favicon, and `HighScores` and `Tally`
+stand on the grid as chunky pixel sprites. Toggle light mode for the Game
+Boy greens. Run `odf run --theme default` to compare the same project in a
+built-in theme.

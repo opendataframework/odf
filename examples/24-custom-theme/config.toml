@@ -1,0 +1,6 @@
+[project]
+name = "custom-theme-example"
+
+[ui]
+theme = "./pixel-theme"
+brand = "Arcade"

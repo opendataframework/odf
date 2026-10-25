@@ -67,10 +67,16 @@ const canvas = document.getElementById('canvas');
 let ctx      = canvas.getContext('2d');
 let CW = 0, CH = 0;
 
+// Canvas pixels per CSS pixel: the device's, unless the theme sets
+// THEME_STYLE.pixelSize to draw the canvas coarser.
+function canvasScale() {
+  return THEME_STYLE.pixelSize ? 1 / THEME_STYLE.pixelSize : (window.devicePixelRatio || 1);
+}
+
 function resize() {
   const r = document.getElementById('map').getBoundingClientRect();
   CW = r.width; CH = r.height;
-  const dpr = window.devicePixelRatio || 1;
+  const dpr = canvasScale();
   canvas.width  = Math.round(CW * dpr);
   canvas.height = Math.round(CH * dpr);
   canvas.style.width  = CW + 'px';
@@ -118,6 +124,10 @@ function readTheme() {
 // default look; a theme's optional theme.js overrides any of them through
 // ODF.registerTheme(). `part` is 'tile', 'face' or 'top'.
 const THEME_STYLE = {
+  // CSS pixels per topology canvas pixel, or null for the device's
+  // resolution. A pixel-art theme sets it (say to 2) and upscales the canvas
+  // with `image-rendering: pixelated` in its theme.css.
+  pixelSize: null,
   emptyTileLine: 0.6,
   tickSize: 1,
   tileLine: lit => lit ? 1.1 : 0.8,
@@ -957,6 +967,7 @@ window.ODF = {
     if (faces) Object.assign(THEME_STYLE.faces, faces);
     readTheme();
     vignetteDirty = true;
+    if ('pixelSize' in rest && CW > 0) resize();
   },
   // Called by a grid script under grids/ to add a grid `[ui] grid` can
   // pick. Entries it leaves out are the isometric grid's; see "Grids".
@@ -1180,7 +1191,7 @@ let vignetteGradient = null;
 let vignetteDirty = true;
 
 function render() {
-  const dpr = window.devicePixelRatio || 1;
+  const dpr = canvasScale();
 
   if (layoutDirty) {
     byDepth.sort((a, b) => (a.col + a.row) - (b.col + b.row));
