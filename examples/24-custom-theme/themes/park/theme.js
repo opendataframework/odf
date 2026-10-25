@@ -11,9 +11,15 @@
 
   ODF.registerTheme({
     pixelSize: 2,
-    // Large enough to stay legible on the half-resolution canvas.
-    labelFont: "'Pixelify Sans', Tahoma, sans-serif",
-    labelSize: 16,
+    // Micro 5 is drawn on an 11px em: at 22 CSS pixels each of its pixels is
+    // one canvas pixel, and `labelSnap` keeps it so at any zoom, on whole
+    // canvas pixels. It has no bold, and an ink shadow lifts it off the grass.
+    labelFont: "'Micro 5', Tahoma, sans-serif",
+    labelSize: 22,
+    labelSnap: true,
+    labelBold: false,
+    labelAlpha: 0.9,
+    labelShadow: true,
     faces: {
       fill: 'shade',
       shade:    { top: 0.25, left: -0.05, right: -0.3 },

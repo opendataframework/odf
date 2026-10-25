@@ -7,9 +7,14 @@
 ODF.registerTheme({
   pixelSize: 2,
   // Silkscreen is drawn on an 8px grid: at 16 CSS pixels it lands on exactly
-  // 8 canvas pixels, so labels stay crisp and legible at half resolution.
+  // 8 canvas pixels, and `labelSnap` keeps it there at any zoom, on whole
+  // canvas pixels, so labels stay crisp at half resolution. An ink shadow
+  // keeps them readable over the tiles.
   labelFont: "'Silkscreen', 'Courier New', monospace",
   labelSize: 16,
+  labelSnap: true,
+  labelAlpha: 0.85,
+  labelShadow: true,
   faces: {
     fill: 'shade',
     shade:    { top: 0.2,  left: -0.1, right: -0.35 },

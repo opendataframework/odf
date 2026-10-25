@@ -133,6 +133,18 @@ const THEME_STYLE = {
   // theme with a coarse pixelSize can pick a font that stays legible there.
   labelFont: "'SF Mono', 'Courier New', monospace",
   labelSize: 9.5,
+  // Whether a lit label is bold. A pixel font without a bold face turns it
+  // off, since a synthesized bold smears it.
+  labelBold: true,
+  // Alpha of a label while its node isn't lit.
+  labelAlpha: 0.45,
+  // A hard one-pixel drop shadow in the tile-stroke color under label text,
+  // so it reads over busy tiles.
+  labelShadow: false,
+  // Labels and run badges keep `labelSize` at any zoom and land on whole
+  // canvas pixels, so a pixel font at a coarse pixelSize stays crisp. Pick a
+  // labelSize at which one of the font's pixels is one canvas pixel.
+  labelSnap: false,
   emptyTileLine: 0.6,
   tickSize: 1,
   tileLine: lit => lit ? 1.1 : 0.8,
@@ -989,6 +1001,13 @@ window.ODF = {
     readTheme();
     vignetteDirty = true;
     if ('pixelSize' in rest && CW > 0) resize();
+    // Canvas text falls back until a web font has loaded, so redraw once
+    // the label font is in.
+    if ('labelFont' in rest && document.fonts) {
+      const font = `${THEME_STYLE.labelSize}px ${THEME_STYLE.labelFont}`;
+      Promise.all([document.fonts.load(font), document.fonts.load(`bold ${font}`)])
+        .then(() => { if (CW > 0) render(); }, () => {});
+    }
   },
   // Called by a grid script under grids/ to add a grid `[ui] grid` can
   // pick. Entries it leaves out are the isometric grid's; see "Grids".
@@ -1120,65 +1139,104 @@ function drawRunRing(node, sx, sy, run) {
   ctx.restore();
 }
 
+// Moves ctx into the space drawLabel() and drawRunBadge() draw in, anchored
+// at world point (sx, sy): world space itself, or, with THEME_STYLE.labelSnap,
+// unzoomed CSS pixels with the anchor on a whole canvas pixel. Returns the
+// anchor there, `px` rounding a length to whole canvas pixels, and `pixel`,
+// one canvas pixel (0 when not snapping).
+function enterLabelSpace(sx, sy) {
+  if (!THEME_STYLE.labelSnap) return { x: sx, y: sy, px: v => v, pixel: 0 };
+  const dpr = canvasScale();
+  ctx.setTransform(dpr, 0, 0, dpr,
+    Math.round(dpr * (zoom * sx + panX)), Math.round(dpr * (zoom * sy + panY)));
+  return { x: 0, y: 0, px: v => Math.round(v * dpr) / dpr, pixel: 1 / dpr };
+}
+
+// Fills and outlines a label chip or run badge. When snapping, the outline
+// is one canvas pixel, inset so it covers whole pixels.
+function labelChip(s, l, t, w, h) {
+  ctx.fillRect(l, t, w, h);
+  if (s.pixel) ctx.lineWidth = s.pixel;
+  const i = s.pixel / 2;
+  ctx.strokeRect(l + i, t + i, w - s.pixel, h - s.pixel);
+}
+
 function drawRunBadge(node, sx, sy, run) {
   if (run.state === 'running') return;
   const alpha = runMarkAlpha(run);
   if (alpha <= 0) return;
   const color = runMarkColor(node, run);
-  const size = THEME_STYLE.labelSize;
-  const h = size + 4.5;
-  // Just above the label chip drawLabel() draws while the node is lit.
-  const by = sy - GRID.extents(node).top - 8 - (size + 3.5) - 2 - h / 2;
   const failed = run.state === 'failed';
   const text = failed ? (run.count > 1 ? `! ×${run.count}` : '!') : '✓';
 
   ctx.save();
+  const s = enterLabelSpace(sx, sy - GRID.extents(node).top);
+  const size = THEME_STYLE.labelSize;
+  const h = s.px(size + 4.5);
+  // Just above the label chip drawLabel() draws while the node is lit.
+  const by = s.px(s.y - 8 - (size + 3.5) - 2 - h / 2);
   ctx.globalAlpha = alpha;
-  ctx.font = `bold ${size}px ${THEME_STYLE.labelFont}`;
-  ctx.textAlign = 'center';
-  ctx.textBaseline = 'middle';
-  const w = Math.max(h, ctx.measureText(text).width + 8);
-  ctx.beginPath();
-  ctx.rect(sx - w / 2, by - h / 2, w, h);
+  ctx.font = `${THEME_STYLE.labelBold ? 'bold ' : ''}${size}px ${THEME_STYLE.labelFont}`;
+  ctx.textAlign = 'left';
+  ctx.textBaseline = s.pixel ? 'alphabetic' : 'middle';
+  const m = ctx.measureText(text);
+  const textW = m.width;
+  const w = s.px(Math.max(h, textW + 8));
+  const left = s.x - s.px(w / 2);
   ctx.fillStyle = `rgba(${LABEL_BG_RGB},${LABEL_BG_ALPHA})`;
-  ctx.fill();
   ctx.strokeStyle = color;
   ctx.lineWidth = 1;
-  ctx.stroke();
+  labelChip(s, left, s.px(by - h / 2), w, h);
   ctx.fillStyle = color;
-  ctx.fillText(text, sx, by + 0.5);
+  // When snapping, the glyphs are centered on a baseline on a whole pixel.
+  const ty = s.pixel ? by + (m.actualBoundingBoxAscent - m.actualBoundingBoxDescent) / 2 : by + 0.5;
+  ctx.fillText(text, left + s.px((w - textW) / 2), s.px(ty));
   ctx.restore();
 }
 
 function drawLabel(node, sx, sy, lit) {
   const accent = nodeAccent(node);
-  const ly = sy - GRID.extents(node).top - 8;
   const text = node.label.toUpperCase();
 
   ctx.save();
-  ctx.textAlign    = 'center';
-  ctx.textBaseline = 'bottom';
+  const s = enterLabelSpace(sx, sy - GRID.extents(node).top);
+  const ly = s.px(s.y - 8);
+  ctx.textAlign    = 'left';
+  ctx.textBaseline = s.pixel ? 'alphabetic' : 'bottom';
   const size = THEME_STYLE.labelSize;
-  ctx.font         = `${lit ? 'bold ' : ''}${size}px ${THEME_STYLE.labelFont}`;
+  ctx.font         = `${lit && THEME_STYLE.labelBold ? 'bold ' : ''}${size}px ${THEME_STYLE.labelFont}`;
   // The chip's top edge, sized from the font (13px above the baseline at 9.5px).
-  const chipTop = ly - size - 3.5;
+  const chipTop = s.px(ly - size - 3.5);
+  const m = ctx.measureText(text);
+  const textW = m.width;
+  const tx = s.x - s.px(textW / 2);
+  // When snapping, the baseline sits on a whole pixel, where 'bottom' would.
+  const ty = s.pixel ? s.px(ly - m.fontBoundingBoxDescent) : ly;
 
-  let tw = 0;
+  let tw = 0, chipLeft = 0;
   if (lit) {
-    tw = ctx.measureText(text).width + 12;
+    tw = s.px(textW + 12);
+    chipLeft = tx - s.px(6);
     ctx.fillStyle   = `rgba(${LABEL_BG_RGB},${LABEL_BG_ALPHA})`;
     ctx.strokeStyle = rgba(accent, 0.55);
     ctx.lineWidth   = 0.8;
-    ctx.beginPath();
-    ctx.rect(sx - tw/2, chipTop, tw, size + 5.5);
-    ctx.fill();
-    ctx.stroke();
-    ctx.shadowColor = accent;
-    ctx.shadowBlur  = 6;
+    labelChip(s, chipLeft, chipTop, tw, s.px(size + 5.5));
+    // A glow would blur snapped text.
+    if (!s.pixel) {
+      ctx.shadowColor = accent;
+      ctx.shadowBlur  = 6;
+    }
   }
 
-  ctx.fillStyle = lit ? accent : rgba(accent, 0.45);
-  ctx.fillText(text, sx, ly);
+  if (THEME_STYLE.labelShadow) {
+    const shadowBlur = ctx.shadowBlur;
+    ctx.shadowBlur = 0;
+    ctx.fillStyle = lit ? TILE_STROKE : rgba(TILE_STROKE, THEME_STYLE.labelAlpha);
+    ctx.fillText(text, tx + (s.pixel || 1), ty + (s.pixel || 1));
+    ctx.shadowBlur = shadowBlur;
+  }
+  ctx.fillStyle = lit ? accent : rgba(accent, THEME_STYLE.labelAlpha);
+  ctx.fillText(text, tx, ty);
 
   // Layer badge — a small dot pinned to the label chip's corner, shown only
   // while hovered/selected/dragged (not permanently on the tile) so the
@@ -1187,7 +1245,7 @@ function drawLabel(node, sx, sy, lit) {
   if (lit && node.layer) {
     ctx.shadowBlur = 0;
     ctx.beginPath();
-    ctx.arc(sx + tw/2, chipTop, 3.5, 0, Math.PI * 2);
+    ctx.arc(chipLeft + tw, chipTop, 3.5, 0, Math.PI * 2);
     ctx.fillStyle = layerColor(node.layer);
     ctx.fill();
     ctx.lineWidth = 1;

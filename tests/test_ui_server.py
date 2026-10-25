@@ -2193,7 +2193,18 @@ def test_theme_can_set_the_canvas_label_font():
 
     assert "labelFont: \"'SF Mono', 'Courier New', monospace\"" in script
     assert "labelSize: 9.5," in script
-    assert script.count("px ${THEME_STYLE.labelFont}`") == 2
+    assert script.count("px ${THEME_STYLE.labelFont}`") == 3
+    assert "document.fonts.load(font)" in script
+
+
+def test_theme_can_snap_canvas_labels_to_whole_pixels():
+    script = (themes.STATIC_DIR / "app.js").read_text()
+
+    assert "labelSnap: false," in script
+    assert "labelAlpha: 0.45," in script
+    assert "labelShadow: false," in script
+    assert "labelBold: true," in script
+    assert script.count("enterLabelSpace(sx, sy - GRID.extents(node).top)") == 2
 
 
 def test_theme_can_replace_empty_tile_drawing():

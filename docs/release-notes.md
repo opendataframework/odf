@@ -10,7 +10,9 @@
   `theme.css` and a `favicon.svg`, plus an optional `theme.js` that sets the icon look
   through `ODF.registerTheme()`, the same files as a built-in theme. A theme can also set
   `pixelSize` there to draw the topology canvas at a coarser resolution, for pixel art,
-  and `labelFont`/`labelSize` to keep the node labels drawn on it legible.
+  and `labelFont`/`labelSize` to keep the node labels drawn on it legible, with
+  `labelSnap` to keep them crisp at any zoom on whole canvas pixels, and
+  `labelAlpha`, `labelShadow` and `labelBold` to make them read over busy tiles.
   See [UI](ui.md#custom-themes) and the
   [`24-custom-theme`](https://github.com/opendataframework/odf/tree/main/examples/24-custom-theme)
   example, which ships eleven: a pixel-art theme, a late-90s theme-park one, a 1980s

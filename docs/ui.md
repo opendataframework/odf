@@ -314,7 +314,15 @@ is scaled back up without smoothing. Without `pixelSize`, the canvas is
 drawn at the screen's own resolution. At a coarse `pixelSize`, the node
 labels drawn on the canvas get hard to read, so a theme can also set
 `labelFont` (a CSS font family) and `labelSize` (in CSS pixels, default
-`9.5`) for them, such as a pixel font at a size it was designed for. See
+`9.5`) for them, such as a pixel font at a size it was designed for.
+`labelSnap: true` keeps that size at any zoom and puts the labels and run
+badges on whole canvas pixels, so a pixel font stays crisp. Pick a
+`labelSize` at which one of the font's pixels is one canvas pixel. Three more
+knobs help labels read over busy tiles: `labelAlpha` (the opacity of a label
+whose node isn't hovered or selected, default `0.45`), `labelShadow: true`
+(a hard one-pixel drop shadow in the tile-stroke color) and
+`labelBold: false` (no bold for lit labels, for a font without a bold face,
+since a synthesized bold smears it). See
 [`examples/24-custom-theme`](https://github.com/opendataframework/odf/tree/main/examples/24-custom-theme),
 which ships eleven themes in its own directories: a pixel-art one in
 `themes/pixel/`, a late-90s theme-park one in `themes/park/`, a 1980s

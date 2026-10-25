@@ -7,13 +7,14 @@
    theme.js draws the canvas at half resolution, which
    `image-rendering: pixelated` below scales back up in hard pixels. */
 
-@import url('https://fonts.googleapis.com/css2?family=Pixelify+Sans:wght@400;600;700&family=VT323&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Micro+5&family=Pixelify+Sans:wght@400;600;700&family=VT323&display=swap');
 
 *,*::before,*::after{margin:0;padding:0;box-sizing:border-box}
 
 :root {
   /* Pixelify Sans for the UI; VT323 for data, logs and code. Offline, they
-     fall back to Tahoma and the system monospace. */
+     fall back to Tahoma and the system monospace. theme.js draws the
+     topology's labels in Micro 5. */
   --ui: 'Pixelify Sans',Tahoma,Verdana,sans-serif;
   --mono: 'VT323','Courier New',monospace;
 }
