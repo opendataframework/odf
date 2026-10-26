@@ -265,15 +265,15 @@ and
 
 ## Themes, icons and branding
 
-The UI ships four themes: `default`, `glitch`, `emerald` and `onyx`.
+The UI ships four themes: `default`, `ink`, `emerald` and `onyx`.
 Pick one with `odf run --theme <name>`, `server.start(theme=...)`, or
 `[ui] theme` in config. A theme only restyles the UI; markup and behavior are
 the same in every theme. An unknown theme name raises a `ValueError` at start.
 
 Each theme also has its own icon look: `default` keeps thin outlines over
 faint faces, `emerald` tints faces more strongly with a soft shadow under a
-lit icon, `glitch` draws near-black solids with bright edges, and `onyx`
-tonal solids with no
+lit icon, `ink` draws tonal solids in muted kind colors, raising a lit icon
+a step in tone over a soft black shadow, and `onyx` tonal solids with no
 outlines at all. A theme's `theme.js` sets this through
 `ODF.registerTheme({ faces: {...} })`, whose knobs are listed on
 `THEME_STYLE.faces` in `app.js`. It can also replace how empty grid tiles are
@@ -328,8 +328,9 @@ whose node isn't hovered or selected, default `0.45`), `labelShadow: true`
 `labelBold: false` (no bold for lit labels, for a font without a bold face,
 since a synthesized bold smears it). See
 [`examples/24-custom-theme`](https://github.com/opendataframework/odf/tree/main/examples/24-custom-theme),
-which ships a monochrome SaaS-dashboard theme of its own in `themes/ink/`,
-started from a copy of `emerald`.
+which ships a theme of its own in `themes/glitch/`: dark solids with bright
+edges, and a thin cyan and magenta chromatic-split fringe on the chrome and on
+lit icons.
 
 A node's icon and color can be changed from its "Customize" popover, which
 lists the built-in isometric icons by group (devices, buildings, charts,

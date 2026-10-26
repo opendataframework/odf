@@ -177,8 +177,8 @@ functions adopted with `@Function`), `21-notebook-view/` (notebooks in a
 `odf init --template ml`: runs, params, metrics and artifacts as
 repositories, with a grouped `TimeseriesView`), `23-reverse-proxy/`
 (`docker compose up` with Traefik in front: HTTPS, a login, MCP at `/mcp`,
-as `docs/ui.md#deploying` describes), `24-custom-theme/` (a monochrome SaaS theme of
-the project's own, selected by `[ui] theme = "./themes/ink"`)
+as `docs/ui.md#deploying` describes), `24-custom-theme/` (a glitch theme of
+the project's own, selected by `[ui] theme = "./themes/glitch"`)
 and `25-flat-grid/` (`[ui] grid = "flat"`: one node of each kind showing its
 type's glyph, with a `layout.json` `flatIcon` override) were added here since. Treat new examples here as small and focused, one concept each, matching
 `opendataframework/examples/`'s style rather than `demo/`'s

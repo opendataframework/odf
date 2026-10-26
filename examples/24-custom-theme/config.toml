@@ -2,5 +2,5 @@
 name = "custom-theme-example"
 
 [ui]
-theme = "./themes/ink"
+theme = "./themes/glitch"
 brand = "Acme"

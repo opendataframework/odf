@@ -21,7 +21,7 @@ class Accounts:
     """In-memory ``Account`` repository, pre-seeded with ``_SEED_ACCOUNTS``.
 
     Implements no ``data_view()``. The concept this example isolates is the
-    project's own UI theme (see ``../themes/ink/`` and this project's
+    project's own UI theme (see ``../themes/glitch/`` and this project's
     ``config.toml``), so it renders as the same plain default table as
     ../01-table-view, in the theme's look.
     """

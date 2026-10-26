@@ -60,18 +60,18 @@ def test_revenue_totals_mrr_per_plan_highest_first():
 def test_config_selects_the_example_theme_by_path():
     config = tomllib.loads((EXAMPLE_DIR / "config.toml").read_text())
 
-    assert config["ui"]["theme"] == "./themes/ink"
+    assert config["ui"]["theme"] == "./themes/glitch"
 
 
 def test_example_theme_has_every_required_file(monkeypatch):
     monkeypatch.chdir(EXAMPLE_DIR)
 
-    path = themes.theme_dir("./themes/ink")
+    path = themes.theme_dir("./themes/glitch")
 
     assert (path / "theme.js").is_file()
 
 
 def test_example_theme_keeps_the_canvas_at_full_resolution():
-    script = (EXAMPLE_DIR / "themes" / "ink" / "theme.js").read_text()
+    script = (EXAMPLE_DIR / "themes" / "glitch" / "theme.js").read_text()
 
     assert "pixelSize" not in script

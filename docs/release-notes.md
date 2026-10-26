@@ -16,8 +16,8 @@
   `labelBold` to make them read over busy tiles.
   See [UI](ui.md#custom-themes) and the
   [`24-custom-theme`](https://github.com/opendataframework/odf/tree/main/examples/24-custom-theme)
-  example, which ships a monochrome SaaS-dashboard theme, white on black by night and
-  black on white by day.
+  example, which ships a theme of dark solids with a cyan and magenta chromatic-split
+  fringe.
 - **UI**: `[ui] grid = "flat"` in `config.toml` draws the topology as a flat, top-down
   schematic instead of the isometric grid: faint dots where nodes snap, and every node a
   rounded square in its type's color with its type's glyph and its label on a faint chip,
@@ -111,7 +111,7 @@
   header, and the settings nginx and other proxies need by hand. See
   [UI](ui.md#deploying).
 - **UI**: each theme draws topology icons its own way instead of all as wireframes:
-  `emerald` as tinted glass, `glitch` as dark solids with bright edges, `onyx` as tonal
+  `emerald` as tinted glass, `ink` as tonal solids over a soft shadow, `onyx` as tonal
   solids without outlines, while `default`
   keeps its outlines but hides the lines behind each icon. Icons within each group
   have more varied shapes and heights: a setback tower, pitched roofs, round tanks,
@@ -124,10 +124,12 @@
   start, marked `(copied)`, to paste into another browser or an MCP client's config. It
   uses `pbcopy`, `wl-copy`, `xclip`, `xsel` or `clip`, and skips the copy when none is
   installed. The URLs are also terminal links.
-- **UI**: the `neo` theme is no longer built in, so `[ui] theme = "neo"` raises a
-  `ValueError`. A project can ship a theme of its own instead, as the
-  [`24-custom-theme`](https://github.com/opendataframework/odf/tree/main/examples/24-custom-theme)
-  example does. `17-custom-icon` now uses `glitch`.
+- **UI**: the `neo` and `glitch` themes are no longer built in, so `[ui] theme = "neo"`
+  or `"glitch"` raises a `ValueError`. A project can ship a theme of its own instead, as
+  the [`24-custom-theme`](https://github.com/opendataframework/odf/tree/main/examples/24-custom-theme)
+  example does with `glitch`, which can be copied from there. The new built-in `ink`
+  theme is monochrome, white on black by night and black on white by day, with muted
+  kind colors. `17-custom-icon` now uses `ink`.
 - **Chat**: the default `[project.chat] model` is now `gpt-oss:20b` instead of `gpt-oss`.
   See [Chat](chat.md).
 
