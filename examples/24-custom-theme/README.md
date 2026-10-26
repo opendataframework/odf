@@ -29,7 +29,7 @@ A project's theme has the same files as a built-in one:
 | File | Required | What it does here |
 |---|---|---|
 | `theme.css` | yes | The whole stylesheet: colors as CSS custom properties for dark (`:root`) and light (`[data-theme="light"]`) mode, then every rule the UI's shared markup needs |
-| `favicon.svg` | yes | A purple pixel face with pale eyes on a near-black tile. The header shows it next to the brand too |
+| `favicon.svg` | yes | Purple stacked layers on a near-black tile. The header shows it next to the brand too |
 | `theme.js` | no | How the topology canvas is drawn, through `ODF.registerTheme()` |
 
 Themes share no stylesheet, so `theme.css` has to style the whole UI. The
@@ -62,7 +62,7 @@ screen's own resolution. Every knob it can set is listed on `THEME_STYLE` in
 │   └── glitch/
 │       ├── theme.css    # palette, split colors and every UI rule
 │       ├── theme.js     # ODF.registerTheme({ faces, onReadTheme, litFringe })
-│       └── favicon.svg  # purple pixel face on a dark tile
+│       └── favicon.svg  # purple stacked layers on a dark tile
 └── app/
     ├── __init__.py      # imports every module so decorators register at startup
     ├── entities.py      # Account(id, name, plan, mrr) — @Entity
@@ -77,7 +77,7 @@ cd examples/24-custom-theme
 odf run
 ```
 
-Open the UI. The header reads "Acme" next to the purple pixel face, the
+Open the UI. The header reads "Acme" next to the purple stacked layers, the
 browser tab shows the same logo, and `Accounts` and `Revenue` stand on a
 near-black grid as dark solids with bright edges, fringed in cyan and
 magenta when lit. Toggle light mode for the same look on white. Run

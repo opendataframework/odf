@@ -91,10 +91,9 @@
 
 - **Deps**: requires `opendataframework >=0.4.0,<0.5.0`, which the grouped timeseries
   view and the run activity above build on.
-- **UI**: every built-in theme shows its favicon as the header mark next to "ODF". The
-  `default` theme's logo is the pixel tile of the docs site in neutral grays, and the
-  `emerald` and `onyx` themes share a rounded tile of stacked layers in each theme's
-  colors (`[ui] logo` still replaces the mark, and `[ui] favicon` replaces both).
+- **UI**: every built-in theme shows its favicon as the header mark next to "ODF". All
+  of them share one logo, a rounded tile of stacked layers in each theme's colors
+  (`[ui] logo` still replaces the mark, and `[ui] favicon` replaces both).
 - **UI**: the UI refuses requests another site's page makes the browser send, so a login
   at a reverse proxy can't be used from there: any request but `GET`, `HEAD` and
   `OPTIONS`, and every WebSocket (Jupyter's included), answers 403 when its `Origin`
