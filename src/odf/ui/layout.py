@@ -25,8 +25,10 @@ def load(path: Path) -> dict[str, dict[str, int | str]]:
         path: Location of the layout JSON file.
 
     Returns:
-        Mapping of node id to ``{"col": int, "row": int, "icon": str, "color": str}``,
-        where ``"icon"`` and ``"color"`` are optional (a node with no such
+        Mapping of node id to
+        ``{"col": int, "row": int, "icon": str, "flatIcon": str, "color": str}``,
+        where ``"icon"`` (the isometric grid's icon), ``"flatIcon"`` (the flat
+        grid's glyph) and ``"color"`` are optional (a node with no such
         override omits the corresponding key). The reserved key ``"_grid"``
         (never a valid node id — those are ``<namespace>.<name>`` keys, or
         ``config``) maps
@@ -52,8 +54,8 @@ def save(path: Path, positions: dict[str, dict[str, int | str]]) -> None:
         path: Location of the layout JSON file. Parent directories are
             created as needed.
         positions: Mapping of node id to
-            ``{"col": int, "row": int, "icon": str, "color": str}``, where
-            ``"icon"`` and ``"color"`` are optional.
+            ``{"col": int, "row": int, "icon": str, "flatIcon": str, "color": str}``,
+            where ``"icon"``, ``"flatIcon"`` and ``"color"`` are optional.
     """
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(json.dumps(positions, indent=2, sort_keys=True))

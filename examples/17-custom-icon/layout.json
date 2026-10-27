@@ -1,5 +1,5 @@
 {
-  "beacons": {
+  "repository.beacons": {
     "col": 0,
     "color": "#f2c14e",
     "icon": "lighthouse",

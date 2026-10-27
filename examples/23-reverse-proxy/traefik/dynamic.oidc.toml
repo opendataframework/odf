@@ -1,0 +1,57 @@
+# dynamic.toml with oauth2-proxy as the login: Traefik asks it about every
+# request (forwardAuth), and a browser that isn't signed in gets its sign-in
+# page. Used by compose.oidc.yaml in place of dynamic.toml.
+
+[http.routers.odf]
+rule = "PathPrefix(`/`)"
+priority = 1
+entryPoints = ["websecure"]
+middlewares = ["sign-in", "login"]
+service = "odf"
+[http.routers.odf.tls]
+
+# MCP clients send a token themselves, so a missing or bad one is a plain 401,
+# with no sign-in page.
+[http.routers.mcp]
+rule = "PathPrefix(`/mcp`)"
+priority = 2
+entryPoints = ["websecure"]
+middlewares = ["login"]
+service = "mcp"
+[http.routers.mcp.tls]
+
+# oauth2-proxy's own pages: sign-in, the provider's callback, sign-out.
+[http.routers.oauth2]
+rule = "PathPrefix(`/oauth2/`)"
+priority = 3
+entryPoints = ["websecure"]
+service = "oauth2-proxy"
+[http.routers.oauth2.tls]
+
+[http.middlewares.login.forwardAuth]
+address = "http://oauth2-proxy:4180/oauth2/auth"
+
+# Only 401, the login's answer: the UI's own 403s for cross-site requests
+# pass through as they are.
+[http.middlewares.sign-in.errors]
+status = ["401"]
+service = "oauth2-proxy"
+query = "/oauth2/sign_in?rd={url}"
+
+[http.services.odf.loadBalancer]
+passHostHeader = false
+[[http.services.odf.loadBalancer.servers]]
+url = "http://odf:4747"
+
+[http.services.mcp.loadBalancer]
+passHostHeader = false
+[[http.services.mcp.loadBalancer.servers]]
+url = "http://odf:4748"
+
+[http.services.oauth2-proxy.loadBalancer]
+[[http.services.oauth2-proxy.loadBalancer.servers]]
+url = "http://oauth2-proxy:4180"
+
+[tls.stores.default.defaultCertificate]
+certFile = "/etc/traefik/secrets/odf.crt"
+keyFile = "/etc/traefik/secrets/odf.key"

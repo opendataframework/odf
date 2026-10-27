@@ -29,8 +29,13 @@ external consumers.
 | 18 | [`18-custom-mcp-tool`](https://github.com/opendataframework/odf/tree/main/examples/18-custom-mcp-tool) | A `StockRoom` component whose `mcp_tools()` adds a typed `stock-room.low_stock` tool next to the fixed MCP tools. | [MCP Server](mcp.md) |
 | 19 | [`19-agent`](https://github.com/opendataframework/odf/tree/main/examples/19-agent) | A `Librarian` `@Agent` whose `invoke(question, limit=3)` takes arguments: called through `context.call()`, invoked from a form in the UI, and exposed as its own typed `agent.librarian.invoke` MCP tool. | [MCP Server](mcp.md), [Chat](chat.md) |
 | 20 | [`20-function`](https://github.com/opendataframework/odf/tree/main/examples/20-function) | Adopting plain functions with `@Function`: `to_eur` and `store_total` keep their signatures and still work when called directly, while `context.call()` injects their `Rates`/`Orders` dependencies and another function through `Annotated`. Each one gets a **Call** action in the UI and its own typed `<key>.call` MCP tool. | [MCP Server](mcp.md), [Chat](chat.md) |
+| 21 | [`21-notebook-view`](https://github.com/opendataframework/odf/tree/main/examples/21-notebook-view) | A `Notebooks` repository over the `.ipynb` files in `notebooks/`, with a `DocumentView`: each notebook opens as its cells and outputs, and **Edit in Jupyter** edits it in place, saving through `save()` back to its file. | [UI](ui.md#notebooks) |
+| 22 | [`22-ml`](https://github.com/opendataframework/odf/tree/main/examples/22-ml) | The `ml` template layout, training a real scikit-learn classifier: `Runs`, `Params`, `Metrics` and `Artifacts` repositories, recorded by a `train` `@Function` and a `Sweep` `@Task`. `Metrics` uses a grouped `TimeseriesView`, one line per run, `export_run` writes a run with its `model.pkl` to `exports/`, and a Plotly `RunComparison` page compares the runs. | [UI](ui.md#grouped-timeseries), [`ml` template](init-templates/ml.md) |
+| 23 | [`23-reverse-proxy`](https://github.com/opendataframework/odf/tree/main/examples/23-reverse-proxy) | Deploying behind a reverse proxy with `docker compose up`: `odf run` in a container reachable only from Traefik, which adds HTTPS, a Basic auth login (or an identity provider through oauth2-proxy) and the MCP server at `/mcp`. **Edit in Jupyter** works through it unchanged. | [UI](ui.md#deploying) |
+| 24 | [`24-custom-theme`](https://github.com/opendataframework/odf/tree/main/examples/24-custom-theme) | A project serving its own UI theme from `./themes/glitch/` (`[ui] theme` as a path): dark solids with bright edges and a thin cyan and magenta chromatic-split fringe on the chrome and on lit icons, with purple stacked layers as its favicon and header mark. | [UI](ui.md#custom-themes) |
+| 25 | [`25-flat-grid`](https://github.com/opendataframework/odf/tree/main/examples/25-flat-grid) | `[ui] grid = "flat"`: a parcel depot with one node of each kind, drawn as a top-down schematic where each node shows its type's glyph, plus a committed `layout.json` giving `Couriers` a `user` glyph (`flatIcon`) and a blue color. | [UI](ui.md#flat-grid) |
 
-Examples 2–5 mirror `odf init --template <name>`'s scaffolded layouts —
+Examples 2–5 and 22 mirror `odf init --template <name>`'s scaffolded layouts —
 each is runnable both as a plain script (`python main.py`) and via
 `odf run` (see each example's own `README.md` for specifics). Most "Docs"
 entries above refer to concept pages on the
@@ -55,6 +60,6 @@ UI running at http://127.0.0.1:4747
 ```
 
 Open the UI and look at `Books` — it renders as a plain table with no
-extra step needed. Examples 2–5 can also run as a plain script instead of
+extra step needed. Examples 2–5 and 22 can also run as a plain script instead of
 the UI (`python main.py`) — see each example's own `README.md` for
 specifics.

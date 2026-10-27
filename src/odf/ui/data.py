@@ -318,7 +318,12 @@ def _view_dict(view: DataView) -> dict:
     if isinstance(view, LocationView):
         return {"kind": "location", "fields": list(view.fields)}
     if isinstance(view, TimeseriesView):
-        return {"kind": "timeseries", "field": view.field}
+        return {
+            "kind": "timeseries",
+            "field": view.field,
+            "fields": list(view.fields) if view.fields is not None else None,
+            "group": view.group,
+        }
     raise TypeError(f"Unknown DataView variant: {view!r}")
 
 

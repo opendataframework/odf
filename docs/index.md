@@ -47,7 +47,7 @@ repositories and tasks go.
 
 ## What's in the package
 
-- **[CLI](cli.md)**: `odf init` scaffolds a project from one of five
+- **[CLI](cli.md)**: `odf init` scaffolds a project from one of six
   templates, and `odf run` starts one, optionally with the UI, MCP server and
   chat.
 - **[Server](server.md)**: `odf.server.Server` wraps an
@@ -86,5 +86,5 @@ server.wait()  # blocks until Ctrl+C/SIGTERM
 
 ## Examples
 
-See [Examples](examples.md) for 20 small projects, one concept each,
-including the four that mirror `odf init --template` layouts.
+See [Examples](examples.md) for 25 small projects, one concept each,
+including the five that mirror `odf init --template` layouts.

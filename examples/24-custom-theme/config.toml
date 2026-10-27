@@ -1,0 +1,6 @@
+[project]
+name = "custom-theme-example"
+
+[ui]
+theme = "./themes/glitch"
+brand = "Acme"

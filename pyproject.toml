@@ -1,6 +1,6 @@
 [project]
 name = "odf"
-version = "0.3.0"
+version = "0.4.0"
 description = "Open Data Framework CLI."
 authors = [
     {name = "mykytapavlov",email = "mykytapavlov@users.noreply.github.com"}
@@ -10,7 +10,7 @@ requires-python = ">=3.14"
 dependencies = [
     "typer (>=0.27.0,<0.28.0)",
     "rich (>=15.0.0,<16.0.0)",
-    "opendataframework (>=0.3.0,<0.4.0)"
+    "opendataframework (>=0.4.0,<0.5.0)"
 ]
 
 [project.optional-dependencies]
@@ -24,12 +24,18 @@ mcp = [
 chat = [
     "ollama>=0.4.0",
 ]
+notebook = [
+    "notebook (>=7.6.0,<8.0.0)",
+    "websockets (>=13.0)",
+]
 examples = [
     "opencv-python (>=5.0.0.93,<6.0.0.0)",
     "matplotlib (>=3.9.0,<4.0.0)",
     "plotly (>=5.24.0,<6.0.0)",
     "notebook (>=7.6.0,<8.0.0)",
     "numpy (>=2.0.0,<3.0.0)",
+    "scikit-learn (>=1.9.0,<2.0.0)",
+    "websockets (>=13.0)",
 ]
 
 [project.scripts]
@@ -51,9 +57,11 @@ dev = [
     "opencv-python (>=5.0.0.93,<6.0.0.0)",
     "plotly (>=5.24.0,<6.0.0)",
     "pytest (>=9.1.1,<10.0.0)",
+    "scikit-learn (>=1.9.0,<2.0.0)",
     "uvicorn (>=0.23.0)",
     "pytest-timeout (>=2.4.0,<3.0.0)",
     "pytest-cov (>=7.1.0,<8.0.0)",
+    "websockets (>=13.0)",
 ]
 docs = [
     "mkdocs-material (>=9.7.7,<10.0.0)",

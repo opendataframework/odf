@@ -1,5 +1,6 @@
 import json
 import re
+import threading
 import time
 from dataclasses import dataclass
 
@@ -472,6 +473,47 @@ def test_execute_endpoint_surfaces_task_exceptions_as_500():
         r = client.post("/api/tasks/boom/execute")
 
     assert r.status_code == 500
+
+
+def test_events_endpoint_streams_calls_as_server_sent_events():
+    NS = make_ns()
+
+    from opendataframework.task import Task
+
+    @NS
+    @Task
+    class DoThing:
+        def execute(self) -> None: ...
+
+    with Context(namespaces={NS}) as ctx:
+        server = UiServer(ctx, "proj")
+        server._events.start()
+
+        # The test client returns a response only once its body ends, so the
+        # call is made, and the stream ended, from another thread.
+        def run():
+            deadline = time.monotonic() + 5
+            while not server._events._clients and time.monotonic() < deadline:
+                time.sleep(0.01)
+            ctx.execute(ctx.key(DoThing))
+            server._events.stop()
+
+        thread = threading.Thread(target=run)
+        thread.start()
+        r = TestClient(server._app).get("/api/events")
+        thread.join()
+
+    assert r.headers["content-type"].startswith("text/event-stream")
+    assert r.headers["x-accel-buffering"] == "no"
+    frames = [
+        json.loads(line[len("data: ") :])
+        for line in r.text.splitlines()
+        if line.startswith("data: ")
+    ]
+    assert [(f["key"], f["state"]) for f in frames] == [
+        (ctx.key(DoThing), "started"),
+        (ctx.key(DoThing), "completed"),
+    ]
 
 
 def _librarian(NS, calls):
@@ -1036,6 +1078,109 @@ def test_record_media_returns_404_for_a_document_held_inline():
     assert as_json.status_code == 404
     assert as_text.status_code == 404
     assert [r["body"] for r in records] == [{"total": 1}, "hi"]
+
+
+def writable_papers_namespace(papers):
+    """Like ``papers_namespace``, with ``save()`` replacing the paper of the same name."""
+    NS = make_ns()
+
+    @NS
+    @Repository(Paper)
+    class Papers:
+        def all(self):
+            return list(papers)
+
+        def save(self, paper):
+            papers[:] = [paper if p.name == paper.name else p for p in papers]
+
+        def delete(self, name):
+            papers[:] = [p for p in papers if p.name != name]
+
+        def data_view(self):
+            return DocumentView(field="body")
+
+    return NS
+
+
+def test_put_record_media_saves_a_document_file_through_the_repository():
+    papers = [Paper(name="a", body=b"old"), Paper(name="b", body=b"other")]
+    NS = writable_papers_namespace(papers)
+
+    with Context(namespaces={NS}) as ctx:
+        client = TestClient(UiServer(ctx, "proj")._app)
+        r = client.put("/api/repositories/papers/records/a/media", content=b'{"cells": []}')
+        served = client.get("/api/repositories/papers/records/a/media")
+
+    assert r.status_code == 204
+    assert papers == [Paper(name="a", body=b'{"cells": []}'), Paper(name="b", body=b"other")]
+    assert served.content == b'{"cells": []}'
+
+
+def test_put_record_media_refuses_a_document_held_inline_or_missing():
+    papers = [Paper(name="text", body="hi")]
+    NS = writable_papers_namespace(papers)
+
+    with Context(namespaces={NS}) as ctx:
+        client = TestClient(UiServer(ctx, "proj")._app)
+        inline = client.put("/api/repositories/papers/records/text/media", content=b"x")
+        missing = client.put("/api/repositories/papers/records/nope/media", content=b"x")
+
+    assert inline.status_code == 409
+    assert missing.status_code == 404
+    assert papers == [Paper(name="text", body="hi")]
+
+
+def test_put_record_media_refuses_a_read_only_or_non_document_repository():
+    read_only = papers_namespace([Paper(name="a", body=b"old")])
+    NS = make_ns()
+
+    @NS
+    @Repository(Photo)
+    class Photos:
+        def all(self):
+            return [Photo(name="a", image=b"\xff\xd8\xff")]
+
+        def save(self, photo): ...
+
+        def delete(self, name): ...
+
+        def data_view(self):
+            return ImageView(field="image")
+
+    with Context(namespaces={read_only, NS}) as ctx:
+        client = TestClient(UiServer(ctx, "proj")._app)
+        paper = client.put("/api/repositories/papers/records/a/media", content=b"x")
+        photo = client.put("/api/repositories/photos/records/a/media", content=b"x")
+
+    assert paper.status_code == 403
+    assert photo.status_code == 403
+
+
+def test_notebook_editing_is_off_by_default():
+    with Context(namespaces=set()) as ctx:
+        client = TestClient(UiServer(ctx, "proj")._app)
+        extensions = client.get("/api/ui/extensions").json()
+        session = client.post("/api/notebooks/session")
+
+    assert extensions["notebooks"] is False
+    assert session.status_code == 404
+
+
+def test_notebook_session_reports_a_jupyter_that_fails_to_start(monkeypatch):
+    from odf.ui import notebooks
+
+    def fail(self):
+        raise RuntimeError("Jupyter exited with code 1 while starting")
+
+    monkeypatch.setattr(notebooks.NotebookServer, "start", fail)
+    with Context(namespaces=set()) as ctx:
+        client = TestClient(UiServer(ctx, "proj", notebooks=True)._app)
+        extensions = client.get("/api/ui/extensions").json()
+        session = client.post("/api/notebooks/session")
+
+    assert extensions["notebooks"] is True
+    assert session.status_code == 503
+    assert "code 1" in session.json()["detail"]
 
 
 def described_papers_namespace(papers, metadata):
@@ -1883,6 +2028,22 @@ def test_ui_extensions_reports_configured_brand():
     assert r.json()["brand"] == "Beacon Watch"
 
 
+def test_ui_extensions_reports_iso_grid_by_default():
+    with Context(namespaces=set()) as ctx:
+        client = TestClient(UiServer(ctx, "proj")._app)
+        r = client.get("/api/ui/extensions")
+
+    assert r.json()["grid"] == "iso"
+
+
+def test_ui_extensions_reports_configured_grid():
+    with Context(namespaces=set()) as ctx:
+        client = TestClient(UiServer(ctx, "proj", grid="flat")._app)
+        r = client.get("/api/ui/extensions")
+
+    assert r.json()["grid"] == "flat"
+
+
 # --- themes --------------------------------------------------------------------
 
 
@@ -1933,16 +2094,82 @@ def test_selecting_a_different_theme_serves_different_content(tmp_path, monkeypa
     assert "alt theme marker" in r.text
 
 
+def make_theme_dir(path, script=True):
+    path.mkdir()
+    (path / "theme.css").write_text("/* project theme marker */")
+    (path / "favicon.svg").write_text("<svg><title>project favicon</title></svg>")
+    if script:
+        (path / "theme.js").write_text("// project theme script")
+    return path
+
+
+def test_serves_a_project_theme_from_an_absolute_path(tmp_path):
+    theme = make_theme_dir(tmp_path / "my-theme")
+
+    with Context(namespaces=set()) as ctx:
+        client = TestClient(UiServer(ctx, "proj", theme=str(theme))._app)
+        responses = {path: client.get(path) for path in ("/theme.css", "/theme.js", "/favicon.svg")}
+
+    assert "project theme marker" in responses["/theme.css"].text
+    assert "project theme script" in responses["/theme.js"].text
+    assert "project favicon" in responses["/favicon.svg"].text
+
+
+def test_resolves_a_relative_project_theme_path_against_the_working_directory(
+    tmp_path, monkeypatch
+):
+    make_theme_dir(tmp_path / "my-theme")
+    monkeypatch.chdir(tmp_path)
+
+    with Context(namespaces=set()) as ctx:
+        client = TestClient(UiServer(ctx, "proj", theme="./my-theme")._app)
+        r = client.get("/theme.css")
+
+    assert "project theme marker" in r.text
+
+
+def test_project_theme_without_a_script_serves_an_empty_one(tmp_path):
+    theme = make_theme_dir(tmp_path / "my-theme", script=False)
+
+    with Context(namespaces=set()) as ctx:
+        client = TestClient(UiServer(ctx, "proj", theme=str(theme))._app)
+        r = client.get("/theme.js")
+
+    assert r.status_code == 200
+    assert r.text == ""
+
+
+def test_missing_project_theme_directory_raises_value_error(tmp_path):
+    with pytest.raises(ValueError, match="UI theme directory .* does not exist"):
+        themes.theme_dir(str(tmp_path / "nowhere"))
+
+
+def test_project_theme_missing_a_required_file_raises_value_error(tmp_path):
+    theme = make_theme_dir(tmp_path / "my-theme")
+    (theme / "favicon.svg").unlink()
+
+    with pytest.raises(ValueError, match="missing required file 'favicon.svg'"):
+        themes.theme_dir(str(theme))
+
+
+def test_built_in_theme_name_wins_over_a_same_named_directory(tmp_path, monkeypatch):
+    make_theme_dir(tmp_path / "default")
+    monkeypatch.chdir(tmp_path)
+
+    assert themes.theme_dir("default") == themes.STATIC_DIR / "themes" / "default"
+
+
+def test_unknown_theme_error_mentions_theme_paths():
+    with pytest.raises(ValueError, match='path to a theme directory such as "./my-theme"'):
+        themes.theme_dir("bogus")
+
+
 def test_list_themes_finds_the_built_in_default_theme():
     assert "default" in themes.list_themes()
 
 
-def test_list_themes_finds_the_built_in_glitch_theme():
-    assert "glitch" in themes.list_themes()
-
-
-def test_list_themes_finds_the_built_in_neo_theme():
-    assert "neo" in themes.list_themes()
+def test_list_themes_finds_the_built_in_ink_theme():
+    assert "ink" in themes.list_themes()
 
 
 def test_list_themes_finds_the_built_in_emerald_theme():
@@ -1953,12 +2180,80 @@ def test_list_themes_finds_the_built_in_onyx_theme():
     assert "onyx" in themes.list_themes()
 
 
+def test_theme_can_draw_the_canvas_coarser():
+    script = (themes.STATIC_DIR / "app.js").read_text()
+
+    assert "pixelSize: null" in script
+    assert "const dpr = canvasScale();" in script
+    assert "'pixelSize' in rest" in script
+
+
+def test_theme_can_set_the_canvas_label_font():
+    script = (themes.STATIC_DIR / "app.js").read_text()
+
+    assert "labelFont: \"'SF Mono', 'Courier New', monospace\"" in script
+    assert "labelSize: 9.5," in script
+    assert script.count("px ${THEME_STYLE.labelFont}`") == 3
+    assert "document.fonts.load(font)" in script
+
+
+def test_theme_can_snap_canvas_labels_to_whole_pixels():
+    script = (themes.STATIC_DIR / "app.js").read_text()
+
+    assert "labelSnap: false," in script
+    assert "labelAlpha: 0.45," in script
+    assert "labelShadow: false," in script
+    assert "labelBold: true," in script
+    assert script.count("enterLabelSpace(sx, sy - GRID.extents(node).top)") == 2
+
+
+def test_theme_can_replace_empty_tile_drawing():
+    script = (themes.STATIC_DIR / "app.js").read_text()
+
+    assert "emptyTile: null" in script
+    assert "THEME_STYLE.emptyTile(sx, sy)" in script
+
+
+def test_theme_can_draw_a_ground_shadow_under_icons():
+    script = (themes.STATIC_DIR / "app.js").read_text()
+
+    assert "groundShadow: null" in script
+    assert "THEME_STYLE.groundShadow(x, y, e, accent, lit)" in script
+
+
+def test_theme_can_fill_faces_across_the_whole_icon():
+    script = (themes.STATIC_DIR / "app.js").read_text()
+
+    assert "faceFill: null" in script
+    assert "function drawIcon(key, x, y, accent, lit)" in script
+    assert "THEME_STYLE.faceFill(side, accent, lit, t, ICON_FRAME)" in script
+    # Both the topology and the icon picker's swatches draw through drawIcon,
+    # so a face fill spans the icon in both.
+    assert "ICONS[iconKey(node)].draw(" not in script
+    assert "GRID.drawSwatch(key, canvasEl.width / 2" in script
+    assert "drawIcon(key, x, y, accent, false)" in script
+
+
 def test_ui_has_the_collapsible_sidebar_rail():
     html = (themes.STATIC_DIR / "index.html").read_text()
     script = (themes.STATIC_DIR / "app.js").read_text()
 
     assert 'id="sb-rail"' in html
     assert "odf-ui-sidebar" in script
+
+
+def test_ui_header_status_shows_run_activity():
+    html = (themes.STATIC_DIR / "index.html").read_text()
+    script = (themes.STATIC_DIR / "app.js").read_text()
+
+    assert 'id="hdr-status"' in html
+    assert 'class="hdr-status-text"' in html
+    assert "function updateHeaderStatus()" in script
+    assert "RUN_ACTIVE_VERB" in script
+    for name in themes.list_themes():
+        css = (themes.STATIC_DIR / "themes" / name / "theme.css").read_text()
+        assert ".hdr-status.failed{" in css, name
+        assert ".hdr-status.running .dot" in css, name
 
 
 def test_ui_has_the_lightbox_tool_rail():
@@ -2064,6 +2359,55 @@ def test_index_loads_every_icon_group_script_between_app_and_theme():
     assert max(positions.values()) < html.index('src="/theme.js"')
 
 
+GRID_SCRIPTS = sorted(p.name for p in (themes.STATIC_DIR / "grids").glob("*.js"))
+
+
+@pytest.mark.parametrize("name", GRID_SCRIPTS)
+def test_serves_every_grid_script(name):
+    with Context(namespaces=set()) as ctx:
+        client = TestClient(UiServer(ctx, "proj")._app)
+        r = client.get(f"/grids/{name}")
+
+    assert r.status_code == 200
+    assert "javascript" in r.headers["content-type"]
+    assert r.headers["cache-control"] == "no-cache"
+    assert r.text == (themes.STATIC_DIR / "grids" / name).read_text()
+
+
+def test_unknown_grid_script_is_404():
+    with Context(namespaces=set()) as ctx:
+        client = TestClient(UiServer(ctx, "proj")._app)
+        r = client.get("/grids/nope.js")
+
+    assert r.status_code == 404
+
+
+def test_index_loads_every_grid_script_between_app_and_theme():
+    html = (themes.STATIC_DIR / "index.html").read_text()
+    positions = [html.index(f'src="/grids/{name}"') for name in GRID_SCRIPTS]
+
+    assert "flat.js" in GRID_SCRIPTS
+    assert html.index('src="/app.js"') < min(positions)
+    assert max(positions) < html.index('src="/theme.js"')
+
+
+def test_flat_grid_has_a_glyph_per_exec_type_saved_as_flat_icon():
+    script = (themes.STATIC_DIR / "grids" / "flat.js").read_text()
+    glyphs = re.findall(r"^    ([a-z]+): \{ label: '[^']+', group: 'Defaults'", script, re.M)
+
+    assert set(glyphs) == DEFAULT_ICONS
+    assert "iconField: 'flatIcon'" in script
+    assert "customizable: false" not in script
+
+
+def test_flat_grid_puts_every_label_on_a_chip():
+    script = (themes.STATIC_DIR / "grids" / "flat.js").read_text()
+    app = (themes.STATIC_DIR / "app.js").read_text()
+
+    assert "labelChip: true" in script
+    assert "GRID.labelChip" in app
+
+
 def test_icon_group_scripts_register_unique_keys():
     keys = []
     for name in ICON_SCRIPTS:
@@ -2112,7 +2456,7 @@ def test_theme_script_is_empty_for_a_theme_without_one():
     assert r.text == ""
 
 
-@pytest.mark.parametrize("theme", ["glitch", "neo"])
+@pytest.mark.parametrize("theme", ["ink", "emerald"])
 def test_theme_script_is_served_for_a_theme_that_has_one(theme):
     with Context(namespaces=set()) as ctx:
         client = TestClient(UiServer(ctx, "proj", theme=theme)._app)
@@ -2130,33 +2474,17 @@ def test_theme_dir_resolves_the_default_theme():
     assert (path / "favicon.svg").is_file()
 
 
-def test_serves_glitch_theme_explicitly():
+def test_serves_ink_theme_explicitly():
     with Context(namespaces=set()) as ctx:
-        client = TestClient(UiServer(ctx, "proj", theme="glitch")._app)
+        client = TestClient(UiServer(ctx, "proj", theme="ink")._app)
         r = client.get("/")
 
     assert r.status_code == 200
     assert "text/html" in r.headers["content-type"]
 
 
-def test_theme_dir_resolves_the_glitch_theme():
-    path = themes.theme_dir("glitch")
-
-    assert (path / "theme.css").is_file()
-    assert (path / "favicon.svg").is_file()
-
-
-def test_serves_neo_theme_explicitly():
-    with Context(namespaces=set()) as ctx:
-        client = TestClient(UiServer(ctx, "proj", theme="neo")._app)
-        r = client.get("/")
-
-    assert r.status_code == 200
-    assert "text/html" in r.headers["content-type"]
-
-
-def test_theme_dir_resolves_the_neo_theme():
-    path = themes.theme_dir("neo")
+def test_theme_dir_resolves_the_ink_theme():
+    path = themes.theme_dir("ink")
 
     assert (path / "theme.css").is_file()
     assert (path / "favicon.svg").is_file()

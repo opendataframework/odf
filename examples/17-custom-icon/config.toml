@@ -2,7 +2,7 @@
 name = "custom-icon-example"
 
 [ui]
-theme = "neo"
+theme = "ink"
 icon-scripts = ["icons/lighthouse.js"]
 favicon = "favicon.svg"
 logo = "logo.svg"

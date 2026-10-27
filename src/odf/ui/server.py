@@ -5,6 +5,7 @@ outside, so it is constructed and driven directly by ``Server.start(ui=True)``
 / ``Server.stop()``, after the ``Context`` has already resolved.
 """
 
+import dataclasses
 import json
 import threading
 from collections.abc import AsyncIterator, Callable, Iterator
@@ -17,6 +18,7 @@ try:
     from fastapi.encoders import jsonable_encoder
     from fastapi.responses import FileResponse, HTMLResponse, Response, StreamingResponse
     from pydantic import ValidationError
+    from starlette.concurrency import run_in_threadpool
 except ImportError as exc:
     raise ImportError(
         "server.start(ui=True) requires the 'ui' extra. Install with: pip install odf[ui]"
@@ -37,7 +39,9 @@ from opendataframework.view import (
     VideoView,
 )
 
-from odf.ui import annotations, arguments, data, keys, layout, media, themes
+from odf.ui import annotations, arguments, data, events, keys, layout, media, themes
+from odf.ui.notebooks import NotebookServer, local_host, theme_rewrite
+from odf.ui.origin import HostCheck, OriginCheck
 from odf.ui.topology import TopologyView, build_topology
 
 if TYPE_CHECKING:
@@ -99,7 +103,8 @@ class UiServer:
             (the default) keeps the built-in ``"ODF"`` label. Distinct from
             ``project`` — that's the specific project being visualized;
             this is the product/tool name wrapping around it.
-        theme: Name of the UI theme (visual file-set) to serve — see
+        theme: Name of the UI theme (visual file-set) to serve, or a path to
+            a theme directory of the project's own — see
             ``odf.ui.themes``. Defaults to ``"default"``. Orthogonal to the
             UI's own client-side light/dark color-mode toggle, which each
             theme keeps working independently.
@@ -107,6 +112,17 @@ class UiServer:
             ``odf.ui.topology.TopologyView``. ``None`` (the default) shows
             everything. Display-only: hidden components stay reachable through
             the other endpoints.
+        notebooks: Whether a notebook in a document view can be edited in
+            the reader, in a Jupyter Notebook server launched on the first
+            edit (see ``odf.ui.notebooks``) and reached through the UI at
+            ``/proxy/jupyter/`` (see ``odf.ui.proxy``). Needs the
+            ``notebook`` package.
+            ``False`` (the default) only renders notebooks.
+        grid: How the topology grid is drawn: ``"iso"`` (the default), the
+            isometric grid with a building per node, or ``"flat"``, a
+            top-down schematic with every node the same shape in its type's
+            color and node customization turned off (see
+            ``static/grids/flat.js``).
     """
 
     def __init__(
@@ -125,6 +141,8 @@ class UiServer:
         brand: str | None = None,
         theme: str = "default",
         topology: TopologyView | None = None,
+        notebooks: bool = False,
+        grid: str = "iso",
     ) -> None:
         """Build the FastAPI app and register every route (see class docstring for args)."""
         self._context = context
@@ -143,10 +161,27 @@ class UiServer:
         self._brand = brand
         self._theme_dir = themes.theme_dir(theme)
         self._topology = topology
+        self._grid = grid
+        self._notebooks: NotebookServer | None = None
+        self._events = events.EventHub(context)
         self._server: uvicorn.Server | None = None
         self._thread: threading.Thread | None = None
 
         app = FastAPI(title="ODF Topology", docs_url=None, redoc_url=None)
+        app.add_middleware(OriginCheck)
+
+        if notebooks:
+            # Only now: forwarding needs tornado, which comes with Jupyter.
+            from odf.ui import proxy
+
+            self._notebooks = NotebookServer(self.local_url, proxy.prefix("jupyter"), Path.cwd())
+            proxy.mount_proxy(
+                app,
+                "jupyter",
+                lambda: self._notebooks.origin,
+                lambda: self._notebooks.credentials,
+                lambda request, path: theme_rewrite(path, request.cookies),
+            )
 
         @app.get("/api/topology")
         def topology() -> dict:
@@ -167,7 +202,7 @@ class UiServer:
 
         @app.get("/api/ui/extensions")
         def ui_extensions() -> dict:
-            """List icon scripts, extra colors, the custom logo, brand, and enabled features."""
+            """List icon scripts, colors, the custom logo, brand, grid, and enabled features."""
             return {
                 "iconScripts": [
                     f"/api/ui/icon-scripts/{i}" for i in range(len(self._icon_scripts))
@@ -175,7 +210,9 @@ class UiServer:
                 "colors": self._colors,
                 "logo": "/api/ui/logo" if self._logo is not None else None,
                 "brand": self._brand,
+                "grid": self._grid,
                 "annotations": self._annotations_path is not None,
+                "notebooks": self._notebooks is not None,
             }
 
         @app.get("/api/ui/logo")
@@ -350,6 +387,29 @@ class UiServer:
                 headers=headers,
             )
 
+        @app.put("/api/repositories/{repo_id}/records/{key}/media", status_code=204)
+        async def put_record_media(repo_id: str, key: str, request: Request) -> None:
+            """Replace a document record's file with the request body, through ``save()``.
+
+            Only a record whose document is a file (bytes) takes one: a
+            document held in the record itself is edited as a field instead.
+            This is how a notebook edited in Jupyter is saved (see
+            ``odf.ui.notebook_contents``).
+            """
+            body = await request.body()
+            await run_in_threadpool(self._replace_document, repo_id, key, body)
+
+        @app.post("/api/notebooks/session")
+        def notebook_session() -> dict:
+            """Launch the Jupyter that edits notebooks, if needed, and say how to reach it."""
+            if self._notebooks is None:
+                raise HTTPException(status_code=404, detail="Notebook editing is not enabled")
+            try:
+                self._notebooks.start()
+            except RuntimeError as exc:
+                raise HTTPException(status_code=503, detail=str(exc)) from exc
+            return {"url": "/proxy/jupyter/"}
+
         @app.get("/api/repositories/{repo_id}/annotations")
         def repository_annotations(repo_id: str) -> dict:
             """Return a repository's labels and annotations.
@@ -452,6 +512,16 @@ class UiServer:
         # collection, by registered name: a @Task registered as "loader" is
         # /api/tasks/loader (see odf.ui.keys). Actions that only apply to one
         # kind have routes for that kind only.
+
+        @app.get("/api/events")
+        def run_events() -> StreamingResponse:
+            """Stream every protocol call the context makes, as server-sent events."""
+            return StreamingResponse(
+                events.sse(self._events),
+                media_type="text/event-stream",
+                # X-Accel-Buffering: nginx would otherwise hold events back.
+                headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
+            )
 
         @app.get("/api/{collection}/{name}/logs")
         def component_logs(collection: str, name: str) -> list[dict]:
@@ -558,6 +628,16 @@ class UiServer:
                 raise HTTPException(status_code=404, detail=f"Unknown icon script: {name}")
             return FileResponse(
                 icons_dir / name, media_type="application/javascript", headers=no_cache
+            )
+
+        @app.get("/grids/{name}")
+        def grid_script(name: str) -> FileResponse:
+            """Serve one of the UI's built-in grid scripts."""
+            grids_dir = themes.STATIC_DIR / "grids"
+            if name not in {p.name for p in grids_dir.glob("*.js")}:
+                raise HTTPException(status_code=404, detail=f"Unknown grid script: {name}")
+            return FileResponse(
+                grids_dir / name, media_type="application/javascript", headers=no_cache
             )
 
         @app.get("/theme.css")
@@ -675,6 +755,23 @@ class UiServer:
             raise HTTPException(status_code=403, detail="Repository has no data view")
         return view
 
+    def _replace_document(self, repo_id: str, key: str, content: bytes) -> None:
+        """Save the record matching ``key`` with ``content`` as its document file."""
+        _, instance, entity_cls = self._get_writable(repo_id)
+        if not isinstance(instance, ReadableProtocol):
+            raise HTTPException(status_code=403, detail="Repository is not readable")
+        view = self._get_data_view(repo_id)
+        if not isinstance(view, DocumentView):
+            raise HTTPException(status_code=403, detail="Repository has no document view")
+        key_field = data.key_field_name(entity_cls)
+        coerced_key = data.coerce_key(entity_cls, key_field, key)
+        record = next((r for r in instance.all() if getattr(r, key_field) == coerced_key), None)
+        if record is None:
+            raise HTTPException(status_code=404, detail="Record not found")
+        if not isinstance(getattr(record, view.field), (bytes, bytearray)):
+            raise HTTPException(status_code=409, detail="Record's document is not a file")
+        instance.save(dataclasses.replace(record, **{view.field: content}))
+
     def _get_annotatable_view(self, repo_id: str) -> DataView:
         """Resolve a repository id's data view, or raise 404 if it can't be annotated."""
         view = self._get_data_view(repo_id)
@@ -736,16 +833,28 @@ class UiServer:
         """The base URL the UI is served from."""
         return f"http://{self._host}:{self._port}"
 
+    @property
+    def local_url(self) -> str:
+        """The base URL to reach the UI at from this machine, whatever it binds to."""
+        return f"http://{local_host(self._host)}:{self._port}"
+
     def start(self) -> None:
         """Start serving in a background daemon thread. Returns immediately."""
-        config = uvicorn.Config(self._app, host=self._host, port=self._port, log_level="warning")
+        self._events.start()
+        config = uvicorn.Config(
+            HostCheck(self._app, self._host), host=self._host, port=self._port, log_level="warning"
+        )
         self._server = uvicorn.Server(config)
         self._thread = threading.Thread(target=self._server.run, daemon=True)
         self._thread.start()
 
     def stop(self) -> None:
         """Signal the server to exit and wait for the background thread to finish."""
+        # Ends the open event streams first, which shutdown would wait on.
+        self._events.stop()
         if self._server is not None:
             self._server.should_exit = True
         if self._thread is not None:
             self._thread.join(timeout=5)
+        if self._notebooks is not None:
+            self._notebooks.stop()

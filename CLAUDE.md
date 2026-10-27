@@ -39,7 +39,7 @@ poetry run odf run
 ```
 
 Requires Python >=3.14, managed with Poetry. `pyproject.toml` depends on
-`opendataframework (>=0.3.0,<0.4.0)` by version, resolved from PyPI. When
+`opendataframework (>=0.4.0,<0.5.0)` by version, resolved from PyPI. When
 developing both repos side by side against unreleased `opendataframework`
 changes, temporarily override the dependency to a local path/git source —
 and revert that override (and regenerate `poetry.lock`) before releasing a
@@ -56,7 +56,9 @@ needs a third-party dependency:
 | `cli.py`, `scaffold.py`, `templates/` | `odf init`/`odf run` CLI | `typer`, `rich` |
 | `mcp/server.py` | MCP server exposing component lifecycle + task/pipeline execution + repository data queries as tools | `mcp`, `uvicorn` |
 | `ui/server.py`, `ui/topology.py`, `ui/keys.py`, `ui/data.py`, `ui/arguments.py`, `ui/layout.py`, `ui/extensions.py`, `ui/themes.py` | UI dev server | `fastapi`, `uvicorn` |
-| `ui/static/` | The UI itself: `index.html` + `app.js` shared by every theme, `icons/` holding the built-in topology icons (one file per picker group, plus `shared.js`), and `themes/<name>/` holding each theme's `theme.css`, `favicon.svg` and optional `theme.js` | (Leaflet from a CDN; no build step) |
+| `ui/static/` | The UI itself: `index.html` + `app.js` shared by every theme, `icons/` holding the built-in topology icons (one file per picker group, plus `shared.js`), `grids/` holding the
+non-isometric topology grids picked by `[ui] grid` (`flat.js`), and `themes/<name>/` holding each theme's `theme.css`, `favicon.svg` and optional `theme.js` | (Leaflet from a CDN; no build step) |
+| `ui/notebooks.py`, `ui/notebook_contents.py`, `ui/notebook_identity.py`, `ui/proxy.py` | Jupyter Notebook launched on demand (on `127.0.0.1` only) to edit notebooks in the document view; `notebook_contents.py` is its contents manager and `notebook_identity.py` its identity provider, both loaded only inside that Jupyter subprocess: the first reads and saves records through the UI's HTTP API, the second accepts only requests carrying the token the UI's proxy adds, so the browser never holds one; `proxy.py` forwards `/proxy/<name>/` (HTTP and WebSockets) to such an embedded app, dropping the browser's `Authorization`, so the browser reaches Jupyter on the UI's own origin | `notebook`, `websockets` (optional) |
 | `chat/engine.py` | Chat window backing a `Server`'s UI | `ollama` |
 
 Every component is addressed by its upstream key, `<namespace>.<name>`
@@ -84,6 +86,11 @@ with the `ODF.iconKit` helpers from `icons/shared.js`. Icon keys are stored
 in projects' `layout.json`, so renaming one resets it to the type default
 there.
 
+The topology's projection and node drawing go through `GRID` in `app.js`,
+whose built-in entry is the isometric grid. Another grid is its own file
+under `ui/static/grids/`, registering through `ODF.registerGrid`; keep its
+logic there, not in `app.js` or a theme.
+
 None of `ui`/`mcp`/`chat` are imported eagerly by `odf/__init__.py` or
 `odf/server.py` (keep it that way — `import odf` alone must not pull in
 fastapi/mcp/ollama). They're activated by
@@ -108,7 +115,7 @@ don't exist in this package anymore. If an import like that shows up
 
 ### Templates (`odf init`)
 
-`templates/{default,data-analytics,data-engineering,data-science,research}/`
+`templates/{default,data-analytics,data-engineering,data-science,ml,research}/`
 are scaffolded onto disk by `scaffold.py` via
 `importlib.resources.files("odf") / "templates" / template`. Each
 template's `app/*.py` imports core symbols from `opendataframework`, not
@@ -152,7 +159,7 @@ not per commit; format mirrors `opendataframework`'s release notes).
 
 ## Examples
 
-`examples/` has 20 examples. `01-table-view/` (a repository with no
+`examples/` has 25 examples. `01-table-view/` (a repository with no
 `data_view()` at all, so the UI falls back to the implicit default table)
 and `06-location-view/` (`data_view() -> LocationView` overriding that
 default with a map) are the two ends of the `data_view()` concept.
@@ -164,7 +171,15 @@ belong with the CLI that describes them, not the core package).
 (streaming/video/audio/image/document/timeseries views, chart, chart via
 Plotly, MCP + chat) ported from the original monorepo's `demo/` project.
 `17-custom-icon/`, `18-custom-mcp-tool/`, `19-agent/` (an `@Agent`
-invoked from the UI, over MCP and from chat) and `20-function/` (plain
-functions adopted with `@Function`) were added here since. Treat new examples here as small and focused, one concept each, matching
+invoked from the UI, over MCP and from chat), `20-function/` (plain
+functions adopted with `@Function`), `21-notebook-view/` (notebooks in a
+`DocumentView`, edited in an embedded Jupyter), `22-ml/` (mirrors
+`odf init --template ml`: runs, params, metrics and artifacts as
+repositories, with a grouped `TimeseriesView`), `23-reverse-proxy/`
+(`docker compose up` with Traefik in front: HTTPS, a login, MCP at `/mcp`,
+as `docs/ui.md#deploying` describes), `24-custom-theme/` (a glitch theme of
+the project's own, selected by `[ui] theme = "./themes/glitch"`)
+and `25-flat-grid/` (`[ui] grid = "flat"`: one node of each kind showing its
+type's glyph, with a `layout.json` `flatIcon` override) were added here since. Treat new examples here as small and focused, one concept each, matching
 `opendataframework/examples/`'s style rather than `demo/`'s
 everything-at-once approach.

@@ -1,0 +1,9 @@
+[project]
+name = "ml-example"
+
+[component.sqlite]
+path = "app.db"
+
+[task.sweep]
+learning-rates = [0.001, 0.01, 0.1, 1.0]
+epochs = 5

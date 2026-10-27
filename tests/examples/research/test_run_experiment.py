@@ -31,7 +31,9 @@ def _write_data_csv(base: Path) -> None:
 @pytest.fixture
 def readings(tmp_path) -> Readings:
     config = Config({"component": {"sqlite": {"path": str(tmp_path / "test.db")}}})
-    return Readings(SQLite(config))
+    sqlite = SQLite(config)
+    yield Readings(sqlite)
+    sqlite.on_stop()
 
 
 def test_run_experiment_loads_data_and_writes_results(tmp_path, monkeypatch, readings):

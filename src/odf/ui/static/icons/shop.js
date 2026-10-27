@@ -20,14 +20,14 @@
     onFace(display, 'v', len => {
       ctx.font = 'bold 5px monospace';
       ctx.textAlign = 'center';
-      ctx.fillStyle = rgba(accent, lit ? 1 : 0.8);
+      ctx.fillStyle = rgba(faceInk(accent), lit ? 1 : 0.8);
       if (lit) { ctx.shadowColor = accent; ctx.shadowBlur = 3; }
       ctx.fillText(`$${10 + (Math.floor(animT * 2) % 90)}`, len / 2, -2.5);
     });
     for (const u of [-0.12, 0.05, 0.22]) {
       for (const v of [0.08, 0.2]) {
         const p = pt(body.g, u, v, 7);
-        ctx.fillStyle = rgba(accent, lit ? 0.9 : 0.6);
+        ctx.fillStyle = rgba(faceInk(accent), lit ? 0.9 : 0.6);
         ctx.fillRect(p[0] - 0.6, p[1] - 0.6, 1.2, 1.2);
       }
     }
@@ -57,7 +57,7 @@
         line(6.5, y - 1, len - 2, y - 1, color, alpha * 0.8, 0.6);
         if (!low) {
           ctx.save();
-          ctx.strokeStyle = rgba(accent, alpha);
+          ctx.strokeStyle = rgba(faceInk(accent), alpha);
           ctx.lineWidth = 0.6;
           ctx.beginPath();
           ctx.moveTo(2.5, y - 1.3);
@@ -182,7 +182,7 @@
       rect(len * 0.25, -8, len * 0.5, 1.6, accent, lit ? 0.7 : 0.5, lit ? 0.9 : 0.6, 0.5);
       ctx.font = 'bold 4px monospace';
       ctx.textAlign = 'center';
-      ctx.fillStyle = rgba(accent, lit ? 0.9 : 0.65);
+      ctx.fillStyle = rgba(faceInk(accent), lit ? 0.9 : 0.65);
       ctx.fillText('PO', len / 2, -2);
     });
     // Flag on the side pops up when a letter goes in.
@@ -232,7 +232,7 @@
         ctx.scale(Math.abs(flip), 1);
         ctx.font = 'bold 5.5px sans-serif';
         ctx.textAlign = 'center';
-        ctx.fillStyle = rgba(flip < 0 ? ACCENT.alert : accent, lit ? 1 : 0.8);
+        ctx.fillStyle = rgba(faceInk(flip < 0 ? ACCENT.alert : accent), lit ? 1 : 0.8);
         ctx.fillText(flip < 0 ? 'CLOSED' : 'OPEN', 0, 0);
         ctx.restore();
       }
@@ -297,7 +297,7 @@
     onFace(bin, 'v', len => {
       ctx.font = 'bold 4px monospace';
       ctx.textAlign = 'center';
-      ctx.fillStyle = rgba(accent, lit ? 0.95 : 0.7);
+      ctx.fillStyle = rgba(faceInk(accent), lit ? 0.95 : 0.7);
       ctx.fillText('CSV', len / 2, -9);
       for (let i = 0; i < 2; i++) line(3, -5 + i * 2, len - 3, -5 + i * 2, accent, lit ? 0.6 : 0.4, 0.5);
     });
@@ -362,7 +362,7 @@
       onFace(step, 'v', len => {
         ctx.font = 'bold 6px sans-serif';
         ctx.textAlign = 'center';
-        ctx.fillStyle = rgba(accent, lit ? 1 : 0.75);
+        ctx.fillStyle = rgba(faceInk(accent), lit ? 1 : 0.75);
         ctx.fillText(label, len / 2, -h / 2 + 2);
       });
     }
@@ -385,9 +385,9 @@
     onFace(body, 'v', len => {
       ctx.beginPath();
       ctx.arc(len / 2, -5, 3.6, 0, Math.PI * 2);
-      ctx.fillStyle = rgba(accent, lit ? 0.3 : 0.2);
+      ctx.fillStyle = rgba(faceInk(accent), lit ? 0.3 : 0.2);
       ctx.fill();
-      ctx.strokeStyle = rgba(accent, lit ? 1 : 0.7);
+      ctx.strokeStyle = rgba(faceInk(accent), lit ? 1 : 0.7);
       ctx.lineWidth = 1;
       ctx.stroke();
       dot(len / 2, -5, 1.4, accent, lit ? 0.9 : 0.6);

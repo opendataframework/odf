@@ -112,10 +112,8 @@ body{
 
 #hdr{padding:0 16px;height:46px;display:flex;align-items:center;gap:0;flex-shrink:0}
 .brand{display:flex;align-items:center;gap:10px;margin-right:18px;padding-right:18px;border-right:1px solid var(--border)}
-.brand-mark{width:18px;height:18px;flex-shrink:0;border:1.5px solid var(--title-accent);position:relative;transform:rotate(45deg)}
-.brand-mark::after{content:"";position:absolute;inset:4px;background:var(--title-accent);opacity:.85}
-.brand-mark.has-logo{border:none;transform:none}
-.brand-mark.has-logo::after{content:none}
+.brand-mark{width:18px;height:18px;flex-shrink:0;background:url(/favicon.svg) center/contain no-repeat}
+.brand-mark.has-logo{background:none}
 .brand-mark img{width:100%;height:100%;object-fit:contain;display:block}
 .hdr-title{font-family:'SF Mono','IBM Plex Mono',Consolas,monospace;color:var(--text);font-size:13px;font-weight:600;letter-spacing:.04em}
 .hdr-title small{display:block;color:var(--text-dim);font-size:9.5px;font-weight:500;letter-spacing:.09em;text-transform:uppercase;margin-top:2px}
@@ -128,6 +126,12 @@ body{
 
 .hdr-status{display:flex;align-items:center;gap:7px;margin-left:auto;padding:0 16px;font-family:'SF Mono',Consolas,monospace;font-size:10px;letter-spacing:.08em;text-transform:uppercase;color:var(--text-muted)}
 .hdr-status .dot{width:6px;height:6px;background:var(--ok);box-shadow:0 0 0 2px color-mix(in srgb, var(--ok) 20%, transparent);animation:pulse-dot 2.4s ease-in-out infinite}
+.hdr-status-text{max-width:280px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.hdr-status.running .dot,.hdr-status.done .dot{background:var(--status-accent);box-shadow:0 0 0 2px color-mix(in srgb, var(--status-accent) 25%, transparent)}
+.hdr-status.running .dot{animation-duration:.8s}
+.hdr-status.running,.hdr-status.done{color:var(--text)}
+.hdr-status.failed{color:var(--accent-alert);cursor:pointer}
+.hdr-status.failed .dot{background:var(--accent-alert);box-shadow:0 0 0 2px color-mix(in srgb, var(--accent-alert) 25%, transparent);animation:none}
 .hdr-clock{font-family:'SF Mono',Consolas,monospace;font-size:11px;color:var(--text-dim);font-variant-numeric:tabular-nums;padding:0 16px;border-left:1px solid var(--border)}
 @keyframes pulse-dot{0%,100%{opacity:1}50%{opacity:.35}}
 
@@ -542,6 +546,22 @@ button.media-tile:hover,button.media-tile:focus-visible{border-color:var(--title
 .doc-markdown th:not([align]){text-align:left}
 .doc-markdown img{max-width:100%}
 .doc-markdown hr{margin:1.5em 0;border:0;border-top:1px solid var(--border)}
+.doc-notebook{padding-bottom:16px}
+.doc-nb-cell{display:grid;grid-template-columns:44px minmax(0,1fr);column-gap:8px;margin-bottom:12px}
+.doc-nb-prompt{padding-top:9px;font-family:'SF Mono',Consolas,monospace;font-size:10px;color:var(--text-dim);text-align:right;white-space:nowrap}
+.doc-nb-body{min-width:0}
+.doc-nb-markdown .doc-markdown>:last-child{margin-bottom:0}
+.doc-nb-input{margin:0;padding:8px 10px;overflow:auto;border:1px solid var(--border);border-radius:3px;background:var(--hover-bg);font-family:'SF Mono',Consolas,monospace;font-size:11.5px;line-height:1.5;white-space:pre;color:var(--text)}
+.doc-nb-output{margin-top:6px;padding:0 10px;overflow:auto;font-size:12px;color:var(--text)}
+.doc-nb-output pre{margin:0 0 4px;font-family:'SF Mono',Consolas,monospace;font-size:11.5px;line-height:1.5;white-space:pre-wrap;overflow-wrap:anywhere;color:var(--text)}
+.doc-nb-output .doc-nb-stderr,.doc-nb-output .doc-nb-error{padding:4px 6px;border-radius:3px;background:color-mix(in srgb, var(--accent-alert) 10%, transparent)}
+.doc-nb-output .doc-nb-error{color:var(--accent-alert)}
+.doc-nb-output img,.doc-nb-html svg{display:block;max-width:100%;height:auto;margin-bottom:4px;background:#fff}
+.doc-nb-html table{margin-bottom:4px;border-collapse:collapse;font-size:11.5px}
+.doc-nb-html th,.doc-nb-html td{padding:3px 8px;border:1px solid var(--border);text-align:right}
+.doc-nb-html thead th{background:var(--hover-bg);font-weight:600}
+.doc-reader.doc-reader-frame{padding:0;overflow:hidden}
+.doc-reader>.doc-notebook-frame{display:block;width:100%;max-width:none;height:100%;border:0;background:#fff}
 .doc-note{padding:8px 0;font-size:10.5px;color:var(--text-muted)}
 .doc-header{display:flex;flex-wrap:wrap;gap:10px;font-size:10.5px;color:var(--text-dim);margin-bottom:8px;padding-bottom:8px;border-bottom:1px solid var(--border)}
 .doc-header b{color:var(--text-muted);font-weight:600}
@@ -579,3 +599,21 @@ button.media-tile:hover,button.media-tile:focus-visible{border-color:var(--title
 .ts-point .ts-mark-head{left:50%;top:auto;bottom:0}
 .ts-mark-label{max-width:160px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;padding:1px 5px;background:var(--box-color);color:#111;font-size:10.5px;font-weight:600;line-height:1.4;cursor:pointer}
 .ts-mark-delete{width:18px;padding:0;border:0;border-left:1px solid rgba(0,0,0,.25);background:var(--box-color);color:#111;font-family:inherit;font-size:13px;line-height:1;cursor:pointer}
+
+/* Run toasts (see "Toasts" in app.js) and the log lines a toast opened the logs at */
+#toasts{position:absolute;top:44px;right:14px;z-index:8;display:flex;flex-direction:column;gap:6px;width:280px;max-width:calc(100% - 28px);pointer-events:none}
+.toast{pointer-events:auto;background:var(--panel);border:1px solid var(--border-strong);border-left:3px solid var(--border-strong);border-radius:2px;box-shadow:0 6px 18px rgba(0,0,0,.25),var(--panel-shadow);padding:8px 10px;font-size:11px;color:var(--text);animation:toast-in .18s ease-out}
+.toast.failed{border-color:var(--accent-alert);border-left-color:var(--accent-alert)}
+.toast-head{display:flex;align-items:center;gap:6px}
+.toast-label{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-family:'SF Mono',Consolas,monospace;font-weight:600;letter-spacing:.04em;text-transform:uppercase;font-size:10px}
+.toast-count{font-family:'SF Mono',Consolas,monospace;font-size:10px;color:var(--accent-alert)}
+.toast-close{background:none;border:none;color:var(--text-dim);cursor:pointer;font-size:14px;line-height:1;padding:0 2px}
+.toast-close:hover{color:var(--text)}
+.toast-text{margin-top:4px;color:var(--text-muted);font-family:'SF Mono',Consolas,monospace;font-size:10.5px;word-break:break-word;max-height:4.5em;overflow:hidden}
+.toast.failed .toast-text{color:var(--accent-alert)}
+.toast-actions{margin-top:6px;display:flex;justify-content:flex-end}
+.toast-logs{background:transparent;border:1px solid var(--border);border-radius:2px;color:var(--text-muted);font-family:'SF Mono',Consolas,monospace;font-size:9.5px;letter-spacing:.06em;text-transform:uppercase;padding:3px 8px;cursor:pointer}
+.toast-logs:hover{color:var(--title-accent);border-color:var(--border-strong);background:var(--hover-bg)}
+.log-line.run-match{background:color-mix(in srgb, var(--title-accent) 10%, transparent)}
+@keyframes toast-in{from{opacity:0;transform:translateY(-4px)}to{opacity:1;transform:none}}
+@media (prefers-reduced-motion: reduce){.toast,.hdr-status .dot{animation:none}}

@@ -1,47 +1,42 @@
-// Buildings: office blocks, a bank, a storefront, a stockroom and a factory.
+// Buildings: a tower, a pitched-roof block, a bank, a storefront, a stockroom
+// and a factory.
 (() => {
-  const { pt, poly, line, rect, dot, block, onFace, wave, strong } = ODF.iconKit;
+  const { pt, outline, line, rect, dot, block, gable, wedge, cylinder, onFace, wave, strong } = ODF.iconKit;
   const add = (key, draw, meta) => ODF.registerIcon(key, draw, { group: 'Buildings', ...meta });
 
-  // Building A / Building B → plain iso blocks with a few floor bands (each
-  // interpolated between its wall's own corners so it follows the wall's iso
-  // shear) and a rooftop antenna broadcasting "((•))" signal arcs that loop
-  // with animT. `seed` offsets the wave phase so neighboring buildings don't
-  // pulse in lockstep.
-  function drawBuilding(sx, sy, accent, lit, { bh, scale, floors, seed }) {
-    const { w2, h2, topY } = drawBox(sx, sy, bh, accent, lit, scale);
-
-    // Floor bands on both visible walls.
-    const walls = [
-      [[sx - w2, sy - bh], [sx - w2, sy], [sx, sy + h2 - bh], [sx, sy + h2]],
-      [[sx + w2, sy - bh], [sx + w2, sy], [sx, sy + h2 - bh], [sx, sy + h2]],
-    ];
-    ctx.save();
-    ctx.strokeStyle = rgba(accent, lit ? 0.45 : 0.25);
-    ctx.lineWidth = 0.6;
-    for (const [outerTop, outerBot, innerTop, innerBot] of walls) {
-      for (let f = 1; f <= floors; f++) {
-        const t = f / (floors + 1);
-        const a = lerp(outerTop, outerBot, t), b = lerp(innerTop, innerBot, t);
-        ctx.beginPath();
-        ctx.moveTo(a[0], a[1]);
-        ctx.lineTo(b[0], b[1]);
-        ctx.stroke();
+  // Windows in rows and columns across a wall of length `len` (see onFace),
+  // from `y0` up to `y1` px above its bottom edge. `lights(i)` gives window
+  // i's fill alpha.
+  function windows(len, rows, cols, y0, y1, accent, lit, lights) {
+    const gx = len / cols, gy = (y1 - y0) / rows;
+    for (let r = 0, i = 0; r < rows; r++) {
+      for (let k = 0; k < cols; k++, i++) {
+        rect(k * gx + gx * 0.25, -y0 - (r + 1) * gy + gy * 0.3, gx * 0.5, gy * 0.45,
+          accent, lights(i), lit ? 0.6 : 0.35, 0.5);
       }
     }
-    ctx.restore();
+  }
 
-    // Antenna mast from the roof-diamond center.
-    const tipY = topY - 14;
-    ctx.save();
-    ctx.strokeStyle = rgba(accent, lit ? 0.9 : 0.55);
-    ctx.lineWidth = 1;
-    ctx.lineCap = 'round';
-    ctx.beginPath();
-    ctx.moveTo(sx, topY);
-    ctx.lineTo(sx, tipY);
-    ctx.stroke();
-    ctx.restore();
+  // Building A → a setback tower, each tier narrower than the one under it,
+  // with a rooftop antenna broadcasting "((•))" signal arcs that loop with
+  // animT.
+  function drawBuildingA(sx, sy, accent, lit) {
+    const c = [sx, sy];
+    const tiers = [{ a: 0.55, b: 0.55, h: 26 }, { a: 0.42, b: 0.42, h: 16 }, { a: 0.28, b: 0.28, h: 12 }];
+    let z = 0;
+    for (const { a, b, h } of tiers) {
+      const blk = block(c, a, b, h, accent, lit, { lift: z });
+      const rows = Math.round(h / 7);
+      for (const side of ['u', 'v']) {
+        onFace(blk, side, len => windows(len, rows, Math.max(2, Math.round(len / 8)), 2, h - 1,
+          accent, lit, () => (lit ? 0.3 : 0.18)));
+      }
+      z += h;
+    }
+
+    // Antenna mast from the roof center.
+    const topY = sy - z, tipY = topY - 14;
+    line(sx, topY, sx, tipY, accent, lit ? 0.9 : 0.55, 1);
 
     // Signal arcs — left and right of the tip, expanding and fading out.
     const spread = 0.8;
@@ -50,7 +45,7 @@
     ctx.lineCap = 'round';
     if (lit) { ctx.shadowColor = accent; ctx.shadowBlur = 4; }
     for (let i = 0; i < 3; i++) {
-      const phase = (animT * 0.8 + i / 3 + seed) % 1;
+      const phase = (animT * 0.8 + i / 3) % 1;
       const r = 4 + phase * 10;
       ctx.strokeStyle = rgba(accent, (1 - phase) * (lit ? 0.9 : 0.45));
       ctx.beginPath();
@@ -63,7 +58,7 @@
     ctx.restore();
 
     // Pulsing tip.
-    const pulse = (Math.sin(animT * 4 + seed * Math.PI * 2) + 1) / 2;
+    const pulse = (Math.sin(animT * 4) + 1) / 2;
     ctx.save();
     ctx.beginPath();
     ctx.arc(sx, tipY, 1.8, 0, Math.PI * 2);
@@ -74,12 +69,20 @@
     ctx.restore();
   }
 
-  function drawBuildingA(sx, sy, accent, lit) {
-    drawBuilding(sx, sy, accent, lit, { bh: 48, scale: 0.55, floors: 4, seed: 0 });
-  }
-
+  // Building B → a long two-storey block under a pitched roof, its windows
+  // lighting up one after another as if people were coming in, with a
+  // chimney at the back.
   function drawBuildingB(sx, sy, accent, lit) {
-    drawBuilding(sx, sy, accent, lit, { bh: 24, scale: 0.9, floors: 2, seed: 0.5 });
+    const c = [sx, sy];
+    const a = 0.82, b = 0.5, h = 18, ridge = 11;
+    block(pt(c, -0.45, -0.2), 0.07, 0.07, h + ridge + 5, accent, lit, { fillAlpha: 1.5 });
+    const house = gable(c, a, b, h, ridge, accent, lit);
+    const on = Math.floor(animT * 1.2) % 12;
+    onFace(house, 'v', len => windows(len, 2, 6, 1, h - 1, accent, lit,
+      i => (i <= on ? 0.55 : 0.12) + (lit ? 0.1 : 0)));
+    onFace(house, 'u', len => {
+      rect(len / 2 - 3, -11, 6, 11, accent, 0.2, strong(lit), 0.6);
+    });
   }
 
   // Bank → a classical bank on its steps, with data
@@ -102,14 +105,9 @@
       for (let i = 0; i < 2; i++) rect(len * (0.2 + i * 0.4), -12, len * 0.2, 6, accent, 0.15, lit ? 0.7 : 0.45, 0.5);
     });
     // Gable roof: ridge runs front to back, the pediment faces the V wall.
-    poly([pt(top, -a, -b, bh), pt(top, 0, -b, bh + rise), pt(top, 0, b, bh + rise), pt(top, -a, b, bh)],
-      accent, 0.08, lit ? 0.6 : 0.4);
-    poly([pt(top, 0, -b, bh + rise), pt(top, a, -b, bh), pt(top, a, b, bh), pt(top, 0, b, bh + rise)],
-      accent, lit ? 0.16 : 0.1, lit ? 1 : 0.6, { lw: lit ? 1.2 : 1, blur: lit ? 8 : 0 });
-    poly([pt(top, -a, b, bh), pt(top, a, b, bh), pt(top, 0, b, bh + rise)],
-      accent, lit ? 0.22 : 0.14, strong(lit));
+    gable(top, a, b, 0, rise, accent, lit, { axis: 'v', lift: bh });
     const [ox, oy] = pt(top, 0, b, bh + rise * 0.4);
-    dot(ox, oy, 1.4, accent, strong(lit));
+    dot(ox, oy, 1.4, faceInk(accent), strong(lit));
     // Packets leave the door and head off towards the front-left.
     for (let i = 0; i < 3; i++) {
       const t = (animT * 0.5 + i / 3) % 1;
@@ -120,28 +118,28 @@
     }
   }
 
-  // Storefront → storefront: shop window, door and a striped awning.
+  // Storefront → a low shop behind a taller false front: shop window, door
+  // and a striped awning.
   function drawStorefront(sx, sy, accent, lit) {
     const c = [sx, sy];
-    const body = block(c, 0.8, 0.8, 24, accent, lit);
+    const shop = block(pt(c, 0, -0.12), 0.8, 0.6, 18, accent, lit);
+    const body = block(pt(c, 0, 0.6), 0.8, 0.12, 30, accent, lit);
     const glow = 0.2 + 0.2 * wave(2);
-    onFace(body, 'v', () => {
+    onFace(body, 'v', len => {
       rect(3, -13, 17, 9, accent, glow + (lit ? 0.1 : 0), lit ? 0.9 : 0.6);
       line(11.5, -13, 11.5, -4, accent, lit ? 0.7 : 0.45);
       rect(23, -13, 6, 13, accent, 0.12, lit ? 0.9 : 0.6);
-      ctx.beginPath();
-      ctx.arc(27.5, -6.5, 0.8, 0, Math.PI * 2);
-      ctx.fillStyle = rgba(accent, 0.9);
-      ctx.fill();
+      dot(27.5, -6.5, 0.8, accent, 0.9);
+      rect(4, -27, len - 8, 5, accent, 0.15, lit ? 0.7 : 0.45, 0.5);
     });
-    onFace(body, 'u', len => {
+    onFace(shop, 'u', len => {
       rect(len * 0.3, -14, len * 0.4, 7, accent, glow * 0.7, lit ? 0.7 : 0.45);
     });
-    const { a, b } = body, stripes = 6;
+    const { a, b } = body, front = pt(c, 0, 0.6), stripes = 6;
     for (let i = 0; i < stripes; i++) {
       const u0 = -a + (2 * a * i) / stripes, u1 = -a + (2 * a * (i + 1)) / stripes;
-      poly([pt(c, u0, b, 19), pt(c, u1, b, 19), pt(c, u1, b + 0.2, 14), pt(c, u0, b + 0.2, 14)],
-        accent, i % 2 ? 0.12 : (lit ? 0.6 : 0.45), lit ? 0.9 : 0.6);
+      paintFace(outline([pt(front, u0, b, 19), pt(front, u1, b, 19), pt(front, u1, b + 0.2, 14), pt(front, u0, b + 0.2, 14)]),
+        'top', accent, lit, i % 2 ? 1 : 2.5);
     }
   }
 
@@ -149,7 +147,8 @@
   // stack of crates outside.
   function drawStockroom(sx, sy, accent, lit) {
     const c = [sx, sy];
-    const body = block(c, 0.7, 0.7, 26, accent, lit);
+    // Lean-to roof, high at the back and falling towards the right wall.
+    const body = wedge(c, 0.7, 0.7, 32, 22, accent, lit);
     onFace(body, 'v', len => {
       const x = 5, w = len - 10, h = 17;
       const open = 0.55 * wave(0.8);
@@ -163,7 +162,7 @@
         line(x + 0.5, y, x + w - 0.5, y, accent, lit ? 0.5 : 0.3, 0.5);
       }
     });
-    onFace(body, 'u', len => rect(len * 0.3, -21, len * 0.4, 5, accent, 0.25, lit ? 0.7 : 0.45));
+    onFace(body, 'u', len => rect(len * 0.3, -18, len * 0.4, 5, accent, 0.25, lit ? 0.7 : 0.45));
     const crate = (u, v, lift) => {
       const blk = block(pt(c, u, v), 0.12, 0.12, 8, accent, lit, { lift, fillAlpha: 1.8 });
       onFace(blk, 'v', len => line(0, -4, len, -4, accent, lit ? 0.7 : 0.45, 0.6));
@@ -173,18 +172,18 @@
     crate(0.86, 0.25, 8);
   }
 
-  // Factory → a factory with a sawtooth roof and a smoking chimney.
+  // Factory → a factory with a sawtooth roof, a round smokestack and a silo.
   function drawFactory(sx, sy, accent, lit) {
     const c = [sx, sy];
     const a = 0.75, b = 0.5, bh = 16, teeth = 3, rise = 8;
-    // Chimney first, so the hall sits in front of its base.
-    const chimney = block(pt(c, -0.45, -0.3), 0.08, 0.08, bh + rise + 12, accent, lit, { fillAlpha: 1.5 });
-    const top = pt(chimney.g, 0, 0, chimney.bh);
+    // Stack and silo first, so the hall sits in front of their bases.
+    const stack = cylinder(pt(c, -0.45, -0.3), 0.1, bh + rise + 14, accent, lit, { fillAlpha: 1.5 });
     for (let i = 0; i < 3; i++) {
       const phase = (animT * 0.35 + i / 3) % 1;
-      dot(top[0] + 3 * phase + 1.5 * Math.sin(animT * 2 + i), top[1] - 3 - phase * 14,
+      dot(stack.x + 3 * phase + 1.5 * Math.sin(animT * 2 + i), stack.y - 3 - phase * 14,
         1.6 + phase * 3, accent, (1 - phase) * (lit ? 0.45 : 0.3));
     }
+    cylinder(pt(c, 0.45, -0.72), 0.24, bh + 14, accent, lit);
     const hall = block(c, a, b, bh, accent, lit);
     onFace(hall, 'v', len => {
       for (let i = 0; i < 4; i++) rect(3 + i * (len - 4) / 4, -11, (len - 4) / 4 - 3, 6, accent, 0.2, lit ? 0.8 : 0.5, 0.5);
@@ -193,19 +192,18 @@
     // Each tooth slopes up along U and ends in a glazed wall facing +U.
     for (let i = 0; i < teeth; i++) {
       const u0 = -a + (2 * a * i) / teeth, u1 = -a + (2 * a * (i + 1)) / teeth;
-      poly([pt(c, u0, -b, bh), pt(c, u1, -b, bh + rise), pt(c, u1, b, bh + rise), pt(c, u0, b, bh)],
-        accent, lit ? 0.16 : 0.1, lit ? 0.9 : 0.55, { lw: lit ? 1.1 : 0.9 });
-      poly([pt(c, u1, -b, bh), pt(c, u1, -b, bh + rise), pt(c, u1, b, bh + rise), pt(c, u1, b, bh)],
-        accent, 0.2 + 0.2 * wave(1.5, i), lit ? 0.8 : 0.5);
-      poly([pt(c, u0, b, bh), pt(c, u1, b, bh), pt(c, u1, b, bh + rise)],
-        accent, 0.08, lit ? 0.65 : 0.4);
+      paintFace(outline([pt(c, u0, -b, bh), pt(c, u1, -b, bh + rise), pt(c, u1, b, bh + rise), pt(c, u0, b, bh)]),
+        'top', accent, lit);
+      paintFace(outline([pt(c, u1, -b, bh), pt(c, u1, -b, bh + rise), pt(c, u1, b, bh + rise), pt(c, u1, b, bh)]),
+        'right', accent, lit, 1 + 1.5 * wave(1.5, i));
+      paintFace(outline([pt(c, u0, b, bh), pt(c, u1, b, bh), pt(c, u1, b, bh + rise)]), 'left', accent, lit);
     }
   }
 
-  add('building-a', drawBuildingA, { bh: 48, scale: 0.55, extraTop: 22, label: 'Building A' });
-  add('building-b', drawBuildingB, { bh: 24, scale: 0.9, extraTop: 22, label: 'Building B' });
+  add('building-a', drawBuildingA, { bh: 54, scale: 0.55, extraTop: 22, label: 'Building A' });
+  add('building-b', drawBuildingB, { bh: 29, scale: 0.9, extraTop: 8, label: 'Building B' });
   add('bank', drawBank, { bh: 28, scale: 1, label: 'Bank' });
-  add('storefront', drawStorefront, { bh: 24, scale: 0.8, label: 'Storefront' });
-  add('stockroom', drawStockroom, { bh: 26, scale: 1, label: 'Stockroom' });
-  add('factory', drawFactory, { bh: 24, scale: 1, extraTop: 14, label: 'Factory' });
+  add('storefront', drawStorefront, { bh: 30, scale: 0.8, label: 'Storefront' });
+  add('stockroom', drawStockroom, { bh: 32, scale: 1, label: 'Stockroom' });
+  add('factory', drawFactory, { bh: 38, scale: 1, extraTop: 14, label: 'Factory' });
 })();

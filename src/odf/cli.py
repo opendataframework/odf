@@ -1,6 +1,8 @@
 """Command-line entry point (``odf``), installed as a console script."""
 
 import importlib
+import shutil
+import subprocess  # nosec B404 - only runs a clipboard tool, see _copy_to_clipboard
 import sys
 from enum import StrEnum
 from importlib.metadata import PackageNotFoundError, version
@@ -33,6 +35,7 @@ class Template(StrEnum):
     data_analytics = "data-analytics"
     data_science = "data-science"
     data_engineering = "data-engineering"
+    ml = "ml"
     research = "research"
 
 
@@ -214,6 +217,46 @@ def _banner() -> Panel:
     )
 
 
+def _link(url: str, copied: bool = False) -> str:
+    """Render ``url`` bold and as a terminal hyperlink, noting when it was copied."""
+    note = " [dim](copied)[/dim]" if copied else ""
+    return f"[bold][link={url}]{url}[/link][/bold]{note}"
+
+
+_CLIPBOARD_COMMANDS = (
+    ["pbcopy"],
+    ["wl-copy"],
+    ["xclip", "-selection", "clipboard"],
+    ["xsel", "--clipboard", "--input"],
+    ["clip"],
+)
+
+
+def _copy_to_clipboard(text: str) -> bool:
+    """Put ``text`` on the system clipboard with the first clipboard tool found.
+
+    Returns whether it worked: ``False`` when no tool is installed (e.g. a
+    headless Linux box) or the tool fails, which ``odf run`` shrugs off.
+    """
+    for command in _CLIPBOARD_COMMANDS:
+        executable = shutil.which(command[0])
+        if executable is None:
+            continue
+        try:
+            subprocess.run(  # nosec B603 - fixed clipboard tool, URL passed on stdin
+                [executable, *command[1:]],
+                input=text.encode(),
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
+                check=True,
+                timeout=2,
+            )
+        except OSError, subprocess.SubprocessError:
+            continue
+        return True
+    return False
+
+
 @app.callback()
 def main() -> None:
     """Open Data Framework CLI."""
@@ -237,8 +280,9 @@ def run(
         None,
         "--theme",
         help=(
-            "UI theme (visual file-set) to serve. Defaults to config.toml's "
-            '[ui] theme, or "default".'
+            "UI theme (visual file-set) to serve: a built-in theme's name, or a "
+            'path to a theme directory such as "./my-theme". Defaults to '
+            'config.toml\'s [ui] theme, or "default".'
         ),
     ),
     mcp: bool = typer.Option(False, help="Start the MCP server."),
@@ -292,13 +336,19 @@ def run(
         _exit_on_startup_error(errors, exc)
         raise
 
+    # The first URL goes on the clipboard, to paste into another browser or an
+    # MCP client's config.
+    copied = server.ui_url or server.mcp_url
+    if copied and not _copy_to_clipboard(copied):
+        copied = None
+
     lines = []
     if server.ui_url:
-        lines.append(f"[{_BRAND}]●[/{_BRAND}] UI running at [bold]{server.ui_url}[/bold]")
+        ui_url = _link(server.ui_url, copied=server.ui_url == copied)
+        lines.append(f"[{_BRAND}]●[/{_BRAND}] UI running at {ui_url}")
     if server.mcp_url:
-        lines.append(
-            f"[{_ACCENT}]●[/{_ACCENT}] MCP server running at [bold]{server.mcp_url}[/bold]"
-        )
+        mcp_url = _link(server.mcp_url, copied=server.mcp_url == copied)
+        lines.append(f"[{_ACCENT}]●[/{_ACCENT}] MCP server running at {mcp_url}")
     lines.append("[dim]Press Ctrl+C to stop[/dim]")
 
     console.print(

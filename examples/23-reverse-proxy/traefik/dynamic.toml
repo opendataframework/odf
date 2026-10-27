@@ -1,0 +1,43 @@
+# The UI at /, the MCP server at /mcp, both behind the same login.
+#
+# Nothing here is specific to Jupyter, WebSockets or the UI's event stream:
+# Traefik passes upgrades on, streams responses and sets X-Forwarded-Host by
+# default.
+
+[http.routers.odf]
+rule = "PathPrefix(`/`)"
+priority = 1
+entryPoints = ["websecure"]
+middlewares = ["login"]
+service = "odf"
+[http.routers.odf.tls]
+
+[http.routers.mcp]
+rule = "PathPrefix(`/mcp`)"
+priority = 2
+entryPoints = ["websecure"]
+middlewares = ["login"]
+service = "mcp"
+[http.routers.mcp.tls]
+
+[http.middlewares.login.basicAuth]
+realm = "odf"
+usersFile = "/etc/traefik/secrets/users"
+
+# passHostHeader = false: Host is the upstream's own, and the host the browser
+# asked for goes in X-Forwarded-Host, which the UI compares Origin against.
+# A UI bound to 127.0.0.1 on the proxy's machine needs this, since it only
+# answers loopback hosts; in a container it makes no difference.
+[http.services.odf.loadBalancer]
+passHostHeader = false
+[[http.services.odf.loadBalancer.servers]]
+url = "http://odf:4747"
+
+[http.services.mcp.loadBalancer]
+passHostHeader = false
+[[http.services.mcp.loadBalancer.servers]]
+url = "http://odf:4748"
+
+[tls.stores.default.defaultCertificate]
+certFile = "/etc/traefik/secrets/odf.crt"
+keyFile = "/etc/traefik/secrets/odf.key"

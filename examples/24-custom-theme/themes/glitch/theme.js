@@ -1,5 +1,6 @@
 // Chromatic-split fringe on lit shapes, giving the canvas the same
-// RGB-misregistration look as the CSS chrome.
+// RGB-misregistration look as the CSS chrome, over dark solid icons: faces
+// nearly the canvas color with a trace of their accent, under bright edges.
 (() => {
   let splitA, splitB;
 
@@ -23,6 +24,14 @@
   }
 
   ODF.registerTheme({
+    faces: {
+      fill: 'shade',
+      shadeBase: 'canvas',
+      shade:    { top: -0.72, left: -0.82, right: -0.88 },
+      shadeLit: { top: -0.55, left: -0.68, right: -0.76 },
+      stroke:    { top: 0.95, left: 0.8,  right: 0.7 },
+      strokeLit: { top: 1,    left: 1,    right: 0.95 },
+    },
     onReadTheme(v) {
       splitA = v('--split-a');
       splitB = v('--split-b');

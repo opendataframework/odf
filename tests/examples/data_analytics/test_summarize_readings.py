@@ -1,3 +1,4 @@
+import pytest
 from app.analytics import SummarizeReadings
 from app.entities import Reading
 from app.repositories import Readings
@@ -11,13 +12,15 @@ from opendataframework.logger import LogManager
 # global for the whole pytest process.
 
 
-def _readings(tmp_path) -> Readings:
+@pytest.fixture
+def readings(tmp_path) -> Readings:
     config = Config({"component": {"sqlite": {"path": str(tmp_path / "test.db")}}})
-    return Readings(SQLite(config))
+    sqlite = SQLite(config)
+    yield Readings(sqlite)
+    sqlite.on_stop()
 
 
-def test_summarize_readings_writes_report(tmp_path):
-    readings = _readings(tmp_path)
+def test_summarize_readings_writes_report(tmp_path, readings):
     readings.save(Reading(id=None, sensor="kitchen", celsius=21.0))
     readings.save(Reading(id=None, sensor="kitchen", celsius=23.0))
     readings.save(Reading(id=None, sensor="garage", celsius=17.0))
@@ -35,8 +38,7 @@ def test_summarize_readings_writes_report(tmp_path):
     assert report_path.exists()
 
 
-def test_summarize_readings_handles_no_data(tmp_path):
-    readings = _readings(tmp_path)
+def test_summarize_readings_handles_no_data(tmp_path, readings):
     report_path = tmp_path / "reports" / "summary.json"
     config = Config({"task": {"summarize-readings": {"report-path": str(report_path)}}})
     logger = LogManager().logger_for("SummarizeReadings")

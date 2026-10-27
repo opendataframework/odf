@@ -1,7 +1,7 @@
 // Research: a globe, a ledger, a chalkboard, lab glassware, notebooks and a
 // study desk.
 (() => {
-  const { pt, poly, line, path, rect, dot, text, block, onFace, wave, strong } = ODF.iconKit;
+  const { pt, poly, line, path, rect, dot, text, outline, block, onFace, wave, strong } = ODF.iconKit;
   const add = (key, draw, meta) => ODF.registerIcon(key, draw, { group: 'Research', ...meta });
 
   // Globe → a globe on a stand, turning, with pins on two of the capitals.
@@ -76,13 +76,13 @@
       const spine = side < 0 ? u1 : u0, edge = side < 0 ? u0 : u1;
       // Pages lift slightly towards their outer edge.
       const P = (u, v) => pt(top, u, v, 1 + 2.5 * Math.abs(u - spine) / 0.44);
-      poly([P(u0, -0.3), P(u1, -0.3), P(u1, 0.3), P(u0, 0.3)], accent, lit ? 0.22 : 0.14, strong(lit));
+      paintFace(outline([P(u0, -0.3), P(u1, -0.3), P(u1, 0.3), P(u0, 0.3)]), 'top', accent, lit, 1.6);
       for (let i = 0; i < rows; i++) {
         const v = -0.2 + i * 0.1;
         const n = side < 0 ? i : rows + i;
         const done = n < filled;
         const [x1, y1] = P(Math.min(spine, edge) + 0.05, v), [x2, y2] = P(Math.max(spine, edge) - 0.05, v);
-        line(x1, y1, x2, y2, accent, done ? (lit ? 0.85 : 0.6) : 0.18, done ? 0.8 : 0.5);
+        line(x1, y1, x2, y2, faceInk(accent), done ? (lit ? 0.85 : 0.6) : 0.18, done ? 0.8 : 0.5);
       }
     }
   }
@@ -92,10 +92,12 @@
   function drawSlopeBoard(sx, sy, accent, lit) {
     const c = [sx, sy];
     const head = pt(c, 0, 0, 34);
-    for (const [u, v] of [[-0.36, 0.2], [0.36, 0.2], [0, -0.35]]) {
+    const leg = (u, v) => {
       const foot = pt(c, u, v);
       line(head[0], head[1], foot[0], foot[1], accent, lit ? 0.8 : 0.55, 1.1);
-    }
+    };
+    // Back leg behind the board, front legs in front of it.
+    leg(0, -0.35);
     const board = block(pt(c, 0, 0.08), 0.46, 0.03, 24, accent, lit, { lift: 8, fillAlpha: 1.8 });
     onFace(board, 'v', len => {
       line(3, -3, len - 2, -3, accent, lit ? 0.6 : 0.4, 0.5);
@@ -111,6 +113,8 @@
       line(x0, y0, x0 + (x1 - x0) * t, y0 + (y1 - y0) * t, accent, lit ? 1 : 0.75, 1.1);
       text('β<0', len - 9, -15, accent, lit ? 1 : 0.8, lit);
     });
+    leg(-0.36, 0.2);
+    leg(0.36, 0.2);
   }
 
   // Flask → a bench with a bubbling Erlenmeyer flask and a test tube.
@@ -123,9 +127,9 @@
     dot(tx, ty, 1.6, accent, 0.3 + 0.4 * wave(1.7));
     const [fx, fy] = pt(c, -0.1, 0.05, 10);
     const bodyH = 14, neckH = 8, half = 10, neck = 2.6;
-    const outline = [[fx - half, fy], [fx + half, fy], [fx + neck, fy - bodyH], [fx + neck, fy - bodyH - neckH],
+    const glass = [[fx - half, fy], [fx + half, fy], [fx + neck, fy - bodyH], [fx + neck, fy - bodyH - neckH],
       [fx - neck, fy - bodyH - neckH], [fx - neck, fy - bodyH]];
-    poly(outline, accent, lit ? 0.12 : 0.08, lit ? 1 : 0.7, { lw: lit ? 1.2 : 1, blur: lit ? 6 : 0 });
+    poly(glass, accent, lit ? 0.12 : 0.08, lit ? 1 : 0.7, { lw: lit ? 1.2 : 1, blur: lit ? 6 : 0 });
     // Liquid up to 55% of the body, with a gently sloshing surface.
     const level = bodyH * (0.55 + 0.05 * Math.sin(animT * 2));
     const w = neck + (half - neck) * (1 - level / bodyH);
@@ -157,20 +161,33 @@
       const v = -0.2 + i * 0.12;
       const [ax, ay] = pt(g, -0.28, v, 4.5), [bx, by] = pt(g, 0.3, v, 4.5);
       const fresh = i === shown - 1;
-      path([[ax - 3, ay - 0.5], [ax - 2, ay + 0.5], [ax - 0.2, ay - 1.8]], accent, lit ? 1 : 0.75, 0.7);
-      line(ax + 1, ay, bx, by, accent, fresh ? 0.5 + 0.5 * wave(6) : (lit ? 0.7 : 0.5), 0.6);
+      path([[ax - 3, ay - 0.5], [ax - 2, ay + 0.5], [ax - 0.2, ay - 1.8]], faceInk(accent), lit ? 1 : 0.75, 0.7);
+      line(ax + 1, ay, bx, by, faceInk(accent), fresh ? 0.5 + 0.5 * wave(6) : (lit ? 0.7 : 0.5), 0.6);
     }
   }
 
-  // Study desk → a desk with a monitor mid-conversation and a lamp.
+  // Study desk → a desk with a monitor mid-conversation and a lamp, in
+  // front of a tall bookcase.
   function drawStudyDesk(sx, sy, accent, lit) {
     const c = [sx, sy];
-    const desk = block(c, 0.66, 0.38, 12, accent, lit);
+    const shelf = block(pt(c, -0.2, -0.62), 0.42, 0.14, 34, accent, lit);
+    onFace(shelf, 'v', len => {
+      for (let row = 0; row < 3; row++) {
+        const y = -14 - row * 7;
+        line(1, y, len - 1, y, accent, lit ? 0.7 : 0.45, 0.6);
+        for (let x = 3, i = 0; x < len - 4; i++) {
+          const w = 1.6 + ((row * 5 + i * 3) % 4) * 0.4, h = 4 + ((row + i * 7) % 3);
+          rect(x, y - h, w, h, accent, 0.2 + 0.25 * ((i + row) % 2), lit ? 0.7 : 0.45, 0.4);
+          x += w + 0.8;
+        }
+      }
+    });
+    const desk = block(pt(c, 0, 0.12), 0.66, 0.34, 12, accent, lit);
     onFace(desk, 'v', len => {
       rect(len * 0.6, -10, len * 0.32, 4, accent, 0.15, lit ? 0.7 : 0.45, 0.5);
       dot(len * 0.76, -8, 0.8, accent, strong(lit));
     });
-    const top = [sx, sy - 12];
+    const top = pt(c, 0, 0.12, 12);
     // Lamp at the back right, drawn first so the monitor sits in front.
     const [lx, ly] = pt(top, 0.45, -0.2);
     const [kx, ky] = [lx - 3, ly - 14];
@@ -195,5 +212,5 @@
   add('slope-board', drawSlopeBoard, { bh: 34, scale: 0.6, label: 'Chalkboard' });
   add('flask', drawFlask, { bh: 10, scale: 0.8, extraTop: 30, label: 'Flask' });
   add('logbook', drawLogbook, { bh: 15, scale: 0.75, label: 'Logbook' });
-  add('study-desk', drawStudyDesk, { bh: 12, scale: 0.85, extraTop: 22, label: 'Study desk' });
+  add('study-desk', drawStudyDesk, { bh: 34, scale: 0.85, extraTop: 4, label: 'Study desk' });
 })();

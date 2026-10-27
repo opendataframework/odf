@@ -1,5 +1,143 @@
 # Release Notes
 
+## 0.4.0
+
+### Added
+
+- **UI**: a project can ship its own theme: `[ui] theme`, `odf run --theme` and
+  `server.start(theme=...)` take a path to a theme directory (`"./my-theme"`, relative to
+  the working directory) as well as a built-in theme's name. The directory holds a
+  `theme.css` and a `favicon.svg`, plus an optional `theme.js` that sets the icon look
+  through `ODF.registerTheme()`, the same files as a built-in theme. A theme can also set
+  `pixelSize` there to draw the topology canvas at a coarser resolution, for pixel art,
+  and `labelFont`/`labelSize` to keep the node labels drawn on it legible, with
+  `labelSnap` to keep them crisp at any zoom on whole canvas pixels, and
+  `labelAlpha`, `labelShadow` (in its `theme.css`'s `--label-shadow` color) and
+  `labelBold` to make them read over busy tiles.
+  See [UI](ui.md#custom-themes) and the
+  [`24-custom-theme`](https://github.com/opendataframework/odf/tree/main/examples/24-custom-theme)
+  example, which ships a theme of dark solids with a cyan and magenta chromatic-split
+  fringe.
+- **UI**: `[ui] grid = "flat"` in `config.toml` draws the topology as a flat, top-down
+  schematic instead of the isometric grid: faint dots where nodes snap, and every node a
+  rounded square in its type's color with its type's glyph and its label on a faint chip,
+  for large topologies. Node
+  positions and colors are shared by both grids. **Customize** picks a flat glyph, saved as
+  `flatIcon` apart from the isometric icon. See [UI](ui.md#flat-grid) and the
+  [`25-flat-grid`](https://github.com/opendataframework/odf/tree/main/examples/25-flat-grid)
+  example.
+- **UI**: Jupyter notebooks in a document view open as their cells and saved outputs
+  (Markdown rendered, images inline, HTML outputs sanitized) instead of raw JSON, with
+  **View source** for the JSON. With the `notebook` package installed in the project
+  (`pip install odf[notebook]`), **Edit in Jupyter** in the reader's rail embeds Jupyter
+  Notebook's own editor in the reader. Jupyter starts on the first edit, with kernels in
+  the project directory, listens on `127.0.0.1` only and is served through the UI at
+  `/proxy/jupyter/`, so it works behind an HTTPS reverse proxy with no setup of its own.
+  Its token stays with the UI, which adds it to each request it forwards, so the
+  browser never holds one and a proxy's Basic auth login isn't replaced by it. The editor
+  follows the UI's light/dark mode (JupyterLab Light or Dark) unless your own Jupyter
+  settings pick a theme. It saves each notebook back through the repository's `save()`
+  via the new `PUT /api/repositories/{name}/records/{key}/media`. `[ui] notebooks = false`
+  in `config.toml` turns editing off. See [UI](ui.md#notebooks) and the
+  [`21-notebook-view`](https://github.com/opendataframework/odf/tree/main/examples/21-notebook-view)
+  example.
+- **CLI**: `odf init --template ml` scaffolds a project for training and comparing models:
+  `Runs`, `Params`, `Metrics` (one row per training step) and `Artifacts` repositories, a
+  `train` `@Function` recording one run, a `Sweep` `@Task` recording one run per learning
+  rate in `[task.sweep]`, an `export_run` `@Function` writing a run's params, metrics and
+  artifacts to `exports/`, and a `RunComparison` chart of final loss and accuracy by
+  learning rate. An artifact can be a JSON summary or a file's bytes, such as a trained
+  model, which the document view downloads under its name. It needs only the standard
+  library. See [`ml` template](init-templates/ml.md), including when to pick it over
+  `data-science`, and the
+  [`22-ml`](https://github.com/opendataframework/odf/tree/main/examples/22-ml) example,
+  which trains a real scikit-learn classifier, exports it as `model.pkl`, and compares the
+  runs on an interactive Plotly page in the UI's theme. The `examples` extra now includes
+  `scikit-learn`.
+- **UI**: the timeseries view plots only the view's `fields` when set, and with `group`
+  set draws one line per value of that field, colored per group and dashed per field, with
+  every group on its field's y axis so they compare on one chart. The legend toggles
+  groups as well as fields. The ordering `field` can be any number, such as a training
+  step, not only a timestamp. Requires `opendataframework` 0.4.0. See
+  [UI](ui.md#grouped-timeseries).
+- **UI**: the topology shows runs as they happen, whoever started them (the UI, an MCP
+  client, chat, a pipeline, a service's `run()` loop). An edge animates only while a call
+  goes through it, where before every edge pulsed all the time. A running node gets a
+  ring that fades out with a ✓ when its call completes, or turns red with a `!` when it
+  fails, until the node is selected. Failures pop a notice with the error and a
+  **Show logs** button that opens the node's logs at the run. Successes pop one only for
+  actions started from that tab or its chat. The header status, **System Nominal** when
+  idle, shows the running call, an unseen failure (click it to open the logs) and a
+  just-completed call, so a run stays visible when the chat drawer covers the notices.
+  With reduced motion on, nothing moves. A
+  service's Start/Stop button now follows starts and stops made over MCP or chat. The
+  new `GET /api/events` streams every protocol call as server-sent events. Requires
+  `opendataframework` 0.4.0. See [UI](ui.md#run-activity).
+- **UI**: a theme's `theme.js` can replace how empty grid tiles are drawn with
+  `ODF.registerTheme({ emptyTile })`, fill opaque icon faces its own way, such as a
+  gradient spanning the whole icon, with `ODF.registerTheme({ faceFill })`, and draw on
+  the floor under each icon with `ODF.registerTheme({ groundShadow })`. See
+  [UI](ui.md#themes-icons-and-branding).
+- **Examples**: [`23-reverse-proxy`](https://github.com/opendataframework/odf/tree/main/examples/23-reverse-proxy)
+  deploys a project with `docker compose up`: `odf run` in one container with its ports
+  exposed only to the compose network, and Traefik in front of it with HTTPS (a
+  self-signed certificate generated on first start), a Basic auth login, and the MCP
+  server at `/mcp`. **Edit in Jupyter** works through it with nothing Jupyter-specific
+  in the proxy. `compose.oidc.yaml` swaps the login for an identity provider through
+  oauth2-proxy, and `ODF_INDEX_URL` installs odf from a local package index for trying
+  unreleased builds. See [UI](ui.md#deploying).
+
+### Changed
+
+- **Deps**: requires `opendataframework >=0.4.0,<0.5.0`, which the grouped timeseries
+  view and the run activity above build on.
+- **UI**: every built-in theme shows its favicon as the header mark next to "ODF". All
+  of them share one logo, a rounded tile of stacked layers in each theme's colors
+  (`[ui] logo` still replaces the mark, and `[ui] favicon` replaces both).
+- **UI**: the UI refuses requests another site's page makes the browser send, so a login
+  at a reverse proxy can't be used from there: any request but `GET`, `HEAD` and
+  `OPTIONS`, and every WebSocket (Jupyter's included), answers 403 when its `Origin`
+  isn't the host the UI was reached by (`Host`, or `X-Forwarded-Host`). Requests without
+  an `Origin`, from scripts or `curl`, are unaffected. Bound to a loopback address (the
+  default), the UI also answers only requests whose `Host` is `127.0.0.1`, `localhost`
+  or `[::1]` (421 otherwise), so a page that points its own name at your machine (DNS
+  rebinding) can't reach it. A proxy in front leaves `Host` to the upstream and passes
+  the browser's host as `X-Forwarded-Host`, as the documented Traefik setup does
+  (`passHostHeader = false`). The UI docs gain a deployment section: keeping the port
+  off the network, serving at a host's root (not under a subpath), the Traefik route,
+  adding a login with Basic auth or an identity provider through oauth2-proxy, serving
+  the MCP server behind the same proxy at `/mcp` with a login the client sends as a
+  header, and the settings nginx and other proxies need by hand. See
+  [UI](ui.md#deploying).
+- **UI**: each theme draws topology icons its own way instead of all as wireframes:
+  `emerald` as tinted glass, `ink` as tonal solids over a soft shadow, `onyx` as tonal
+  solids without outlines, while `default`
+  keeps its outlines but hides the lines behind each icon. Icons within each group
+  have more varied shapes and heights: a setback tower, pitched roofs, round tanks,
+  drums and turrets, sloped consoles, and five kinds of stand for the charts. Icon keys
+  are unchanged, so saved layouts keep their icons. Custom icon scripts get the new
+  solids in `ODF.iconKit` (`stepped`, `gable`, `wedge`, `cylinder`), and a theme sets
+  its icon look with `ODF.registerTheme({ faces })`. See
+  [UI](ui.md#themes-icons-and-branding).
+- **CLI**: `odf run` copies the UI URL (the MCP URL with `--no-ui`) to the clipboard on
+  start, marked `(copied)`, to paste into another browser or an MCP client's config. It
+  uses `pbcopy`, `wl-copy`, `xclip`, `xsel` or `clip`, and skips the copy when none is
+  installed. The URLs are also terminal links.
+- **UI**: the `neo` and `glitch` themes are no longer built in, so `[ui] theme = "neo"`
+  or `"glitch"` raises a `ValueError`. A project can ship a theme of its own instead, as
+  the [`24-custom-theme`](https://github.com/opendataframework/odf/tree/main/examples/24-custom-theme)
+  example does with `glitch`, which can be copied from there. The new built-in `ink`
+  theme is monochrome, white on black by night and black on white by day, with muted
+  kind colors. `17-custom-icon` now uses `ink`.
+- **Chat**: the default `[project.chat] model` is now `gpt-oss:20b` instead of `gpt-oss`.
+  See [Chat](chat.md).
+
+### Fixed
+
+- **CLI**: the `SQLite` storage of every `odf init` template, and of the examples built on
+  them, closes its connection in `on_stop()` when the project stops, instead of leaving it
+  open. See [Examples](examples.md).
+
 ## 0.3.0
 
 ### Added

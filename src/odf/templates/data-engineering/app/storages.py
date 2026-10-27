@@ -22,3 +22,7 @@ class SQLite:
             )
         """)
         self.conn.commit()
+
+    def on_stop(self) -> None:
+        with self.lock:
+            self.conn.close()

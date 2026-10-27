@@ -67,10 +67,16 @@ const canvas = document.getElementById('canvas');
 let ctx      = canvas.getContext('2d');
 let CW = 0, CH = 0;
 
+// Canvas pixels per CSS pixel: the device's, unless the theme sets
+// THEME_STYLE.pixelSize to draw the canvas coarser.
+function canvasScale() {
+  return THEME_STYLE.pixelSize ? 1 / THEME_STYLE.pixelSize : (window.devicePixelRatio || 1);
+}
+
 function resize() {
   const r = document.getElementById('map').getBoundingClientRect();
   CW = r.width; CH = r.height;
-  const dpr = window.devicePixelRatio || 1;
+  const dpr = canvasScale();
   canvas.width  = Math.round(CW * dpr);
   canvas.height = Math.round(CH * dpr);
   canvas.style.width  = CW + 'px';
@@ -89,7 +95,7 @@ function resize() {
 // on every toggle.
 
 let BG_CANVAS, TILE_FILL, TILE_STROKE, WIRE, WIRE_GLOW;
-let LABEL_BG_RGB, LABEL_BG_ALPHA, VIGNETTE_RGB, VIGNETTE_ALPHA;
+let LABEL_BG_RGB, LABEL_BG_ALPHA, LABEL_SHADOW, VIGNETTE_RGB, VIGNETTE_ALPHA;
 let TEXT_MUTED, TITLE_ACCENT;
 
 function readTheme() {
@@ -102,6 +108,7 @@ function readTheme() {
   BG_CANVAS      = v('--bg-canvas');
   TILE_FILL      = v('--tile-fill');
   TILE_STROKE    = v('--tile-stroke');
+  LABEL_SHADOW   = v('--label-shadow') || TILE_STROKE;
   WIRE           = v('--wire');
   WIRE_GLOW      = v('--wire-glow');
   LABEL_BG_RGB   = v('--label-bg-rgb');
@@ -118,11 +125,59 @@ function readTheme() {
 // default look; a theme's optional theme.js overrides any of them through
 // ODF.registerTheme(). `part` is 'tile', 'face' or 'top'.
 const THEME_STYLE = {
+  // CSS pixels per topology canvas pixel, or null for the device's
+  // resolution. A pixel-art theme sets it (say to 2) and upscales the canvas
+  // with `image-rendering: pixelated` in its theme.css.
+  pixelSize: null,
+  // Font of the node labels and run badges drawn on the canvas, and its size
+  // in CSS pixels. The label chip and badge size themselves from it, so a
+  // theme with a coarse pixelSize can pick a font that stays legible there.
+  labelFont: "'SF Mono', 'Courier New', monospace",
+  labelSize: 9.5,
+  // Whether a lit label is bold. A pixel font without a bold face turns it
+  // off, since a synthesized bold smears it.
+  labelBold: true,
+  // Alpha of a label while its node isn't lit.
+  labelAlpha: 0.45,
+  // A hard one-pixel drop shadow under label text, so it reads over busy
+  // tiles, in `--label-shadow` (the tile-stroke color when unset).
+  labelShadow: false,
+  // Labels and run badges keep `labelSize` at any zoom and land on whole
+  // canvas pixels, so a pixel font at a coarse pixelSize stays crisp. Pick a
+  // labelSize at which one of the font's pixels is one canvas pixel.
+  labelSnap: false,
   emptyTileLine: 0.6,
   tickSize: 1,
   tileLine: lit => lit ? 1.1 : 0.8,
   faceLine: 0.8,
   topLine: lit => lit ? 1.3 : 1,
+  // How icon faces are painted (see paintFace), per side: 'top', 'left' or
+  // 'right'. `fill` is 'tint' (the accent at the `tint` alphas, so the grid
+  // shows through) or 'shade' (opaque: the accent mixed by the `shade`
+  // amounts, toward white when positive and toward `shadeBase` when
+  // negative). `occlude` under-fills a tinted face with the canvas color so
+  // it hides what's behind it. `outline` strokes faces in the accent, in
+  // 'ink' (the tile-stroke color) or not at all ('none'). Each `*Lit` entry
+  // is used instead while the node is lit.
+  faces: {
+    fill: 'tint',
+    tint:    { top: 0.1,  left: 0.08, right: 0.05 },
+    tintLit: { top: 0.16, left: 0.08, right: 0.05 },
+    shade:    { top: 0.15, left: -0.15, right: -0.35 },
+    shadeLit: { top: 0.3,  left: 0,     right: -0.2 },
+    // A color, 'canvas' (the canvas background) or null (black).
+    shadeBase: null,
+    occlude: true,
+    outline: 'accent',
+    // Shade (as in `shade`) for details drawn on an opaque face, or null to
+    // draw them in the accent; see faceInk().
+    detail: null,
+    // Scales the face line widths, so a theme with thick tile lines can keep
+    // small icon parts from drowning in their outlines.
+    lineScale: 1,
+    stroke:    { top: 0.6, left: 0.4,  right: 0.35 },
+    strokeLit: { top: 1,   left: 0.65, right: 0.55 },
+  },
   // Shadow applied to the stroke of a lit shape.
   litShadow(part, accent) {
     ctx.shadowColor = accent;
@@ -131,9 +186,35 @@ const THEME_STYLE = {
   // Optional (buildPath, part, sMul) => void: extra strokes drawn under a lit
   // shape's own stroke.
   litFringe: null,
+  // Optional (sx, sy) => void: draws an empty grid tile centered at (sx, sy)
+  // instead of the default outline and center tick. Called inside a
+  // save()/restore().
+  emptyTile: null,
+  // Optional (side, accent, lit, t, frame) => fillStyle for an opaque
+  // ('shade') icon face, instead of the flat shadeHex(accent, t). `frame` is
+  // the icon being drawn, {x, top, bottom} in canvas pixels (see drawIcon),
+  // so a gradient can span the whole icon rather than one face.
+  faceFill: null,
+  // Optional (x, y, e, accent, lit) => void: draws on the floor under the
+  // icon standing on (x, y), before the icon itself, such as a contact
+  // shadow. `e` is its ICONS entry, whose widthExtent and scale give the
+  // footprint. Called inside a save()/restore().
+  groundShadow: null,
   // Optional (v) => void, called at the end of readTheme() with its CSS
   // custom-property reader, for themes that mirror extra variables.
   onReadTheme: null,
+  // Run marks (see "Run state"): the ring around a running, done or failed
+  // node's tile, and the extra glow on a wire a call is going through. Both
+  // are called inside a save()/restore().
+  runRingLine: 1.4,
+  runRingShadow(state, color) {
+    ctx.shadowColor = color;
+    ctx.shadowBlur = state === 'running' ? 10 : 6;
+  },
+  flowLine(accent) {
+    ctx.shadowColor = accent;
+    ctx.shadowBlur = 7;
+  },
 };
 
 // Strokes the outline of a tile or box face with the caller's strokeStyle and
@@ -151,6 +232,64 @@ function strokeShape(buildPath, part, accent, lit, sMul = 1) {
   ctx.shadowOffsetY = 0;
 }
 
+// Fills and strokes one face of an icon solid in the theme's look (see
+// THEME_STYLE.faces). `side` is 'top', 'left' or 'right'; fMul and sMul are
+// a shape's fillAlpha/strokeAlpha: a tinted face scales its alphas by them,
+// a shaded one reads fMul above 1 as a lighter face and either below 1 as
+// fading out. `lw` overrides the theme's line width, and `fill`/`stroke`
+// false skip that half, for a face whose fill and outline are split up (a
+// cylinder's side, shaded in two halves under a single outline).
+function paintFace(buildPath, side, accent, lit, fMul = 1, sMul = 1, { lw, fill = true, stroke = true } = {}) {
+  const f = THEME_STYLE.faces;
+  ctx.save();
+  buildPath();
+  if (fill && f.fill === 'shade') {
+    ctx.save();
+    ctx.globalAlpha *= Math.max(0, Math.min(1, fMul, sMul));
+    const t = (lit ? f.shadeLit : f.shade)[side] + Math.max(0, Math.min(fMul, 2.5) - 1) * 0.12;
+    ctx.fillStyle = THEME_STYLE.faceFill && ICON_FRAME
+      ? THEME_STYLE.faceFill(side, accent, lit, t, ICON_FRAME)
+      : shadeHex(accent, t);
+    ctx.fill();
+    ctx.restore();
+  } else if (fill) {
+    // A fading shape (alpha multipliers below 1) stays see-through.
+    if (f.occlude && fMul >= 1 && sMul >= 1) { ctx.fillStyle = BG_CANVAS; ctx.fill(); }
+    ctx.fillStyle = rgba(accent, (lit ? f.tintLit : f.tint)[side] * fMul);
+    ctx.fill();
+  }
+  if (stroke && f.outline !== 'none') {
+    const ink = f.outline === 'ink';
+    const a = ink ? Math.min(1, sMul) : (lit ? f.strokeLit : f.stroke)[side] * sMul;
+    ctx.strokeStyle = rgba(ink ? TILE_STROKE : accent, a);
+    ctx.lineWidth = (lw ?? (side === 'top' ? THEME_STYLE.topLine(lit) : THEME_STYLE.faceLine)) * f.lineScale;
+    ctx.lineJoin = 'round';
+    strokeShape(buildPath, side === 'top' ? 'top' : 'face', accent, lit, sMul);
+  }
+  ctx.restore();
+}
+
+// `accent` shaded by t as THEME_STYLE.faces describes: toward white when
+// positive, toward its shadeBase when negative.
+function shadeHex(accent, t) {
+  const f = THEME_STYLE.faces;
+  const base = f.shadeBase === 'canvas' ? BG_CANVAS : (f.shadeBase || '#000000');
+  return t >= 0 ? mixHex(accent, '#ffffff', t) : mixHex(accent, base, -t);
+}
+
+// Whether the theme paints icon faces opaque.
+function solidFaces() {
+  return THEME_STYLE.faces.fill === 'shade';
+}
+
+// Color for details drawn onto a face (windows, doors, rack lines, screens):
+// the accent itself, unless the theme paints faces opaque in their own
+// accent, where it would vanish, and shifts it by `faces.detail` instead.
+function faceInk(accent) {
+  const { detail } = THEME_STYLE.faces;
+  return solidFaces() && detail != null ? shadeHex(accent, detail) : accent;
+}
+
 function updateThemeButton(theme) {
   const btn = document.getElementById('theme-toggle');
   btn.innerHTML = theme === 'dark'
@@ -166,6 +305,8 @@ function applyTheme(theme) {
   vignetteDirty = true;
   render();
   if (mapMode === 'geo') refreshGeoMap();
+  syncNotebookTheme(theme);
+  if (notebookEditing) reloadNotebookFrame();
 }
 
 function initTheme() {
@@ -175,6 +316,7 @@ function initTheme() {
   document.documentElement.setAttribute('data-theme', theme);
   readTheme();
   updateThemeButton(theme);
+  syncNotebookTheme(theme);
 }
 
 // ── Layer colors ─────────────────────────────────────────────────────────
@@ -225,7 +367,7 @@ function saveLayerColor(name, hex) {
 }
 
 // ── Camera (pan / zoom) ──────────────────────────────────────────────────
-// World-space coords are whatever iso() returns; the camera is a separate
+// World-space coords are whatever gridPos() returns; the camera is a separate
 // translate+scale applied at draw time, so all scene math stays untouched.
 
 let panX = 0, panY = 0, zoom = 1;
@@ -305,8 +447,7 @@ function saveGridExpand() {
 function updateOrigin() {
   const midCol = (GRID_MIN_COL + GRID_MAX_COL) / 2;
   const midRow = (GRID_MIN_ROW + GRID_MAX_ROW) / 2;
-  ORIGIN_X = CW / 2 - (midCol - midRow) * TW2;
-  ORIGIN_Y = CH / 2 - (midCol + midRow) * TH2;
+  GRID.origin(midCol, midRow);
 }
 
 // Isometric projection — returns CSS-pixel screen coords
@@ -323,6 +464,76 @@ function isoInverse(x, y) {
   const Y = (y - ORIGIN_Y) / TH2;
   return { col: Math.round((X + Y) / 2), row: Math.round((Y - X) / 2) };
 }
+
+// ── Grids ─────────────────────────────────────────────────────────────────
+// How the topology grid is projected and its nodes drawn. 'iso' below is the
+// built-in isometric view; other grids (grids/flat.js) register through
+// ODF.registerGrid, and `[ui] grid` in config picks one (see
+// loadUiExtensions()). Everything outside this section goes through GRID.
+//
+// project/cell — (col, row) → world point at the cell's center, and back
+// origin       — sets ORIGIN_X/ORIGIN_Y so (midCol, midRow) is mid-canvas
+// tilePath     — builds the outline of the cell at (sx, sy), scaled by s
+// emptyCell    — draws an empty cell at (sx, sy)
+// drawNode     — draws a node standing on its cell at (sx, sy)
+// extents      — {top, bottom, half}: how far a node drawn at (sx, sy)
+//                reaches up, down and to each side, for labels, run badges,
+//                hit testing and the inspector popup
+// gridArrows   — [glyph, title] per grid-control button, keyed nw/ne/se/sw
+//                like gridExpand
+// customizable — whether a node's icon and color can be changed; when
+//                false, Customize is hidden and nodes take their type colors
+// labelChip    — whether a node's label sits on a chip while not lit too (a
+//                fainter one than a lit label's); off when unset
+// icons        — the registry Customize's Shape section lists, keyed like
+//                ICONS ({label, group} per entry) with one entry per exec
+//                type as its default
+// iconField    — the node (and layout.json) property holding the icon
+//                override picked from `icons`, so each grid keeps its own
+// drawSwatch   — draws icon `key` for a picker swatch, standing on (x, y)
+const GRIDS = {
+  iso: {
+    project: iso,
+    cell: isoInverse,
+    origin(midCol, midRow) {
+      ORIGIN_X = CW / 2 - (midCol - midRow) * TW2;
+      ORIGIN_Y = CH / 2 - (midCol + midRow) * TH2;
+    },
+    tilePath(sx, sy, s) {
+      ctx.beginPath();
+      ctx.moveTo(sx,           sy - TH2 * s);
+      ctx.lineTo(sx + TW2 * s, sy);
+      ctx.lineTo(sx,           sy + TH2 * s);
+      ctx.lineTo(sx - TW2 * s, sy);
+      ctx.closePath();
+    },
+    emptyCell: drawEmptyTile,
+    drawNode(node, sx, sy, lit) {
+      drawIcon(iconKey(node), sx, sy, nodeAccent(node), lit);
+    },
+    extents(node) {
+      const e = ICONS[iconKey(node)];
+      return { top: e.topExtent, bottom: TH2, half: e.widthExtent };
+    },
+    gridArrows: {
+      nw: ['↖', 'Add cells (top-left edge)'],
+      ne: ['↗', 'Add cells (top-right edge)'],
+      sw: ['↙', 'Add cells (bottom-left edge)'],
+      se: ['↘', 'Add cells (bottom-right edge)'],
+    },
+    customizable: true,
+    // A getter, since ICONS is declared further down.
+    get icons() { return ICONS; },
+    iconField: 'icon',
+    drawSwatch(key, x, y, accent) {
+      drawIcon(key, x, y, accent, false);
+    },
+  },
+};
+let GRID = GRIDS.iso;
+
+function gridPos(col, row) { return GRID.project(col, row); }
+function gridCell(x, y) { return GRID.cell(x, y); }
 
 function clamp(v, lo, hi) { return Math.min(hi, Math.max(lo, v)); }
 
@@ -353,6 +564,13 @@ function rgba(hex, a) {
   return `rgba(${r},${g},${b},${a})`;
 }
 
+// `hex` moved fraction t of the way to `toHex`, as another #rrggbb.
+function mixHex(hex, toHex, t) {
+  const c = (h, i) => parseInt(h.slice(i, i + 2), 16);
+  const m = i => Math.round(c(hex, i) + (c(toHex, i) - c(hex, i)) * t).toString(16).padStart(2, '0');
+  return `#${m(1)}${m(3)}${m(5)}`;
+}
+
 function lerp(a, b, t) { return [a[0]+(b[0]-a[0])*t, a[1]+(b[1]-a[1])*t]; }
 
 function hashSeed(s) {
@@ -361,16 +579,18 @@ function hashSeed(s) {
   return (h % 1000) / 1000;
 }
 
-function tilePath(sx, sy) {
-  ctx.beginPath();
-  ctx.moveTo(sx,       sy - TH2);
-  ctx.lineTo(sx + TW2, sy);
-  ctx.lineTo(sx,       sy + TH2);
-  ctx.lineTo(sx - TW2, sy);
-  ctx.closePath();
+// The outline of the cell at (sx, sy), scaled by s, in the current grid.
+function tilePath(sx, sy, s = 1) {
+  GRID.tilePath(sx, sy, s);
 }
 
 function drawEmptyTile(sx, sy) {
+  if (THEME_STYLE.emptyTile) {
+    ctx.save();
+    THEME_STYLE.emptyTile(sx, sy);
+    ctx.restore();
+    return;
+  }
   tilePath(sx, sy);
   ctx.fillStyle   = TILE_FILL;
   ctx.fill();
@@ -406,52 +626,34 @@ function isoBox(sx, sy, w2, h2, bh, accent, lit, opts = {}) {
   const sMul = opts.strokeAlpha ?? 1;
 
   // ── Right face ──
-  const rightFace = () => {
+  paintFace(() => {
     ctx.beginPath();
     ctx.moveTo(sx + w2, sy - bh);
     ctx.lineTo(sx + w2, sy);
     ctx.lineTo(sx,      sy + h2);
     ctx.lineTo(sx,      sy + h2 - bh);
     ctx.closePath();
-  };
-  rightFace();
-  ctx.fillStyle   = rgba(accent, 0.05 * fMul);
-  ctx.fill();
-  ctx.strokeStyle = rgba(accent, (lit ? 0.55 : 0.35) * sMul);
-  ctx.lineWidth   = THEME_STYLE.faceLine;
-  strokeShape(rightFace, 'face', accent, lit, sMul);
+  }, 'right', accent, lit, fMul, sMul);
 
   // ── Left face ──
-  const leftFace = () => {
+  paintFace(() => {
     ctx.beginPath();
     ctx.moveTo(sx - w2, sy - bh);
     ctx.lineTo(sx - w2, sy);
     ctx.lineTo(sx,      sy + h2);
     ctx.lineTo(sx,      sy + h2 - bh);
     ctx.closePath();
-  };
-  leftFace();
-  ctx.fillStyle   = rgba(accent, 0.08 * fMul);
-  ctx.fill();
-  ctx.strokeStyle = rgba(accent, (lit ? 0.65 : 0.4) * sMul);
-  ctx.lineWidth   = THEME_STYLE.faceLine;
-  strokeShape(leftFace, 'face', accent, lit, sMul);
+  }, 'left', accent, lit, fMul, sMul);
 
   // ── Top face ──
-  const topFace = () => {
+  paintFace(() => {
     ctx.beginPath();
     ctx.moveTo(sx,      sy - h2 - bh);
     ctx.lineTo(sx + w2, sy      - bh);
     ctx.lineTo(sx,      sy + h2 - bh);
     ctx.lineTo(sx - w2, sy      - bh);
     ctx.closePath();
-  };
-  topFace();
-  ctx.fillStyle   = rgba(accent, (lit ? 0.16 : 0.1) * fMul);
-  ctx.fill();
-  ctx.strokeStyle = rgba(accent, (lit ? 1.0 : 0.6) * sMul);
-  ctx.lineWidth   = THEME_STYLE.topLine(lit);
-  strokeShape(topFace, 'top', accent, lit, sMul);
+  }, 'top', accent, lit, fMul, sMul);
 
   return { w2, h2, topY: sy - bh };
 }
@@ -503,7 +705,7 @@ function drawWarehouse(sx, sy, accent, lit) {
   ctx.beginPath();
   ctx.moveTo(sx, sy - h2 - bh);
   ctx.lineTo(sx, sy + h2 - bh);
-  ctx.strokeStyle = rgba(accent, lit ? 0.9 : 0.5);
+  ctx.strokeStyle = rgba(faceInk(accent), lit ? 0.9 : 0.5);
   ctx.lineWidth = lit ? 1.3 : 1;
   if (lit) { ctx.shadowColor = accent; ctx.shadowBlur = 5; }
   ctx.stroke();
@@ -519,7 +721,7 @@ function drawServerRack(sx, sy, accent, lit) {
   const rBot = [[sx + w2, sy],      [sx, sy + TH2 * scale]];
   const n = 5;
   ctx.save();
-  ctx.strokeStyle = rgba(accent, lit ? 0.5 : 0.25);
+  ctx.strokeStyle = rgba(faceInk(accent), lit ? 0.5 : 0.25);
   ctx.lineWidth = 0.7;
   for (let i = 1; i < n; i++) {
     const t = i / n;
@@ -581,15 +783,10 @@ function drawFactoryCube(sx, sy, accent, lit) {
   const { w2, h2 } = drawBox(sx, sy, bh, accent, lit, 0.8);
   const cx = sx - w2 * 0.35, cBase = sy - h2 * 0.2 - bh, cH = 16, cw = 5;
 
-  ctx.save();
-  ctx.fillStyle = rgba(accent, 0.12);
-  ctx.strokeStyle = rgba(accent, lit ? 0.7 : 0.4);
-  ctx.lineWidth = 0.8;
-  ctx.beginPath();
-  ctx.rect(cx - cw / 2, cBase - cH, cw, cH);
-  ctx.fill();
-  ctx.stroke();
-  ctx.restore();
+  paintFace(() => {
+    ctx.beginPath();
+    ctx.rect(cx - cw / 2, cBase - cH, cw, cH);
+  }, 'left', accent, lit, 1.5);
 
   for (let i = 0; i < 3; i++) {
     const phase = (animT * 0.5 + i / 3) % 1;
@@ -616,7 +813,7 @@ function drawConveyorPad(sx, sy, accent, lit) {
   ctx.lineTo(sx - w2, sy      - bh);
   ctx.closePath();
   ctx.clip();
-  ctx.strokeStyle = rgba(accent, lit ? 0.5 : 0.28);
+  ctx.strokeStyle = rgba(faceInk(accent), lit ? 0.5 : 0.28);
   ctx.lineWidth = 2.2;
   const shift = (animT * 10) % 16;
   for (let i = -4; i <= 4; i++) {
@@ -635,25 +832,19 @@ function drawObservatory(sx, sy, accent, lit) {
   drawBox(sx, sy, bh, accent, lit, 0.75);
   const cy = sy - bh, r = 13;
 
-  ctx.save();
-  ctx.beginPath();
-  ctx.ellipse(sx, cy, r, r * (TH2 / TW2), 0, 0, Math.PI);
-  ctx.arc(sx, cy, r, 0, Math.PI, true);
-  ctx.closePath();
-  ctx.fillStyle = rgba(accent, lit ? 0.2 : 0.12);
-  ctx.strokeStyle = rgba(accent, lit ? 0.9 : 0.55);
-  ctx.lineWidth = 1;
-  if (lit) { ctx.shadowColor = accent; ctx.shadowBlur = 5; }
-  ctx.fill();
-  ctx.stroke();
-  ctx.restore();
+  paintFace(() => {
+    ctx.beginPath();
+    ctx.ellipse(sx, cy, r, r * (TH2 / TW2), 0, 0, Math.PI);
+    ctx.arc(sx, cy, r, 0, Math.PI, true);
+    ctx.closePath();
+  }, 'top', accent, lit, 1.4, 1, { lw: 1 });
 
   // A slit in the dome, and the beam leaving it, both turning with time.
   const angle = animT * 0.8 + sx;
   const dx = Math.cos(angle), dy = Math.sin(angle) * (TH2 / TW2);
   const front = Math.sin(angle) > 0;
   ctx.save();
-  ctx.strokeStyle = rgba(accent, front ? (lit ? 0.85 : 0.6) : 0.2);
+  ctx.strokeStyle = rgba(faceInk(accent), front ? (lit ? 0.85 : 0.6) : 0.2);
   ctx.lineWidth = 1.4;
   ctx.beginPath();
   ctx.moveTo(sx + dx * r * 0.35, cy - r * 0.95);
@@ -743,13 +934,35 @@ function finalizeIconEntry(key) {
 }
 for (const key in ICONS) finalizeIconEntry(key);
 
-// Resolves which registry entry to draw for a node: its icon override, or
-// its exec-type default. Falls back to the type default if the stored icon
-// key is unrecognized (e.g. stale after a future rename), so render() and
-// friends never index the registry with an unknown key.
+// The icon being drawn, {x, top, bottom} in canvas pixels, while drawIcon()
+// runs; null otherwise. Read by paintFace() for THEME_STYLE.faceFill.
+let ICON_FRAME = null;
+
+// Draws ICONS[key] standing on (x, y), with ICON_FRAME set to its extents,
+// over the theme's ground shadow if it has one.
+function drawIcon(key, x, y, accent, lit) {
+  const e = ICONS[key];
+  if (THEME_STYLE.groundShadow) {
+    ctx.save();
+    THEME_STYLE.groundShadow(x, y, e, accent, lit);
+    ctx.restore();
+  }
+  ICON_FRAME = { x, top: y - e.topExtent, bottom: y + TH2 * e.scale };
+  try {
+    e.draw(x, y, accent, lit);
+  } finally {
+    ICON_FRAME = null;
+  }
+}
+
+// Resolves which GRID.icons entry to draw for a node: its icon override for
+// this grid (GRID.iconField), or its exec-type default. Falls back to the
+// type default if the stored icon key is unrecognized (e.g. stale after a
+// future rename), so render() and friends never index the registry with an
+// unknown key.
 function iconKey(node) {
-  const key = node.icon || node.type;
-  return ICONS[key] ? key : node.type;
+  const key = node[GRID.iconField] || node.type;
+  return GRID.icons[key] ? key : node.type;
 }
 
 // Curated swatch palette for the color picker — distinct from the 7 exec-type
@@ -771,9 +984,10 @@ const COLOR_SWATCHES = [
 // odf.ui.extensions.register_icon_script, either by a framework-extension
 // package (Python, import time) or by [ui] icon-scripts in config.toml. Each
 // file calls ODF.registerIcon(key, draw, meta) at its top level, same
-// signature/shared primitives (drawBox, isoBox, isoDisc, rgba, ctx, animT,
-// plus ODF.iconKit from icons/shared.js) as every draw function above, so a
-// custom icon renders at the same fidelity as a built-in one. `meta.group`
+// signature/shared primitives (drawBox, isoBox, isoDisc, paintFace, faceInk,
+// rgba, ctx, animT, plus ODF.iconKit from icons/shared.js) as every draw
+// function above, so a custom icon renders at the same fidelity as a
+// built-in one, in the theme's look. `meta.group`
 // names the icon picker tab it's listed under — 'Custom' unless given.
 window.ODF = {
   registerIcon(key, draw, meta = {}) {
@@ -781,19 +995,37 @@ window.ODF = {
     finalizeIconEntry(key);
   },
   // Called by a theme's optional theme.js to override THEME_STYLE entries.
+  // `faces` merges into the default face style, so a theme sets only the
+  // knobs it changes.
   registerTheme(overrides) {
-    Object.assign(THEME_STYLE, overrides);
+    const { faces, ...rest } = overrides;
+    Object.assign(THEME_STYLE, rest);
+    if (faces) Object.assign(THEME_STYLE.faces, faces);
     readTheme();
     vignetteDirty = true;
+    if ('pixelSize' in rest && CW > 0) resize();
+    // Canvas text falls back until a web font has loaded, so redraw once
+    // the label font is in.
+    if ('labelFont' in rest && document.fonts) {
+      const font = `${THEME_STYLE.labelSize}px ${THEME_STYLE.labelFont}`;
+      Promise.all([document.fonts.load(font), document.fonts.load(`bold ${font}`)])
+        .then(() => { if (CW > 0) render(); }, () => {});
+    }
+  },
+  // Called by a grid script under grids/ to add a grid `[ui] grid` can
+  // pick. Entries it leaves out are the isometric grid's; see "Grids".
+  registerGrid(name, impl) {
+    GRIDS[name] = { ...GRIDS.iso, ...impl };
   },
 };
 
 // Resolves a node's effective accent color for canvas drawing: its color
 // override, or its exec-type default. ACCENT is already a literal hex string
 // (refreshed by readTheme() on every theme toggle), so this stays correct
-// across themes without any extra bookkeeping.
+// across themes without any extra bookkeeping. A grid that isn't
+// customizable ignores the override, so color always reads as type there.
 function nodeAccent(node) {
-  return node.color || ACCENT[node.type];
+  return (GRID.customizable && node.color) || ACCENT[node.type];
 }
 
 // Resolves a node's effective accent color for DOM `style="color:...` use.
@@ -801,19 +1033,20 @@ function nodeAccent(node) {
 // for free on theme toggle (matching today's behavior); only a node with an
 // explicit override gets pinned to a literal value.
 function nodeAccentCss(node) {
-  return node.color || `var(--accent-${node.type})`;
+  return (GRID.customizable && node.color) || `var(--accent-${node.type})`;
 }
 
-// ── Edges — grid-aligned wires with a traveling glow pulse ────────────────
+// ── Edges — grid-aligned wires, with a traveling glow pulse while a call
+// goes through them (see "Run state") ─────────────────────────────────────
 
 function edgePath(fromNode, toNode) {
-  const f = iso(fromNode.col, fromNode.row);
-  const bend = iso(toNode.col, fromNode.row);
-  const t = iso(toNode.col, toNode.row);
+  const f = gridPos(fromNode.col, fromNode.row);
+  const bend = gridPos(toNode.col, fromNode.row);
+  const t = gridPos(toNode.col, toNode.row);
   return [[f.x, f.y], [bend.x, bend.y], [t.x, t.y]];
 }
 
-function drawEdge(fromNode, toNode, dashed) {
+function drawEdge(fromNode, toNode, dashed, flowing) {
   const pts = edgePath(fromNode, toNode);
   const c = dashed ? ACCENT.alert : WIRE;
   const g = dashed ? ACCENT.alert : WIRE_GLOW;
@@ -821,6 +1054,7 @@ function drawEdge(fromNode, toNode, dashed) {
   ctx.save();
   ctx.shadowColor = g;
   ctx.shadowBlur  = dashed ? 5 : 3;
+  if (flowing) THEME_STYLE.flowLine(nodeAccent(toNode));
   ctx.beginPath();
   ctx.moveTo(pts[0][0], pts[0][1]);
   for (let i = 1; i < pts.length; i++) ctx.lineTo(pts[i][0], pts[i][1]);
@@ -842,7 +1076,9 @@ function drawEdge(fromNode, toNode, dashed) {
     ctx.restore();
   }
 
-  // traveling pulse, colored by destination node
+  // traveling pulse, colored by destination node; still under reduced motion,
+  // where the brighter wire alone shows the flow
+  if (!flowing || reduceMotion) return;
   const accent = nodeAccent(toNode);
   const segLens = [];
   let total = 0;
@@ -876,32 +1112,138 @@ function drawEdge(fromNode, toNode, dashed) {
   }
 }
 
+// ── Run marks — a ring on the tile of a node whose call is running, has just
+// completed (fading out) or failed (kept until seen), and a ✓ / ! badge above
+// its label. See "Run state" for where the state comes from. ───────────────
+
+function runMarkColor(node, run) {
+  return run.state === 'failed' ? ACCENT.alert : nodeAccent(node);
+}
+
+// 1 while running or failed; fades from 1 to 0 over a done mark's lifetime.
+function runMarkAlpha(run) {
+  if (run.state !== 'done') return 1;
+  return Math.max(0, 1 - (performance.now() - run.at) / RUN_DONE_MS);
+}
+
+function drawRunRing(node, sx, sy, run) {
+  const color = runMarkColor(node, run);
+  const alpha = runMarkAlpha(run);
+  if (alpha <= 0) return;
+  // A running ring breathes outward; a still one sits just outside the tile.
+  const pulse = run.state === 'running' && !reduceMotion ? (Math.sin(animT * 5) + 1) / 2 : 0;
+  const s = 1.08 + 0.06 * pulse;
+  ctx.save();
+  tilePath(sx, sy, s);
+  ctx.strokeStyle = rgba(color, (run.state === 'running' ? 0.55 + 0.35 * pulse : 0.85) * alpha);
+  ctx.lineWidth = THEME_STYLE.runRingLine;
+  THEME_STYLE.runRingShadow(run.state, color);
+  ctx.stroke();
+  ctx.restore();
+}
+
+// Moves ctx into the space drawLabel() and drawRunBadge() draw in, anchored
+// at world point (sx, sy): world space itself, or, with THEME_STYLE.labelSnap,
+// unzoomed CSS pixels with the anchor on a whole canvas pixel. Returns the
+// anchor there, `px` rounding a length to whole canvas pixels, and `pixel`,
+// one canvas pixel (0 when not snapping).
+function enterLabelSpace(sx, sy) {
+  if (!THEME_STYLE.labelSnap) return { x: sx, y: sy, px: v => v, pixel: 0 };
+  const dpr = canvasScale();
+  ctx.setTransform(dpr, 0, 0, dpr,
+    Math.round(dpr * (zoom * sx + panX)), Math.round(dpr * (zoom * sy + panY)));
+  return { x: 0, y: 0, px: v => Math.round(v * dpr) / dpr, pixel: 1 / dpr };
+}
+
+// Fills and outlines a label chip or run badge. When snapping, the outline
+// is one canvas pixel, inset so it covers whole pixels.
+function labelChip(s, l, t, w, h) {
+  ctx.fillRect(l, t, w, h);
+  if (s.pixel) ctx.lineWidth = s.pixel;
+  const i = s.pixel / 2;
+  ctx.strokeRect(l + i, t + i, w - s.pixel, h - s.pixel);
+}
+
+function drawRunBadge(node, sx, sy, run) {
+  if (run.state === 'running') return;
+  const alpha = runMarkAlpha(run);
+  if (alpha <= 0) return;
+  const color = runMarkColor(node, run);
+  const failed = run.state === 'failed';
+  const text = failed ? (run.count > 1 ? `! ×${run.count}` : '!') : '✓';
+
+  ctx.save();
+  const s = enterLabelSpace(sx, sy - GRID.extents(node).top);
+  const size = THEME_STYLE.labelSize;
+  const h = s.px(size + 4.5);
+  // Just above the label chip drawLabel() draws while the node is lit.
+  const by = s.px(s.y - 8 - (size + 3.5) - 2 - h / 2);
+  ctx.globalAlpha = alpha;
+  ctx.font = `${THEME_STYLE.labelBold ? 'bold ' : ''}${size}px ${THEME_STYLE.labelFont}`;
+  ctx.textAlign = 'left';
+  ctx.textBaseline = s.pixel ? 'alphabetic' : 'middle';
+  const m = ctx.measureText(text);
+  const textW = m.width;
+  const w = s.px(Math.max(h, textW + 8));
+  const left = s.x - s.px(w / 2);
+  ctx.fillStyle = `rgba(${LABEL_BG_RGB},${LABEL_BG_ALPHA})`;
+  ctx.strokeStyle = color;
+  ctx.lineWidth = 1;
+  labelChip(s, left, s.px(by - h / 2), w, h);
+  ctx.fillStyle = color;
+  // When snapping, the glyphs are centered on a baseline on a whole pixel.
+  const ty = s.pixel ? by + (m.actualBoundingBoxAscent - m.actualBoundingBoxDescent) / 2 : by + 0.5;
+  ctx.fillText(text, left + s.px((w - textW) / 2), s.px(ty));
+  ctx.restore();
+}
+
 function drawLabel(node, sx, sy, lit) {
   const accent = nodeAccent(node);
-  const ly = sy - ICONS[iconKey(node)].topExtent - 8;
   const text = node.label.toUpperCase();
 
   ctx.save();
-  ctx.textAlign    = 'center';
-  ctx.textBaseline = 'bottom';
-  ctx.font         = `${lit ? 'bold ' : ''}9.5px 'SF Mono', 'Courier New', monospace`;
+  const s = enterLabelSpace(sx, sy - GRID.extents(node).top);
+  const ly = s.px(s.y - 8);
+  ctx.textAlign    = 'left';
+  ctx.textBaseline = s.pixel ? 'alphabetic' : 'bottom';
+  const size = THEME_STYLE.labelSize;
+  ctx.font         = `${lit && THEME_STYLE.labelBold ? 'bold ' : ''}${size}px ${THEME_STYLE.labelFont}`;
+  // The chip's top edge, sized from the font (13px above the baseline at 9.5px).
+  const chipTop = s.px(ly - size - 3.5);
+  const m = ctx.measureText(text);
+  const textW = m.width;
+  const tx = s.x - s.px(textW / 2);
+  // When snapping, the baseline sits on a whole pixel, where 'bottom' would.
+  const ty = s.pixel ? s.px(ly - m.fontBoundingBoxDescent) : ly;
 
-  let tw = 0;
-  if (lit) {
-    tw = ctx.measureText(text).width + 12;
+  // An unlit label on a chip (GRID.labelChip) has the chip to set it apart
+  // from the grid, so it can be brighter than bare text.
+  const chip = lit || GRID.labelChip;
+  const alpha = chip ? Math.max(THEME_STYLE.labelAlpha, 0.8) : THEME_STYLE.labelAlpha;
+  let tw = 0, chipLeft = 0;
+  if (chip) {
+    tw = s.px(textW + 12);
+    chipLeft = tx - s.px(6);
     ctx.fillStyle   = `rgba(${LABEL_BG_RGB},${LABEL_BG_ALPHA})`;
-    ctx.strokeStyle = rgba(accent, 0.55);
+    ctx.strokeStyle = rgba(accent, lit ? 0.55 : 0.2);
     ctx.lineWidth   = 0.8;
-    ctx.beginPath();
-    ctx.rect(sx - tw/2, ly - 13, tw, 15);
-    ctx.fill();
-    ctx.stroke();
-    ctx.shadowColor = accent;
-    ctx.shadowBlur  = 6;
+    labelChip(s, chipLeft, chipTop, tw, s.px(size + 5.5));
+    // A glow would blur snapped text.
+    if (lit && !s.pixel) {
+      ctx.shadowColor = accent;
+      ctx.shadowBlur  = 6;
+    }
   }
 
-  ctx.fillStyle = lit ? accent : rgba(accent, 0.45);
-  ctx.fillText(text, sx, ly);
+  if (THEME_STYLE.labelShadow) {
+    const shadowBlur = ctx.shadowBlur;
+    ctx.shadowBlur = 0;
+    ctx.fillStyle = lit ? LABEL_SHADOW : rgba(LABEL_SHADOW, alpha);
+    ctx.fillText(text, tx + (s.pixel || 1), ty + (s.pixel || 1));
+    ctx.shadowBlur = shadowBlur;
+  }
+  ctx.fillStyle = lit ? accent : rgba(accent, alpha);
+  ctx.fillText(text, tx, ty);
 
   // Layer badge — a small dot pinned to the label chip's corner, shown only
   // while hovered/selected/dragged (not permanently on the tile) so the
@@ -910,7 +1252,7 @@ function drawLabel(node, sx, sy, lit) {
   if (lit && node.layer) {
     ctx.shadowBlur = 0;
     ctx.beginPath();
-    ctx.arc(sx + tw/2, ly - 13, 3.5, 0, Math.PI * 2);
+    ctx.arc(chipLeft + tw, chipTop, 3.5, 0, Math.PI * 2);
     ctx.fillStyle = layerColor(node.layer);
     ctx.fill();
     ctx.lineWidth = 1;
@@ -941,7 +1283,7 @@ let vignetteGradient = null;
 let vignetteDirty = true;
 
 function render() {
-  const dpr = window.devicePixelRatio || 1;
+  const dpr = canvasScale();
 
   if (layoutDirty) {
     byDepth.sort((a, b) => (a.col + a.row) - (b.col + b.row));
@@ -968,7 +1310,7 @@ function render() {
   // 1 — Grid tiles (drawn with a one-tile empty border around the loaded nodes)
   for (let c = GRID_MIN_COL - 1; c <= GRID_MAX_COL + 1; c++) {
     for (let r = GRID_MIN_ROW - 1; r <= GRID_MAX_ROW + 1; r++) {
-      const {x, y} = iso(c, r);
+      const {x, y} = gridPos(c, r);
       if (x < viewL || x > viewR || y < viewT || y > viewB) continue;
       const key  = `${c},${r}`;
       const node = nodeAtTile[key];
@@ -976,14 +1318,14 @@ function render() {
         const lit = node.id === hoverId || node.id === selectId || node === dragNode;
         drawOccupiedTile(x, y, nodeAccent(node), lit);
       } else {
-        drawEmptyTile(x, y);
+        GRID.emptyCell(x, y);
       }
     }
   }
 
   // 1.5 — Drop-target ring for the node currently being dragged
   if (dragNode) {
-    const {x, y} = iso(dragNode.col, dragNode.row);
+    const {x, y} = gridPos(dragNode.col, dragNode.row);
     const ok = !nodeAtCell(dragNode.col, dragNode.row, dragNode);
     const ringColor = ok ? ACCENT.task : ACCENT.alert;
     tilePath(x, y);
@@ -996,25 +1338,39 @@ function render() {
     ctx.restore();
   }
 
+  // 1.75 — Run rings around running, done and failed nodes' tiles
+  for (const id of Object.keys(nodeRun)) {
+    const node = nodeMap[id];
+    if (!node) continue;
+    const {x, y} = gridPos(node.col, node.row);
+    if (x < viewL || x > viewR || y < viewT || y > viewB) continue;
+    drawRunRing(node, x, y, nodeRun[id]);
+  }
+
   // 2 — Edges (grid-aligned wires, drawn at ground level, behind buildings)
   for (const e of edges) {
-    drawEdge(nodeMap[e.from], nodeMap[e.to], e.dashed || false);
+    drawEdge(nodeMap[e.from], nodeMap[e.to], e.dashed || false, flowingEdges.has(`${e.from}|${e.to}`));
   }
 
   // 3 — Buildings (back to front, per-type silhouette)
   for (const node of byDepth) {
-    const {x, y} = iso(node.col, node.row);
+    const {x, y} = gridPos(node.col, node.row);
     if (x < viewL || x > viewR || y < viewT || y > viewB) continue;
     const lit = node.id === hoverId || node.id === selectId || node === dragNode;
-    ICONS[iconKey(node)].draw(x, y, nodeAccent(node), lit);
+    GRID.drawNode(node, x, y, lit);
   }
 
-  // 4 — Labels (always on top)
-  for (const node of byDepth) {
-    const {x, y} = iso(node.col, node.row);
-    if (x < viewL || x > viewR || y < viewT || y > viewB) continue;
-    const lit = node.id === hoverId || node.id === selectId || node === dragNode;
-    drawLabel(node, x, y, lit);
+  // 4 — Labels (always on top), lit ones last so a neighbour's label chip
+  // never covers them
+  for (const pass of [false, true]) {
+    for (const node of byDepth) {
+      const {x, y} = gridPos(node.col, node.row);
+      if (x < viewL || x > viewR || y < viewT || y > viewB) continue;
+      const lit = node.id === hoverId || node.id === selectId || node === dragNode;
+      if (lit !== pass) continue;
+      drawLabel(node, x, y, lit);
+      if (nodeRun[node.id]) drawRunBadge(node, x, y, nodeRun[node.id]);
+    }
   }
 
   // 5 — Vignette (fixed to the viewport, unaffected by pan/zoom)
@@ -1036,10 +1392,10 @@ function hitTest(mx, my) {
   // front-to-back order
   for (let i = byDepth.length - 1; i >= 0; i--) {
     const node = byDepth[i];
-    const {x, y} = iso(node.col, node.row);
-    const ic = ICONS[iconKey(node)], te = ic.topExtent, we = ic.widthExtent;
-    if (mx >= x - we - 2 && mx <= x + we + 2 &&
-        my >= y - te - 2 && my <= y + TH2 + 2) {
+    const {x, y} = gridPos(node.col, node.row);
+    const { top, bottom, half } = GRID.extents(node);
+    if (mx >= x - half - 2 && mx <= x + half + 2 &&
+        my >= y - top - 2 && my <= y + bottom + 2) {
       return node.id;
     }
   }
@@ -1085,7 +1441,7 @@ canvas.addEventListener('mousedown', e => {
 canvas.addEventListener('mousemove', e => {
   const p = canvasPoint(e);
   const w = screenToWorld(p.x, p.y);
-  updateCoordReadout(isoInverse(w.x, w.y));
+  updateCoordReadout(gridCell(w.x, w.y));
   if (isDragging) return; // dragging/panning is driven by the window listener below
   const hit = hitTest(w.x, w.y);
   if (hit !== hoverId) {
@@ -1103,7 +1459,7 @@ window.addEventListener('mousemove', e => {
   if (dragNode) {
     if (!dragMoved) return; // require a small nudge before lifting the building
     const w = screenToWorld(p.x, p.y);
-    const cell = isoInverse(w.x, w.y);
+    const cell = gridCell(w.x, w.y);
     dragNode.col = clamp(cell.col, GRID_MIN_COL - 1, GRID_MAX_COL + 1);
     dragNode.row = clamp(cell.row, GRID_MIN_ROW - 1, GRID_MAX_ROW + 1);
     updateCoordReadout({ col: dragNode.col, row: dragNode.row });
@@ -1133,13 +1489,14 @@ window.addEventListener('mouseup', e => {
         saveLayoutOverride(node);
       }
     }
+    markRunSeen(node.id);
     selectNode(node.id);
   }
 
   const p = canvasPoint(e);
   const w = screenToWorld(p.x, p.y);
   const hit = hitTest(w.x, w.y);
-  if (!node && !dragMoved) selectNode(hit);
+  if (!node && !dragMoved) { markRunSeen(hit); selectNode(hit); }
   hoverId = hit;
   canvas.style.cursor = hit ? 'pointer' : 'grab';
 });
@@ -1151,6 +1508,7 @@ window.addEventListener('mouseup', e => {
 function saveLayoutOverride(node) {
   const entry = { col: node.col, row: node.row };
   if (node.icon) entry.icon = node.icon; // omitted entirely once reset, so it doesn't linger as a stale key
+  if (node.flatIcon) entry.flatIcon = node.flatIcon; // the flat grid's own icon (see GRID.iconField)
   if (node.color) entry.color = node.color; // ditto for a reset color override
   layoutOverrides[node.id] = entry;
   fetch('/api/layout', {
@@ -1224,10 +1582,10 @@ function selectNode(id) {
   if (node.details) {
     actions.push({ id: 'show-details-btn', label: 'Details', kind: '', run: () => showDetailsView(id) });
   }
-  actions.push(
-    { id: 'show-logs-btn', label: 'Show Logs', kind: '', run: () => showLogsView(id) },
-    { id: 'customize-btn', label: 'Customize', kind: '', run: e => openStylePicker(node, e.currentTarget) },
-  );
+  actions.push({ id: 'show-logs-btn', label: 'Show Logs', kind: '', run: () => showLogsView(id) });
+  if (GRID.customizable) {
+    actions.push({ id: 'customize-btn', label: 'Customize', kind: '', run: e => openStylePicker(node, e.currentTarget) });
+  }
   const actionHtml = a =>
     `<button class="detail-action ${a.kind}" id="${a.id}"><span>${a.label}</span><span class="detail-action-arrow">&rarr;</span></button>`;
 
@@ -1257,10 +1615,10 @@ function showInspectorPopup(node) {
   const popup = document.getElementById('inspector-popup');
   popup.classList.add('open');
 
-  const w = iso(node.col, node.row);
+  const w = gridPos(node.col, node.row);
   const sx = w.x * zoom + panX;
   const sy = w.y * zoom + panY;
-  const extent = ICONS[iconKey(node)].topExtent * zoom;
+  const extent = GRID.extents(node).top * zoom;
 
   const pw = popup.offsetWidth, ph = popup.offsetHeight;
   let left = sx - pw / 2;
@@ -1290,20 +1648,20 @@ function renderIconSwatch(canvasEl, key, accent) {
   const saved = ctx;
   ctx = canvasEl.getContext('2d');
   ctx.clearRect(0, 0, canvasEl.width, canvasEl.height);
-  ICONS[key].draw(canvasEl.width / 2, canvasEl.height * 0.8, accent, false);
+  GRID.drawSwatch(key, canvasEl.width / 2, canvasEl.height * 0.8, accent);
   ctx = saved;
 }
 
-// The icon picker's tabs: every group an icon is registered under, in
-// first-registered order, with 'Custom' kept last.
+// The icon picker's tabs: every group a GRID.icons entry is registered
+// under, in first-registered order, with 'Custom' kept last.
 function iconGroups() {
-  const groups = [...new Set(Object.values(ICONS).map(e => e.group))];
+  const groups = [...new Set(Object.values(GRID.icons).map(e => e.group))];
   return groups.sort((a, b) => (a === 'Custom') - (b === 'Custom'));
 }
 
 // Builds the group tabs and the swatches of `group` — the group of the
 // node's current icon unless a tab click passes another.
-function buildIconPicker(node, group = ICONS[iconKey(node)].group) {
+function buildIconPicker(node, group = GRID.icons[iconKey(node)].group) {
   const tabs = document.getElementById('icon-picker-tabs');
   tabs.innerHTML = '';
   for (const name of iconGroups()) {
@@ -1321,18 +1679,19 @@ function buildIconPicker(node, group = ICONS[iconKey(node)].group) {
   grid.innerHTML = '';
   const accent = nodeAccent(node);
   const current = iconKey(node);
+  const field = GRID.iconField;
 
-  for (const key of Object.keys(ICONS)) {
-    if (ICONS[key].group !== group) continue;
+  for (const [key, entry] of Object.entries(GRID.icons)) {
+    if (entry.group !== group) continue;
     const btn = document.createElement('button');
-    btn.className = 'icon-swatch' + (current === key && node.icon ? ' selected' : '');
-    btn.title = ICONS[key].label;
+    btn.className = 'icon-swatch' + (current === key && node[field] ? ' selected' : '');
+    btn.title = entry.label;
     const mini = document.createElement('canvas');
     mini.width = 40; mini.height = 40;
     renderIconSwatch(mini, key, accent);
     btn.appendChild(mini);
     btn.addEventListener('click', () => {
-      node.icon = key;
+      node[field] = key;
       saveLayoutOverride(node);
       closeStylePicker();
     });
@@ -1343,7 +1702,7 @@ function buildIconPicker(node, group = ICONS[iconKey(node)].group) {
   resetBtn.className = 'icon-swatch reset';
   resetBtn.textContent = 'Reset to default';
   resetBtn.addEventListener('click', () => {
-    delete node.icon;
+    delete node[field];
     saveLayoutOverride(node);
     closeStylePicker();
   });
@@ -1504,6 +1863,7 @@ for (const key of ['activity', 'chat']) {
 // objects doesn't force a trip back through the topology first. Falls back
 // to topology when the newly selected node has no equivalent view.
 function selectFromSidebar(id) {
+  markRunSeen(id);
   selectNode(id);
   if (mapMode === 'topology') return;
   const schema = repoSchemas[id];
@@ -1521,6 +1881,297 @@ function selectFromSidebar(id) {
   }
 }
 
+// ── Run state ────────────────────────────────────────────────────────────
+// GET /api/events streams every protocol call the Context makes, whoever made
+// it: this UI, an MCP client, chat, a pipeline running its steps, a service's
+// run() loop (see odf.ui.events). Each call arrives as `started`, then
+// `completed` or `failed`, sharing a `call_id`; `parent` is the call in
+// progress when it started (a pipeline for its steps, a task for a function
+// it calls). From these the topology knows which nodes are running and which
+// edges a call is going through, so motion on the grid means something
+// happened.
+
+// The calls a node counts as running for, by method, and the verb its log
+// line uses. Long-lived calls (a service's run(), a repository's stream) and
+// lifecycle hooks only show when they fail.
+const RUN_VERB = {
+  execute: 'executed', invoke: 'invoked', __call__: 'called', setup: 'started', stop: 'stopped',
+};
+// The same calls while they run, for the header status.
+const RUN_ACTIVE_VERB = {
+  execute: 'executing', invoke: 'invoking', __call__: 'calling', setup: 'starting', stop: 'stopping',
+};
+const CALLABLE_TYPES = new Set(['task', 'pipeline', 'agent', 'function']);
+const RUN_DONE_MS = 3000;
+const TOAST_DONE_MS = 4000;
+const TOAST_MAX = 4;
+
+let runEventsLive = false;     // false until /api/events is connected
+const activeCalls = new Map(); // call_id -> event that started it
+const nodeRun = {};            // node id -> {state: running|done|failed, at, count}
+const pendingClicks = {};      // node id -> true while this tab's action awaits its call
+const chatCalls = new Set();   // call_ids started during this tab's chat turn
+let flowingEdges = new Set();  // `${from}|${to}` of edges a call goes through
+let lastDone = null;           // {nodeId, text} of the top-level call that just completed
+
+const reduceMotion = !!(window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches);
+
+function isRunCall(e) {
+  if (e.method === 'setup' || e.method === 'stop') return e.protocol === 'ServiceProtocol';
+  return e.method in RUN_VERB;
+}
+
+// "execute()", or "call" for a function, whose method is __call__.
+function methodLabel(method) {
+  return method === '__call__' ? 'call' : `${method}()`;
+}
+
+function initRunEvents() {
+  if (!window.EventSource) return;
+  const source = new EventSource('/api/events');
+  source.onopen = () => {
+    // A reconnect may have missed the end of calls in progress.
+    if (!runEventsLive) resetRunState();
+    runEventsLive = true;
+  };
+  source.onerror = () => { runEventsLive = false; };
+  source.onmessage = msg => {
+    const e = JSON.parse(msg.data);
+    if (e.type === 'reset') resetRunState();
+    else if (e.type === 'call') onRunEvent(e);
+  };
+}
+
+function resetRunState() {
+  activeCalls.clear();
+  chatCalls.clear();
+  for (const id of Object.keys(nodeRun)) {
+    if (nodeRun[id].state === 'running') delete nodeRun[id];
+  }
+  updateFlowingEdges();
+  updateHeaderStatus();
+  render();
+}
+
+function onRunEvent(e) {
+  const node = nodeMap[e.key];
+  if (!node) return; // hidden by [ui.topology], or not a component
+  if (e.protocol === 'ServiceProtocol') syncServiceState(node, e);
+  const counted = isRunCall(e);
+
+  if (e.state === 'started') {
+    if (counted) {
+      activeCalls.set(e.call_id, e);
+      if (chatBusy) chatCalls.add(e.call_id);
+      nodeRun[node.id] = { ...nodeRun[node.id], state: 'running' };
+    }
+  } else {
+    const started = activeCalls.get(e.call_id);
+    activeCalls.delete(e.call_id);
+    const fromChat = chatCalls.delete(e.call_id);
+    if (counted || e.state === 'failed') finishRun(node, e, started, fromChat);
+  }
+  updateFlowingEdges();
+  updateHeaderStatus();
+  render();
+}
+
+// A service's Start/Stop follows its calls, whoever made them.
+function syncServiceState(node, e) {
+  let running = node.running;
+  if (e.method === 'setup' && e.state === 'completed') running = true;
+  if (e.method === 'stop' && e.state === 'completed') running = false;
+  if (e.method === 'run' && e.state !== 'started') running = false;
+  if (running === node.running) return;
+  node.running = running;
+  if (selectId === node.id) selectNode(node.id);
+}
+
+function finishRun(node, e, started, fromChat) {
+  const failed = e.state === 'failed';
+  const stillRunning = [...activeCalls.values()].some(c => c.key === node.id);
+  const prev = nodeRun[node.id];
+  const since = started ? started.ts : e.ts - (e.elapsed_ms || 0) / 1000;
+  if (failed) {
+    nodeRun[node.id] = { state: 'failed', at: performance.now(), since, count: prev && prev.state === 'failed' ? prev.count + 1 : 1 };
+  } else if (!stillRunning && !(prev && prev.state === 'failed')) {
+    const entry = { state: 'done', at: performance.now() };
+    nodeRun[node.id] = entry;
+    setTimeout(() => {
+      if (nodeRun[node.id] === entry) { delete nodeRun[node.id]; render(); }
+    }, RUN_DONE_MS);
+  }
+
+  const verb = RUN_VERB[e.method] || methodLabel(e.method);
+  const took = e.elapsed_ms == null ? '' : ` in ${formatElapsed(e.elapsed_ms)}`;
+  const topLevel = e.parent === null;
+  if (failed) {
+    addLog(`${escapeHtml(node.label)} ${methodLabel(e.method)} failed — ${escapeHtml(e.error || '')}`, ACCENT.alert);
+    // A step's failure is told by its pipeline's own, when that fails too;
+    // one inside a service's run() loop has nothing above it to tell it.
+    if (!activeCalls.has(e.parent)) {
+      showToast(node, { failed: true, text: e.error || `${methodLabel(e.method)} failed`, since });
+    }
+  } else if (topLevel) {
+    addLog(`${escapeHtml(node.label)} ${verb}${took}`, nodeAccent(node));
+    if (pendingClicks[node.id] || fromChat) showToast(node, { failed: false, text: `${verb}${took}`, since });
+    const done = { nodeId: node.id, text: `${verb}${took}` };
+    lastDone = done;
+    setTimeout(() => {
+      if (lastDone === done) { lastDone = null; updateHeaderStatus(); }
+    }, RUN_DONE_MS);
+  }
+  if (topLevel) delete pendingClicks[node.id];
+}
+
+function formatElapsed(ms) {
+  return ms < 1000 ? `${Math.round(ms)} ms` : `${(ms / 1000).toFixed(1)} s`;
+}
+
+// A failure stays marked until the node is looked at: selected, or its
+// toast opened.
+function markRunSeen(id) {
+  if (id && nodeRun[id] && nodeRun[id].state === 'failed') {
+    delete nodeRun[id];
+    updateHeaderStatus();
+    render();
+  }
+}
+
+// ── Header status ────────────────────────────────────────────────────────
+// The header's "System Nominal" tells what the project is doing, since
+// toasts can be hidden (under the chat drawer, say). First a call that's
+// running, then a failure not yet looked at (clicking it opens the logs, as
+// its toast's Show logs does), then a call that just completed.
+
+function updateHeaderStatus() {
+  const el = document.getElementById('hdr-status');
+  if (!el) return;
+  let state = '';
+  let node = null;
+  let text = 'System Nominal';
+  // A pipeline's own call, not its steps; the latest one started.
+  const running = [...activeCalls.values()].filter(c => isRunCall(c) && !activeCalls.has(c.parent) && nodeMap[c.key]);
+  const failedIds = Object.keys(nodeRun).filter(id => nodeRun[id].state === 'failed' && nodeMap[id]);
+  if (running.length) {
+    const c = running[running.length - 1];
+    state = 'running';
+    node = nodeMap[c.key];
+    text = `${node.label} ${RUN_ACTIVE_VERB[c.method] || methodLabel(c.method)}`;
+    if (running.length > 1) text += ` +${running.length - 1}`;
+  } else if (failedIds.length) {
+    const id = failedIds.reduce((a, b) => (nodeRun[b].at > nodeRun[a].at ? b : a));
+    state = 'failed';
+    node = nodeMap[id];
+    text = `${node.label} failed`;
+    if (failedIds.length > 1) text += ` +${failedIds.length - 1}`;
+  } else if (lastDone && nodeMap[lastDone.nodeId]) {
+    state = 'done';
+    node = nodeMap[lastDone.nodeId];
+    text = `${node.label} ${lastDone.text}`;
+  }
+
+  el.classList.remove('running', 'failed', 'done');
+  if (state) el.classList.add(state);
+  el.dataset.node = node ? node.id : '';
+  if (node) el.style.setProperty('--status-accent', nodeAccentCss(node));
+  else el.style.removeProperty('--status-accent');
+  el.querySelector('.hdr-status-text').textContent = text;
+  el.title = state === 'failed' ? `${text} — show logs` : text;
+}
+
+function initHeaderStatus() {
+  const el = document.getElementById('hdr-status');
+  if (!el) return;
+  el.addEventListener('click', () => {
+    const id = el.dataset.node;
+    if (!el.classList.contains('failed') || !nodeRun[id]) return;
+    const since = nodeRun[id].since;
+    markRunSeen(id);
+    selectNode(id);
+    showLogsView(id, since);
+  });
+}
+
+// An edge carries a call while a call on one end is running and the other
+// end takes part: it has a call made from inside that one (a pipeline's
+// step, a function a task calls), or it is something called into rather
+// than called (a repository, a component, a service).
+function updateFlowingEdges() {
+  const flowing = new Set();
+  if (activeCalls.size) {
+    const byNode = {};
+    for (const c of activeCalls.values()) (byNode[c.key] = byNode[c.key] || []).push(c);
+    const linked = (a, b) => (byNode[a] || []).some(c =>
+      (byNode[b] || []).some(d => d.parent === c.call_id || c.parent === d.call_id));
+    const usedBy = (a, b) => byNode[a] && nodeMap[b] && !CALLABLE_TYPES.has(nodeMap[b].type) && nodeMap[b].type !== 'config';
+    for (const e of edges) {
+      if (linked(e.from, e.to) || usedBy(e.from, e.to) || usedBy(e.to, e.from)) {
+        flowing.add(`${e.from}|${e.to}`);
+      }
+    }
+  }
+  flowingEdges = flowing;
+}
+
+// ── Toasts ───────────────────────────────────────────────────────────────
+// One non-blocking notice per finished call worth telling about: every
+// top-level failure, and a success this tab asked for (an action clicked,
+// or a chat turn). A success goes after a few seconds; a failure stays
+// until closed, and a node failing again updates its toast's count.
+
+const failureToasts = {}; // node id -> {el, count}
+
+function showToast(node, { failed, text, since }) {
+  const box = document.getElementById('toasts');
+  if (!box) return;
+  const existing = failed && failureToasts[node.id];
+  if (existing) {
+    existing.count += 1;
+    existing.el.querySelector('.toast-text').textContent = text;
+    existing.el.querySelector('.toast-count').textContent = `×${existing.count}`;
+    existing.el.dataset.since = since;
+    box.prepend(existing.el);
+    return;
+  }
+
+  const el = document.createElement('div');
+  el.className = `toast${failed ? ' failed' : ''}`;
+  el.setAttribute('role', failed ? 'alert' : 'status');
+  el.dataset.since = since;
+  el.innerHTML =
+    `<div class="toast-head"><span class="toast-label" style="color:${nodeAccentCss(node)}">${escapeHtml(node.label)}</span>` +
+    `<span class="toast-count"></span>` +
+    `<button class="toast-close" title="Dismiss" aria-label="Dismiss">&times;</button></div>` +
+    `<div class="toast-text"></div>` +
+    `<div class="toast-actions"><button class="toast-logs">Show logs <span>&rarr;</span></button></div>`;
+  el.querySelector('.toast-text').textContent = text;
+  const close = () => {
+    el.remove();
+    if (failureToasts[node.id] && failureToasts[node.id].el === el) delete failureToasts[node.id];
+  };
+  el.querySelector('.toast-close').addEventListener('click', close);
+  el.querySelector('.toast-logs').addEventListener('click', () => {
+    markRunSeen(node.id);
+    selectNode(node.id);
+    showLogsView(node.id, Number(el.dataset.since));
+    close();
+  });
+  box.prepend(el);
+  if (failed) failureToasts[node.id] = { el, count: 1 };
+  else setTimeout(close, TOAST_DONE_MS);
+
+  // Keep the stack short, dropping successes before failures.
+  while (box.children.length > TOAST_MAX) {
+    const toasts = [...box.children];
+    const victim = toasts.reverse().find(t => !t.classList.contains('failed')) || box.lastChild;
+    victim.remove();
+    for (const id of Object.keys(failureToasts)) {
+      if (failureToasts[id].el === victim) delete failureToasts[id];
+    }
+  }
+}
+
 // ── Lifecycle actions ────────────────────────────────────────────────────
 // Backs the "Start"/"Stop" action on @Service nodes and the "Execute" action
 // on @Task/@Pipeline nodes. POST /api/services/{name}/{start,stop} and
@@ -1533,13 +2184,19 @@ async function toggleService(id) {
   const action = node.running ? 'stop' : 'start';
   const btn = document.getElementById('lifecycle-btn');
   if (btn) btn.disabled = true;
+  pendingClicks[id] = true;
   try {
     const res = await fetch(`${apiPath(id)}/${action}`, { method: 'POST' });
-    if (!res.ok) throw new Error(`HTTP ${res.status}`);
-    node.running = !node.running;
-    addLog(`${node.label} ${node.running ? 'started' : 'stopped'}`, ACCENT.service);
+    if (!res.ok) throw httpError(res.status, `HTTP ${res.status}`);
+    // Set, not toggled: the call's own event may have set it already.
+    node.running = action === 'start';
+    if (!runEventsLive) {
+      delete pendingClicks[id];
+      addLog(`${node.label} ${node.running ? 'started' : 'stopped'}`, ACCENT.service);
+    }
   } catch (err) {
-    addLog(`Failed to ${action} ${node.label}`, ACCENT.alert);
+    delete pendingClicks[id];
+    if (reportedByEvents(err)) addLog(`Failed to ${action} ${node.label}`, ACCENT.alert);
   }
   selectNode(id);
 }
@@ -1548,17 +2205,35 @@ async function executeNode(id) {
   const node = nodeMap[id];
   const btn = document.getElementById('execute-btn');
   if (btn) btn.disabled = true;
+  pendingClicks[id] = true;
   try {
     const res = await fetch(`${apiPath(id)}/execute`, { method: 'POST' });
     if (!res.ok) {
       const body = await res.json().catch(() => ({}));
-      throw new Error(body.detail || `HTTP ${res.status}`);
+      throw httpError(res.status, body.detail || `HTTP ${res.status}`);
     }
-    addLog(`${node.label} executed`, nodeAccent(node));
+    if (!runEventsLive) {
+      delete pendingClicks[id];
+      addLog(`${node.label} executed`, nodeAccent(node));
+    }
   } catch (err) {
-    addLog(`${node.label} execute failed — ${err.message}`, ACCENT.alert);
+    delete pendingClicks[id];
+    if (reportedByEvents(err)) addLog(`${node.label} execute failed — ${err.message}`, ACCENT.alert);
   }
   if (btn) btn.disabled = false;
+}
+
+// An Error carrying the HTTP status of a failed action.
+function httpError(status, message) {
+  return Object.assign(new Error(message), { status });
+}
+
+// Whether a failed action still needs its own log line: a 500 is the call
+// itself failing, which its event already reports while /api/events is
+// connected. Anything else (a 404, a 422 validation error) never reached the
+// call.
+function reportedByEvents(err) {
+  return !(runEventsLive && err.status === 500);
 }
 
 // ── Arguments form ───────────────────────────────────────────────────────
@@ -1675,6 +2350,7 @@ async function submitArguments(id, form, props, required) {
   const out = form.querySelector('.invoke-result');
   btn.disabled = true;
   out.classList.remove('error');
+  pendingClicks[id] = true;
   try {
     const args = readInvokeForm(form, props, required);
     const res = await fetch(`${apiPath(id)}/${node.verb}`, {
@@ -1683,14 +2359,18 @@ async function submitArguments(id, form, props, required) {
       body: JSON.stringify(args),
     });
     const body = await res.json().catch(() => ({}));
-    if (!res.ok) throw new Error(invokeErrorMessage(body.detail, res.status));
+    if (!res.ok) throw httpError(res.status, invokeErrorMessage(body.detail, res.status));
     const result = body.result;
     out.textContent = typeof result === 'string' ? result : JSON.stringify(result, null, 2);
-    addLog(`${node.label} ${pastTense(node.verb)}`, nodeAccent(node));
+    if (!runEventsLive) {
+      delete pendingClicks[id];
+      addLog(`${node.label} ${pastTense(node.verb)}`, nodeAccent(node));
+    }
   } catch (err) {
+    delete pendingClicks[id];
     out.textContent = err.message;
     out.classList.add('error');
-    addLog(`${node.label} ${node.verb} failed — ${err.message}`, ACCENT.alert);
+    if (reportedByEvents(err)) addLog(`${node.label} ${node.verb} failed — ${err.message}`, ACCENT.alert);
   }
   out.hidden = false;
   btn.disabled = false;
@@ -2174,7 +2854,8 @@ let tableOffset = 0;
 let tablePageSize = TABLE_PAGE_SIZE_OPTIONS[1];
 let tableTotal = 0;
 let tsHiddenFields = new Set(); // numeric fields the user unchecked from the timeseries chart
-let tsHiddenFieldsRepoId = null; // repo the above selection belongs to — reset on repo change, kept across page/mode switches
+let tsHiddenGroups = new Set(); // groups (as strings) of a grouped timeseries the user unchecked
+let tsHiddenFieldsRepoId = null; // repo the above selections belong to — reset on repo change, kept across page/mode switches
 
 // ── Replay (timeline scrubber) state ────────────────────────────────────
 // Shared by Map/Timeseries/Media replay modes (see renderTimelineBar/
@@ -3558,7 +4239,12 @@ function renderLightboxRail() {
     button.hidden = !tools.includes(button.dataset.tool);
     button.setAttribute('aria-pressed', button.dataset.tool === tool);
   }
-  const actions = ['media-lightbox-source', 'media-lightbox-open', 'media-lightbox-download'].some(id => !document.getElementById(id).hidden);
+  const actions = ['media-lightbox-source', 'media-lightbox-notebook', 'media-lightbox-open', 'media-lightbox-download'].some(id => !document.getElementById(id).hidden);
+  const editButton = document.getElementById('media-lightbox-notebook');
+  const editLabel = notebookEditing ? 'Close Jupyter' : 'Edit in Jupyter';
+  editButton.title = editLabel;
+  editButton.setAttribute('aria-label', editLabel);
+  editButton.setAttribute('aria-pressed', notebookEditing);
   document.getElementById('media-lightbox-rail-sep').hidden = !tools.length || !actions;
   lightboxRail.hidden = !tools.length && !actions;
   document.getElementById('media-lightbox').dataset.tool = tool || '';
@@ -3577,8 +4263,9 @@ function renderLightboxRail() {
       : tool === 'span' ? 'Select text to add a label'
       : tool === 'range' ? 'Drag on the timeline, or press M at each end, to add a range'
       : tool === 'point' ? 'Click the timeline, or press M, to add a point'
-        : tool ? 'Pick a tool to add a label' : '';
-  hint.hidden = !tool;
+        : tool ? 'Pick a tool to add a label'
+          : notebookEditing ? 'Jupyter saves every few seconds; Ctrl+S saves now' : '';
+  hint.hidden = !hint.textContent;
 }
 
 // A box of the set size centred on `point` (0..1 fractions of the image),
@@ -4401,7 +5088,8 @@ function wireMediaReplay(schema) {
 // image. Bytes arrive as null in the records themselves (see
 // odf.ui.data.to_json_safe_dict), which is how a file is told apart. Text
 // that parses as JSON is a tree too, and text that reads as Markdown is
-// rendered, see looksLikeMarkdown().
+// rendered, see looksLikeMarkdown(). A Jupyter notebook is drawn as its
+// cells, and a notebook file can be edited in place (see "Notebooks" below).
 
 // pdf.js draws PDFs. It is only fetched once a PDF is on screen.
 const PDFJS_URL = 'https://unpkg.com/pdfjs-dist@4.10.38/build/';
@@ -4419,7 +5107,7 @@ let docLoadToken = 0;   // bumped whenever the reader is emptied, so a slow load
 let openPdf = null;     // the pdf.js document open in the reader
 let pdfPageObserver = null; // draws the open PDF's pages as they scroll into view
 let markdownRenderer = null; // text => safe HTML, or the promise loading it
-let openText = null;    // the text document open in the reader: { text, note, json, rendered, astral }
+let openText = null;    // the text document open in the reader: { text, note, json, notebook, rendered, astral }
 
 function loadPdfJs() {
   if (!pdfJs) {
@@ -4441,7 +5129,10 @@ function loadMarkdownRenderer() {
         node.setAttribute('target', '_blank');
         node.setAttribute('rel', 'noopener noreferrer');
       });
-      return text => purify.sanitize(marked.parse(text, { gfm: true }), { FORBID_TAGS: ['style', 'form'] });
+      const sanitize = html => purify.sanitize(html, { FORBID_TAGS: ['style', 'form'] });
+      const render = text => sanitize(marked.parse(text, { gfm: true }));
+      render.html = sanitize; // for markup that is HTML already, a notebook's outputs
+      return render;
     });
     markdownRenderer.catch(() => { markdownRenderer = null; }); // offline, say: try again on the next document
   }
@@ -4463,6 +5154,178 @@ function looksLikeMarkdown(text) {
   }
   return false;
 }
+
+// ── Notebooks ─────────────────────────────────────────────────────────────
+// A Jupyter notebook is a JSON document with `nbformat` and `cells`, drawn as
+// its cells and their saved outputs: Markdown cells rendered, code as written,
+// images inline, and HTML outputs (a DataFrame, say) through the same
+// sanitizer as Markdown, so nothing in them runs. View source shows the JSON.
+// A notebook that is a file (bytes) can also be edited in Jupyter itself,
+// embedded in the reader, when the server has it (see odf.ui.notebooks).
+
+let notebooksEnabled = false; // whether the server edits notebooks in Jupyter (see loadUiExtensions)
+let notebookEditing = false;  // whether the reader holds the Jupyter editor
+
+function isNotebook(value) {
+  return Boolean(value) && typeof value === 'object' && !Array.isArray(value) &&
+    'nbformat' in value && Array.isArray(value.cells);
+}
+
+// Whether a record's declared content is a notebook: an .ipynb name or the
+// notebook type.
+function declaredNotebook(record) {
+  const content = record['$content'];
+  if (!content) return false;
+  const type = (content.content_type || '').split(';')[0].trim().toLowerCase();
+  return type === 'application/x-ipynb+json' || /\.ipynb$/i.test(content.filename || '');
+}
+
+// A notebook field's text: a string, or a list of lines.
+function notebookText(value) {
+  return Array.isArray(value) ? value.join('') : String(value ?? '');
+}
+
+// The start of a notebook for a card: its cells' sources, picked out of the
+// leading bytes of its JSON, which needn't parse on their own. Null when none
+// are found there.
+function notebookSnippet(text) {
+  const sources = [];
+  for (const match of text.matchAll(/"source"\s*:\s*("(?:[^"\\]|\\.)*"|\[\s*(?:"(?:[^"\\]|\\.)*"\s*,?\s*)*\])/g)) {
+    try {
+      sources.push(notebookText(JSON.parse(match[1])));
+    } catch (err) {
+      break;
+    }
+  }
+  return sources.length ? docSnippet(sources.join('\n\n')) : null;
+}
+
+// Terminal colours in a traceback, which HTML has no use for.
+function stripAnsi(text) {
+  return text.replace(/\x1b\[[0-9;]*[A-Za-z]/g, '');
+}
+
+// One output of a code cell, `render` being loadMarkdownRenderer()'s, or null
+// when it couldn't be fetched.
+function renderNotebookOutput(output, render) {
+  if (output.output_type === 'stream') {
+    const stderr = output.name === 'stderr' ? ' doc-nb-stderr' : '';
+    return `<pre class="doc-nb-stream${stderr}">${escapeHtml(stripAnsi(notebookText(output.text)))}</pre>`;
+  }
+  if (output.output_type === 'error') {
+    const trace = (output.traceback || []).map(stripAnsi).join('\n') || `${output.ename}: ${output.evalue}`;
+    return `<pre class="doc-nb-error">${escapeHtml(trace)}</pre>`;
+  }
+  const data = output.data || {};
+  for (const type of ['image/png', 'image/jpeg', 'image/gif']) {
+    if (data[type]) return `<img src="data:${type};base64,${escapeHtml(notebookText(data[type]).replace(/\s/g, ''))}" alt="">`;
+  }
+  if (render) {
+    if (data['text/html']) return `<div class="doc-nb-html">${render.html(notebookText(data['text/html']))}</div>`;
+    if (data['image/svg+xml']) return `<div class="doc-nb-html">${render.html(notebookText(data['image/svg+xml']))}</div>`;
+    if (data['text/markdown']) return `<div class="doc-markdown">${render(notebookText(data['text/markdown']))}</div>`;
+  }
+  if (data['text/plain']) return `<pre>${escapeHtml(stripAnsi(notebookText(data['text/plain'])))}</pre>`;
+  return '';
+}
+
+async function renderNotebook(nb) {
+  let render = null;
+  try {
+    render = await loadMarkdownRenderer();
+  } catch (err) {
+    // Offline, say: Markdown and HTML are shown as written.
+  }
+  const cells = nb.cells.map(cell => {
+    const source = notebookText(cell.source);
+    if (cell.cell_type === 'markdown') {
+      const body = render ? `<div class="doc-markdown">${render(source)}</div>` : `<pre class="doc-nb-input">${escapeHtml(source)}</pre>`;
+      return `<div class="doc-nb-cell doc-nb-markdown"><div class="doc-nb-prompt"></div><div class="doc-nb-body">${body}</div></div>`;
+    }
+    if (cell.cell_type !== 'code') {
+      return `<div class="doc-nb-cell"><div class="doc-nb-prompt"></div><div class="doc-nb-body"><pre class="doc-nb-input">${escapeHtml(source)}</pre></div></div>`;
+    }
+    const outputs = (cell.outputs || []).map(o => renderNotebookOutput(o, render)).join('');
+    return '<div class="doc-nb-cell">' +
+      `<div class="doc-nb-prompt">[${cell.execution_count ?? ' '}]:</div>` +
+      `<div class="doc-nb-body"><pre class="doc-nb-input">${escapeHtml(source)}</pre>` +
+      (outputs ? `<div class="doc-nb-output">${outputs}</div>` : '') +
+      '</div></div>';
+  });
+  return `<div class="doc-notebook">${cells.join('') || '<span class="detail-empty">// no cells</span>'}</div>`;
+}
+
+// The path Jupyter knows a record's notebook by, see odf.ui.notebook_contents.
+function notebookPath(record) {
+  const schema = repoSchemas[activeRepoId];
+  const key = String(record[schema.key]);
+  const name = /\.ipynb$/i.test(contentName(record)) ? contentName(record) : `${key}.ipynb`;
+  return [schema.name, key, name].map(encodeURIComponent).join('/');
+}
+
+// Swaps the rendered notebook for Jupyter's editor, launching Jupyter first
+// if it isn't running.
+async function editNotebook() {
+  const record = lightboxRecords[lightboxIndex];
+  const token = docLoadToken;
+  const reader = document.getElementById('media-lightbox-doc');
+  const button = document.getElementById('media-lightbox-notebook');
+  closeImageLabelForm();
+  selectedBox = -1;
+  openText = null;
+  notebookEditing = true;
+  document.getElementById('media-lightbox-source').hidden = true;
+  button.disabled = true;
+  reader.innerHTML = '<span class="detail-empty">// starting Jupyter</span>';
+  renderLightboxRail();
+  let session;
+  try {
+    const res = await fetch('/api/notebooks/session', { method: 'POST' });
+    if (!res.ok) throw new Error((await res.json().catch(() => ({}))).detail || `HTTP ${res.status}`);
+    session = await res.json();
+  } catch (err) {
+    if (token !== docLoadToken) return;
+    addLog(`Failed to start Jupyter: ${err.message}`, ACCENT.alert);
+    openLightbox(lightboxIndex);
+    return;
+  }
+  if (token !== docLoadToken) return;
+  button.disabled = false;
+  // Another tab of the UI may have switched the mode since.
+  syncNotebookTheme(document.documentElement.getAttribute('data-theme'));
+  const src = `${session.url}notebooks/${notebookPath(record)}`;
+  reader.classList.add('doc-reader-frame');
+  reader.innerHTML = `<iframe class="doc-notebook-frame" title="Jupyter Notebook" src="${escapeHtml(src)}"></iframe>`;
+}
+
+// Jupyter's editor opens in JupyterLab Light or Dark as the UI is: the UI's
+// proxy reads the mode from this cookie (see odf.ui.notebooks), and a theme
+// in the user's own Jupyter settings still wins.
+function syncNotebookTheme(theme) {
+  document.cookie = `odf-jupyter-theme=${theme}; path=/proxy/jupyter/; SameSite=Strict`;
+}
+
+// Reloads the open editor in the UI's new mode, saving the notebook first so
+// the last few seconds of edits aren't lost. Its kernel keeps running.
+async function reloadNotebookFrame() {
+  const frame = document.querySelector('#media-lightbox-doc .doc-notebook-frame');
+  const win = frame && frame.contentWindow;
+  if (!win) return; // Jupyter still starting: the editor opens in the new mode
+  try {
+    // Missing while the editor is still loading, with nothing to save yet.
+    if (win.jupyterapp) await win.jupyterapp.commands.execute('docmanager:save');
+  } catch (err) {
+    // Nothing to save, say: reload all the same.
+  }
+  win.location.reload();
+}
+
+// Leaving the editor shows the notebook as Jupyter last saved it.
+document.getElementById('media-lightbox-notebook').addEventListener('click', () => {
+  if (lightboxIndex < 0) return;
+  if (notebookEditing) openLightbox(lightboxIndex);
+  else editNotebook();
+});
 
 async function showDocumentView(repoId) {
   activeRepoId = repoId;
@@ -4491,6 +5354,7 @@ async function loadDocumentPreviews(grid) {
   for (const tile of grid.querySelectorAll('.media-tile')) {
     const value = lightboxRecords[tile.dataset.index][schema.view.field];
     if (value === null || value === undefined) files.push(tile);
+    else if (isNotebook(value)) showNotebookPreview(tile, JSON.stringify(value));
     else tile.querySelector('.doc-preview').textContent =
       docSnippet(typeof value === 'string' ? value : JSON.stringify(value, null, 2));
   }
@@ -4500,13 +5364,26 @@ async function loadDocumentPreviews(grid) {
   }
 }
 
+// Previews a notebook's JSON on a card as its cells' sources. Returns false,
+// leaving the card alone, when none are found in it.
+function showNotebookPreview(tile, text) {
+  const snippet = notebookSnippet(text);
+  if (snippet === null) return false;
+  tile.querySelector('.doc-preview').textContent = snippet;
+  tile.querySelector('.media-duration').textContent = 'notebook';
+  return true;
+}
+
 async function loadFilePreview(tile, url) {
   const preview = tile.querySelector('.doc-preview');
+  const record = lightboxRecords[tile.dataset.index];
   try {
     const res = await fetch(url, { headers: { Range: `bytes=0-${DOC_SNIPPET_BYTES - 1}` } });
     const type = res.headers.get('Content-Type') || '';
     if (res.ok && type.startsWith('text/')) {
-      preview.textContent = docSnippet(await res.text());
+      const text = await res.text();
+      const notebook = declaredNotebook(record) || /^\s*\{\s*"cells"\s*:/.test(text);
+      if (!(notebook && showNotebookPreview(tile, text))) preview.textContent = docSnippet(text);
       return;
     }
     if (res.body) res.body.cancel();
@@ -4541,10 +5418,15 @@ function unloadDocumentReader() {
   if (openPdf) openPdf.destroy();
   openPdf = null;
   openText = null;
+  notebookEditing = false;
   document.getElementById('media-lightbox-source').hidden = true;
+  const button = document.getElementById('media-lightbox-notebook');
+  button.hidden = true;
+  button.disabled = false;
   const reader = document.getElementById('media-lightbox-doc');
   reader.hidden = true;
-  reader.innerHTML = '';
+  reader.classList.remove('doc-reader-frame');
+  reader.innerHTML = ''; // drops the Jupyter editor, if open
 }
 
 // The value of text that is a JSON object or array, undefined for any other.
@@ -4557,15 +5439,16 @@ function parseJsonDocument(text) {
   }
 }
 
-// Shows a text document in the reader: as a tree if it is JSON, rendered if
-// it is Markdown, or as its source either way while the tool last picked for
-// text is the one that labels it. `note` is HTML to put under it, and
+// Shows a text document in the reader: as its cells if it is a notebook, as a
+// tree if it is other JSON, rendered if it is Markdown, or as its source
+// either way while the tool last picked for text is the one that labels it. `note` is HTML to put under it, and
 // `markdown` whether it is declared Markdown (see declaredMarkdown()).
 function showDocumentText(text, note, markdown) {
   const json = parseJsonDocument(text);
   const labelling = annotationsEnabled && lightboxTools.text === 'span';
   // `astral`: whether it has characters that take two UTF-16 units, see unitsToPoints().
-  openText = { text, note, json, rendered: !labelling && (json !== undefined || (markdown ?? looksLikeMarkdown(text))), astral: /[\uD800-\uDFFF]/.test(text) };
+  const notebook = isNotebook(json) ? json : undefined;
+  openText = { text, note, json, notebook, rendered: !labelling && (json !== undefined || (markdown ?? looksLikeMarkdown(text))), astral: /[\uD800-\uDFFF]/.test(text) };
   renderDocumentText();
 }
 
@@ -4575,7 +5458,10 @@ async function renderDocumentText() {
   const reader = document.getElementById('media-lightbox-doc');
   const toggle = document.getElementById('media-lightbox-source');
   let html = null;
-  if (doc.rendered && doc.json !== undefined) {
+  if (doc.rendered && doc.notebook !== undefined) {
+    html = await renderNotebook(doc.notebook);
+    if (token !== docLoadToken) return;
+  } else if (doc.rendered && doc.json !== undefined) {
     html = `<div class="doc-tree">${renderJsonTree(doc.json)}</div>`;
   } else if (doc.rendered) {
     try {
@@ -4587,11 +5473,18 @@ async function renderDocumentText() {
   }
   reader.innerHTML = (html === null ? '<div class="doc-source"><pre class="doc-text"></pre></div>' : html) + doc.note;
   if (html === null) renderDocumentSource();
-  const label = doc.rendered ? 'View source' : (doc.json !== undefined ? 'View as tree' : 'View as Markdown');
+  const label = doc.rendered ? 'View source'
+    : doc.notebook !== undefined ? 'View as notebook'
+      : doc.json !== undefined ? 'View as tree' : 'View as Markdown';
   toggle.title = label;
   toggle.setAttribute('aria-label', label);
   toggle.setAttribute('aria-pressed', !doc.rendered);
   toggle.hidden = false;
+  // Only a file can be saved back, see PUT .../records/{key}/media.
+  const record = lightboxRecords[lightboxIndex];
+  const schema = repoSchemas[activeRepoId];
+  document.getElementById('media-lightbox-notebook').hidden = !(notebooksEnabled && doc.notebook !== undefined &&
+    schema.writable && record && record[schema.view.field] == null);
   renderLightboxRail();
 }
 
@@ -4627,7 +5520,10 @@ async function openDocument(record, url) {
     document.getElementById('media-lightbox-open').hidden = true;
     document.getElementById('media-lightbox-download').hidden = true;
     if (typeof value === 'string') showDocumentText(value, '', declaredMarkdown(record));
-    else reader.innerHTML = `<div class="doc-tree">${renderJsonTree(value)}</div>`;
+    else if (isNotebook(value)) {
+      const html = await renderNotebook(value);
+      if (token === docLoadToken) reader.innerHTML = html;
+    } else reader.innerHTML = `<div class="doc-tree">${renderJsonTree(value)}</div>`;
     return;
   }
   reader.innerHTML = '<span class="detail-empty">// loading</span>';
@@ -4908,8 +5804,10 @@ document.addEventListener('mouseup', e => {
 
 // ── Timeseries view ───────────────────────────────────────────────────────
 // Backs the "View Timeline" action on repository nodes whose DataView is a
-// TimeseriesView — a line chart plotting every other numeric entity field
-// against the declared timestamp field. Plain inline SVG, no charting
+// TimeseriesView — a line chart plotting the view's numeric `fields` (every
+// other numeric entity field when unset) against its ordering `field`, a
+// timestamp or any number such as a training step, with one line per value
+// of its `group` field when set. Plain inline SVG, no charting
 // dependency (see ChartProtocol/showChartView above for anything fancier —
 // that's a component-authored, server-rendered alternative). Time ranges and
 // points can be labelled on it (see "Timeseries annotations" below).
@@ -4983,6 +5881,7 @@ function renderTimeseriesChart(schema, records) {
   tsPlot = null;
   if (tsHiddenFieldsRepoId !== activeRepoId) {
     tsHiddenFields = new Set();
+    tsHiddenGroups = new Set();
     tsHiddenFieldsRepoId = activeRepoId;
   }
   const bottomBar = renderTsBottomBar(schema);
@@ -4993,10 +5892,12 @@ function renderTimeseriesChart(schema, records) {
     bottomBar.wire();
     return;
   }
-  const tsField = schema.view.field;
-  const numericFields = schema.fields
-    .map(f => f.name)
-    .filter(name => name !== tsField && typeof records[0][name] === 'number');
+  const { field: tsField, fields: viewFields, group: groupField } = schema.view;
+  const numericFields = viewFields
+    ? viewFields.filter(name => schema.fields.some(f => f.name === name))
+    : schema.fields
+      .map(f => f.name)
+      .filter(name => name !== tsField && name !== groupField && typeof records[0][name] === 'number');
   const visibleFields = numericFields.filter(name => !tsHiddenFields.has(name));
   const sorted = [...records].sort((a, b) => a[tsField] - b[tsField]);
   const w = 640, h = 280, pad = 32;
@@ -5004,26 +5905,42 @@ function renderTimeseriesChart(schema, records) {
   const xMin = Math.min(...xs), xMax = Math.max(...xs);
   const xScale = x => xMax === xMin ? pad : pad + ((x - xMin) / (xMax - xMin)) * (w - 2 * pad);
   const colors = [ACCENT.repository, ACCENT.component, ACCENT.service, ACCENT.task, ACCENT.pipeline];
-  const series = visibleFields.map(name => {
+  // A grouped view draws one line per field and group: color tells the
+  // groups apart and the dash the fields, and every group shares its field's
+  // y scale so they compare on one chart. Ungrouped, all records are one
+  // group and color tells the fields apart, as before.
+  const groups = groupField ? tsGroupsOf(sorted, groupField) : [null];
+  const visibleGroups = groups.filter(g => g === null || !tsHiddenGroups.has(g));
+  const dashes = ['', '6 3', '2 3', '8 3 2 3'];
+  const series = visibleFields.flatMap(name => {
     const i = numericFields.indexOf(name);
     const ys = sorted.map(r => Number(r[name]));
     const yMin = Math.min(...ys), yMax = Math.max(...ys);
     const yScale = y => yMax === yMin ? h / 2 : h - pad - ((y - yMin) / (yMax - yMin)) * (h - 2 * pad);
-    const points = sorted.map((r, idx) => `${xScale(xs[idx])},${yScale(Number(r[name]))}`).join(' ');
-    const color = colors[i % colors.length];
-    // Replay mode: a small circle at each visible series' last point marks
-    // the playhead — the leading edge of the progressively-revealed chart.
-    const lastIdx = sorted.length - 1;
-    const playhead = isReplay
-      ? `<circle cx="${xScale(xs[lastIdx])}" cy="${yScale(Number(sorted[lastIdx][name]))}" r="3.5" fill="${color}"/>`
-      : '';
-    return `<polyline points="${points}" fill="none" stroke="${color}" stroke-width="1.5"/>${playhead}`;
+    return visibleGroups.map(g => {
+      const rows = g === null ? sorted : sorted.filter(r => String(r[groupField]) === g);
+      if (!rows.length) return '';
+      const points = rows.map(r => `${xScale(Number(r[tsField]))},${yScale(Number(r[name]))}`).join(' ');
+      const color = g === null ? colors[i % colors.length] : colors[groups.indexOf(g) % colors.length];
+      const dash = g === null ? '' : dashes[i % dashes.length];
+      // Replay mode: a small circle at each visible series' last point marks
+      // the playhead — the leading edge of the progressively-revealed chart.
+      const last = rows[rows.length - 1];
+      const playhead = isReplay
+        ? `<circle cx="${xScale(Number(last[tsField]))}" cy="${yScale(Number(last[name]))}" r="3.5" fill="${color}"/>`
+        : '';
+      return `<polyline points="${points}" fill="none" stroke="${color}" stroke-width="1.5"` +
+        `${dash ? ` stroke-dasharray="${dash}"` : ''}/>${playhead}`;
+    });
   }).join('');
-  const legend = numericFields.map((name, i) => {
-    const hidden = tsHiddenFields.has(name);
-    return `<label class="ts-legend-item${hidden ? ' hidden' : ''}" data-field="${escapeHtml(name)}" title="Click to ${hidden ? 'show' : 'hide'}">` +
-      `<span class="ts-swatch" style="background:${colors[i % colors.length]}"></span>${escapeHtml(name)}</label>`;
-  }).join('');
+  const legendItem = (attr, value, hidden, swatch) =>
+    `<label class="ts-legend-item${hidden ? ' hidden' : ''}" ${attr}="${escapeHtml(value)}" title="Click to ${hidden ? 'show' : 'hide'}">` +
+    `${swatch}${escapeHtml(value)}</label>`;
+  const legend = numericFields.map((name, i) => legendItem('data-field', name, tsHiddenFields.has(name), groupField
+    ? `<svg width="16" height="9" viewBox="0 0 16 9"><line x1="0" y1="4.5" x2="16" y2="4.5" stroke="currentColor" stroke-width="1.5"${dashes[i % dashes.length] ? ` stroke-dasharray="${dashes[i % dashes.length]}"` : ''}/></svg>`
+    : `<span class="ts-swatch" style="background:${colors[i % colors.length]}"></span>`)).join('') +
+    (groupField ? groups.map((g, i) => legendItem('data-group', g, tsHiddenGroups.has(g),
+      `<span class="ts-swatch" style="background:${colors[i % colors.length]}"></span>`)).join('') : '');
   const annotating = viewAnnotating() && visibleFields.length > 0;
   const chart = visibleFields.length
     ? '<div class="ts-plot">' +
@@ -5047,13 +5964,25 @@ function renderTimeseriesChart(schema, records) {
 
   body.querySelectorAll('.ts-legend-item').forEach(el => {
     el.addEventListener('click', () => {
-      const name = el.dataset.field;
-      if (tsHiddenFields.has(name)) tsHiddenFields.delete(name);
-      else tsHiddenFields.add(name);
+      const [hidden, value] = el.dataset.group !== undefined
+        ? [tsHiddenGroups, el.dataset.group]
+        : [tsHiddenFields, el.dataset.field];
+      if (hidden.has(value)) hidden.delete(value);
+      else hidden.add(value);
       renderTimeseriesChart(schema, records);
     });
   });
   bottomBar.wire();
+}
+
+// The distinct values of a grouped timeseries' `group` field among
+// `records`, as strings (so they key the legend and tsHiddenGroups), in
+// numeric order when they're all numbers and alphabetical otherwise.
+function tsGroupsOf(records, groupField) {
+  const values = [...new Set(records.map(r => r[groupField]))];
+  const numeric = values.every(v => typeof v === 'number');
+  values.sort((a, b) => numeric ? a - b : String(a).localeCompare(String(b)));
+  return values.map(String);
 }
 
 // ── Timeseries annotations ────────────────────────────────────────────────
@@ -5249,9 +6178,17 @@ const LOG_LEVEL_COLOR = {
 
 let activeLogComponentId = null;
 let logsPollTimer = null;
+// Lines from this local time on ('YYYY-MM-DD HH:MM:SS', the log files'
+// format) are marked as the run a toast opened the logs for; the first is
+// scrolled to once.
+let logsSince = null;
+let logsScrollToSince = false;
 
-async function showLogsView(id) {
+// `since`, optional, is a run's start as epoch seconds (an event's `ts`).
+async function showLogsView(id, since) {
   activeLogComponentId = id;
+  logsSince = since ? logTimestamp(since) : null;
+  logsScrollToSince = !!logsSince;
   const node = nodeMap[id];
   setMapMode('logs');
   document.getElementById('map-panel-title').textContent = `${node.label} · logs`;
@@ -5284,14 +6221,28 @@ function renderLogs(entries) {
   let html = '<div class="map-logs-lines">';
   for (const e of entries) {
     const color = LOG_LEVEL_COLOR[e.level] || 'var(--text-muted)';
-    html += '<div class="log-line">' +
+    const match = logsSince && e.ts && e.ts >= logsSince;
+    html += `<div class="log-line${match ? ' run-match' : ''}">` +
       `<span class="dot" style="background:${color}"></span>` +
       (e.ts ? `<span class="ts">${escapeHtml(e.ts)}</span>` : '') +
       `<span>${escapeHtml(e.message)}</span></div>`;
   }
   html += '</div>';
   body.innerHTML = html;
-  if (wasAtBottom) body.scrollTop = body.scrollHeight;
+  const first = logsScrollToSince && body.querySelector('.run-match');
+  if (first) {
+    first.scrollIntoView({ block: 'start' });
+    logsScrollToSince = false;
+  } else if (wasAtBottom) {
+    body.scrollTop = body.scrollHeight;
+  }
+}
+
+function logTimestamp(epochSeconds) {
+  const d = new Date(epochSeconds * 1000);
+  const pad = n => String(n).padStart(2, '0');
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())} ` +
+    `${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`;
 }
 
 // ── Details view ─────────────────────────────────────────────────────────
@@ -5387,6 +6338,16 @@ async function loadUiExtensions() {
     console.error('Failed to load UI extensions', err);
   }
   annotationsEnabled = Boolean(ext.annotations);
+  notebooksEnabled = Boolean(ext.notebooks);
+
+  // An unknown grid name falls back to the isometric one, as a stale icon
+  // key falls back to the type default.
+  GRID = GRIDS[ext.grid] || GRIDS.iso;
+  for (const [dir, [glyph, title]] of Object.entries(GRID.gridArrows)) {
+    const btn = document.getElementById(`grid-${dir}`);
+    btn.textContent = glyph;
+    btn.title = title;
+  }
 
   if (ext.logo) {
     const mark = document.getElementById('brand-mark');
@@ -5455,6 +6416,7 @@ async function init() {
   for (const [id, pos] of Object.entries(layoutOverrides)) {
     if (!nodeMap[id]) continue;
     if (pos.icon) nodeMap[id].icon = pos.icon;
+    if (pos.flatIcon) nodeMap[id].flatIcon = pos.flatIcon;
     if (pos.color) nodeMap[id].color = pos.color;
   }
   byDepth = [...nodes];
@@ -5477,13 +6439,14 @@ async function init() {
   addLog(`${data.stats.objects} objects · ${data.stats.links} links resolved`);
   addLog(`Topology loaded · ${data.project}`, TITLE_ACCENT);
   initChat();
+  initHeaderStatus();
+  initRunEvents();
 
   // Animation loop — powers blinking lights, pulsing beacons and wire pulses.
   // Capped at ~30fps (plenty for these subtle effects) and paused while the
   // tab is hidden, since an uncapped 60fps full-canvas redraw running
   // forever in the background is what was driving up CPU/GPU usage.
   const FRAME_INTERVAL = 1000 / 30;
-  const reduceMotion = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
   let lastFrameTime = 0;
 
   function loop(ts) {

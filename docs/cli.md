@@ -54,8 +54,9 @@ gets registered:
 |---|---|
 | [`default`](init-templates/default.md) | — nothing; this is the starting point itself |
 | [`data-analytics`](init-templates/data-analytics.md) | An `@Analytics @Task` that aggregates repository data and writes a JSON report |
-| [`data-science`](init-templates/data-science.md) | A seed CSV and a notebook that loads it into the repository |
+| [`data-science`](init-templates/data-science.md) | A seed CSV and a notebook that loads it into the repository, for exploring data |
 | [`data-engineering`](init-templates/data-engineering.md) | A `SeedItems` → `ExportItemsSummary` `Pipeline` reading `data/raw/` and writing `data/processed/` |
+| [`ml`](init-templates/ml.md) | `Item` replaced by `Run`/`Param`/`Metric`/`Artifact` repositories, a `train` function, a `Sweep` task and a `RunComparison` chart, for training and comparing models |
 | [`research`](init-templates/research.md) | A `RunExperiment` `Task` that loads `data/items.csv` and writes `results/summary.json`, plus a write-up stub |
 
 `data-science`, `data-engineering`, and `data-analytics` all borrow folder names from
@@ -71,6 +72,9 @@ rather than ingesting one. `research` follows ["Good Enough Practices in Scienti
 Computing"](https://doi.org/10.1371/journal.pcbi.1005510) (Wilson et al., 2017): a
 flat `data/` for raw, read-only input, a `results/` for everything generated, and a
 `doc/` for the write-up — `app/` plays the role of that layout's `src/`.
+`data-science` and `ml` split data work by what the records are: the data
+itself, to explore, or training runs and what they measured, to compare (see
+[Choosing between `data-science` and `ml`](init-templates/ml.md#choosing-between-data-science-and-ml)).
 
 <!-- termynal -->
 
@@ -103,16 +107,21 @@ the `app` package, the same layout `odf init` produces.
 | `--app` | `app` | Import name of the package that registers components — see [Server](server.md#the-app-module) for the same convention used when building a `Server` directly in Python |
 | `--ui` / `--no-ui` | `--ui` | Start the UI |
 | `--ui-host`, `--ui-port` | `127.0.0.1`, `4747` | Interface/port for the UI |
-| `--theme` | config's `[ui] theme`, or `default` | UI theme (visual file-set) to serve. Built in: `default`, `glitch`, `neo`, `emerald`, `onyx` (see [UI](ui.md#themes-icons-and-branding)) |
+| `--theme` | config's `[ui] theme`, or `default` | UI theme (visual file-set) to serve: a built-in theme's name (`default`, `ink`, `emerald`, `onyx`, see [UI](ui.md#themes-icons-and-branding)), or a path to a theme directory such as `./my-theme` (see [Custom themes](ui.md#custom-themes)) |
 | `--mcp` / `--no-mcp` | `--no-mcp` | Start the [MCP server](mcp.md) |
 | `--mcp-host`, `--mcp-port` | `127.0.0.1`, `4748` | Interface/port for the MCP server |
 | `--chat` / `--no-chat` | `--no-chat` | Add a [chat window](chat.md) to the UI (requires `--ui`) |
 
 ```text
 $ odf run
-UI running at http://127.0.0.1:4747
+UI running at http://127.0.0.1:4747 (copied)
 Press Ctrl+C to stop
 ```
+
+The UI URL (the MCP URL with `--no-ui`) is copied to the clipboard on start,
+ready to paste into another browser or an MCP client's config. The copy uses
+`pbcopy` on macOS, `clip` on Windows, and `wl-copy`, `xclip` or `xsel` on
+Linux; without one of them, `odf run` skips it and leaves out `(copied)`.
 
 When `opendataframework` or `odf` rejects the project at start-up, `odf run`
 prints the reason on one line and exits with status 1, without a traceback.
