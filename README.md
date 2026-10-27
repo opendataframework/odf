@@ -1,4 +1,4 @@
-# Open Data Framework CLI (`odf`)
+# Open Data Framework CLI
 
 Scaffolds and runs Open Data Framework projects, and serves them through a UI, an
 MCP server and a chat window. Depends on `opendataframework` for the core

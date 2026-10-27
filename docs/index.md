@@ -1,13 +1,13 @@
-# Open Data Framework (`odf`)
+# Open Data Framework CLI
 
 Open Data Framework (ODF) is a Python framework for building data
 applications — small services that read, transform, and serve data —
 without the usual boilerplate. You write your data model and logic as
 plain Python classes; the framework wires them together and runs them.
-This package, `odf`, is the toolbelt around that: a CLI to scaffold and
-run projects, a UI to see and drive what's running, an MCP server so AI
-tools can act on your project too, and a chat window to talk to it
-directly.
+This package, `odf`, adds the tools for working with those projects: a
+CLI to scaffold and run them, a UI to see and drive what's running, an
+MCP server so AI tools can act on a project too, and a chat window to
+talk to it directly.
 
 !!! info "Looking for the core abstractions?"
     `Entity`, `Repository`, `Component`, `Service`, `Task`, `Pipeline`,
