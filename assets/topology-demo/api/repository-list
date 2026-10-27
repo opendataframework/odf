@@ -1,0 +1,19 @@
+[
+  {
+    "id": "books",
+    "label": "Books",
+    "entity": "Book",
+    "key": "id",
+    "fields": [
+      { "name": "id", "type": "int" },
+      { "name": "title", "type": "str" },
+      { "name": "author", "type": "str" }
+    ],
+    "readable": true,
+    "writable": true,
+    "streamable": false,
+    "streaming": false,
+    "view": { "kind": "table", "fields": null },
+    "replay_field": null
+  }
+]

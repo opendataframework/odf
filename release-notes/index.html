@@ -1,0 +1,1664 @@
+
+<!doctype html>
+<html lang="en" class="no-js">
+  <head>
+    
+      <meta charset="utf-8">
+      <meta name="viewport" content="width=device-width,initial-scale=1">
+      
+        <meta name="description" content="Open Data Framework CLI.">
+      
+      
+      
+      
+        <link rel="prev" href="../examples/">
+      
+      
+      
+        
+      
+      
+      <link rel="icon" href="../images/light.svg">
+      <meta name="generator" content="mkdocs-1.6.1, mkdocs-material-9.7.7">
+    
+    
+      
+        <title>Release Notes - ODF</title>
+      
+    
+    
+      <link rel="stylesheet" href="../assets/stylesheets/main.ec1eaa64.min.css">
+      
+        
+        <link rel="stylesheet" href="../assets/stylesheets/palette.ab4e12ef.min.css">
+      
+      
+
+
+    
+    
+      
+    
+    
+      
+    
+    
+      <link rel="stylesheet" href="../stylesheets/extra.css">
+    
+      <link rel="stylesheet" href="../termynal.css">
+    
+    <script>__md_scope=new URL("..",location),__md_hash=e=>[...e].reduce(((e,_)=>(e<<5)-e+_.charCodeAt(0)),0),__md_get=(e,_=localStorage,t=__md_scope)=>JSON.parse(_.getItem(t.pathname+"."+e)),__md_set=(e,_,t=localStorage,a=__md_scope)=>{try{t.setItem(a.pathname+"."+e,JSON.stringify(_))}catch(e){}}</script>
+    
+      
+
+    
+    
+  </head>
+  
+  
+    
+    
+      
+    
+    
+    
+    
+    <body dir="ltr" data-md-color-scheme="default" data-md-color-primary="custom" data-md-color-accent="custom">
+  
+    
+    <input class="md-toggle" data-md-toggle="drawer" type="checkbox" id="__drawer" autocomplete="off">
+    <input class="md-toggle" data-md-toggle="search" type="checkbox" id="__search" autocomplete="off">
+    <label class="md-overlay" for="__drawer"></label>
+    <div data-md-component="skip">
+      
+        
+        <a href="#release-notes" class="md-skip">
+          Skip to content
+        </a>
+      
+    </div>
+    <div data-md-component="announce">
+      
+    </div>
+    
+    
+      
+
+  
+
+<header class="md-header md-header--shadow" data-md-component="header">
+  <nav class="md-header__inner md-grid" aria-label="Header">
+    <a href=".." title="ODF" class="md-header__button md-logo" aria-label="ODF" data-md-component="logo">
+      <img class="odf-logo odf-logo--light" src="../images/light.svg" alt="logo">
+<img class="odf-logo odf-logo--dark" src="../images/dark.svg" alt="logo">
+    </a>
+    <label class="md-header__button md-icon" for="__drawer">
+      
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M3 6h18v2H3zm0 5h18v2H3zm0 5h18v2H3z"/></svg>
+    </label>
+    <div class="md-header__title" data-md-component="header-title">
+      <div class="md-header__ellipsis">
+        <div class="md-header__topic">
+          <span class="md-ellipsis">
+            ODF
+          </span>
+        </div>
+        <div class="md-header__topic" data-md-component="header-topic">
+          <span class="md-ellipsis">
+            
+              Release Notes
+            
+          </span>
+        </div>
+      </div>
+    </div>
+    
+      
+        <form class="md-header__option" data-md-component="palette">
+  
+    
+    
+    
+    <input class="md-option" data-md-color-media="(prefers-color-scheme: light)" data-md-color-scheme="default" data-md-color-primary="custom" data-md-color-accent="custom"  aria-label="Switch to dark mode"  type="radio" name="__palette" id="__palette_0">
+    
+      <label class="md-header__button md-icon" title="Switch to dark mode" for="__palette_1" hidden>
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a4 4 0 0 0-4 4 4 4 0 0 0 4 4 4 4 0 0 0 4-4 4 4 0 0 0-4-4m0 10a6 6 0 0 1-6-6 6 6 0 0 1 6-6 6 6 0 0 1 6 6 6 6 0 0 1-6 6m8-9.31V4h-4.69L12 .69 8.69 4H4v4.69L.69 12 4 15.31V20h4.69L12 23.31 15.31 20H20v-4.69L23.31 12z"/></svg>
+      </label>
+    
+  
+    
+    
+    
+    <input class="md-option" data-md-color-media="(prefers-color-scheme: dark)" data-md-color-scheme="slate" data-md-color-primary="custom" data-md-color-accent="custom"  aria-label="Switch to light mode"  type="radio" name="__palette" id="__palette_1">
+    
+      <label class="md-header__button md-icon" title="Switch to light mode" for="__palette_0" hidden>
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 18c-.89 0-1.74-.2-2.5-.55C11.56 16.5 13 14.42 13 12s-1.44-4.5-3.5-5.45C10.26 6.2 11.11 6 12 6a6 6 0 0 1 6 6 6 6 0 0 1-6 6m8-9.31V4h-4.69L12 .69 8.69 4H4v4.69L.69 12 4 15.31V20h4.69L12 23.31 15.31 20H20v-4.69L23.31 12z"/></svg>
+      </label>
+    
+  
+</form>
+      
+    
+    
+      <script>var palette=__md_get("__palette");if(palette&&palette.color){if("(prefers-color-scheme)"===palette.color.media){var media=matchMedia("(prefers-color-scheme: light)"),input=document.querySelector(media.matches?"[data-md-color-media='(prefers-color-scheme: light)']":"[data-md-color-media='(prefers-color-scheme: dark)']");palette.color.media=input.getAttribute("data-md-color-media"),palette.color.scheme=input.getAttribute("data-md-color-scheme"),palette.color.primary=input.getAttribute("data-md-color-primary"),palette.color.accent=input.getAttribute("data-md-color-accent")}for(var[key,value]of Object.entries(palette.color))document.body.setAttribute("data-md-color-"+key,value)}</script>
+    
+    
+    
+      
+      
+        <label class="md-header__button md-icon" for="__search">
+          
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M9.5 3A6.5 6.5 0 0 1 16 9.5c0 1.61-.59 3.09-1.56 4.23l.27.27h.79l5 5-1.5 1.5-5-5v-.79l-.27-.27A6.52 6.52 0 0 1 9.5 16 6.5 6.5 0 0 1 3 9.5 6.5 6.5 0 0 1 9.5 3m0 2C7 5 5 7 5 9.5S7 14 9.5 14 14 12 14 9.5 12 5 9.5 5"/></svg>
+        </label>
+        <div class="md-search" data-md-component="search" role="dialog">
+  <label class="md-search__overlay" for="__search"></label>
+  <div class="md-search__inner" role="search">
+    <form class="md-search__form" name="search">
+      <input type="text" class="md-search__input" name="query" aria-label="Search" placeholder="Search" autocapitalize="off" autocorrect="off" autocomplete="off" spellcheck="false" data-md-component="search-query" required>
+      <label class="md-search__icon md-icon" for="__search">
+        
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M9.5 3A6.5 6.5 0 0 1 16 9.5c0 1.61-.59 3.09-1.56 4.23l.27.27h.79l5 5-1.5 1.5-5-5v-.79l-.27-.27A6.52 6.52 0 0 1 9.5 16 6.5 6.5 0 0 1 3 9.5 6.5 6.5 0 0 1 9.5 3m0 2C7 5 5 7 5 9.5S7 14 9.5 14 14 12 14 9.5 12 5 9.5 5"/></svg>
+        
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M20 11v2H8l5.5 5.5-1.42 1.42L4.16 12l7.92-7.92L13.5 5.5 8 11z"/></svg>
+      </label>
+      <nav class="md-search__options" aria-label="Search">
+        
+        <button type="reset" class="md-search__icon md-icon" title="Clear" aria-label="Clear" tabindex="-1">
+          
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M19 6.41 17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/></svg>
+        </button>
+      </nav>
+      
+    </form>
+    <div class="md-search__output">
+      <div class="md-search__scrollwrap" tabindex="0" data-md-scrollfix>
+        <div class="md-search-result" data-md-component="search-result">
+          <div class="md-search-result__meta">
+            Initializing search
+          </div>
+          <ol class="md-search-result__list" role="presentation"></ol>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+      
+    
+    
+      <div class="md-header__source">
+        <a href="https://github.com/opendataframework/odf" title="Go to repository" class="md-source" data-md-component="source">
+  <div class="md-source__icon md-icon">
+    
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512"><!--! Font Awesome Free 7.1.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2025 Fonticons, Inc.--><path d="M439.6 236.1 244 40.5c-5.4-5.5-12.8-8.5-20.4-8.5s-15 3-20.4 8.4L162.5 81l51.5 51.5c27.1-9.1 52.7 16.8 43.4 43.7l49.7 49.7c34.2-11.8 61.2 31 35.5 56.7-26.5 26.5-70.2-2.9-56-37.3L240.3 199v121.9c25.3 12.5 22.3 41.8 9.1 55-6.4 6.4-15.2 10.1-24.3 10.1s-17.8-3.6-24.3-10.1c-17.6-17.6-11.1-46.9 11.2-56v-123c-20.8-8.5-24.6-30.7-18.6-45L142.6 101 8.5 235.1C3 240.6 0 247.9 0 255.5s3 15 8.5 20.4l195.6 195.7c5.4 5.4 12.7 8.4 20.4 8.4s15-3 20.4-8.4l194.7-194.7c5.4-5.4 8.4-12.8 8.4-20.4s-3-15-8.4-20.4"/></svg>
+  </div>
+  <div class="md-source__repository">
+    opendataframework/odf
+  </div>
+</a>
+      </div>
+    
+  </nav>
+  
+</header>
+    
+    <div class="md-container" data-md-component="container">
+      
+      
+        
+          
+        
+      
+      <main class="md-main" data-md-component="main">
+        <div class="md-main__inner md-grid">
+          
+            
+              
+              <div class="md-sidebar md-sidebar--primary" data-md-component="sidebar" data-md-type="navigation" >
+                <div class="md-sidebar__scrollwrap">
+                  <div class="md-sidebar__inner">
+                    
+
+
+
+<nav class="md-nav md-nav--primary" aria-label="Navigation" data-md-level="0">
+  <label class="md-nav__title" for="__drawer">
+    <a href=".." title="ODF" class="md-nav__button md-logo" aria-label="ODF" data-md-component="logo">
+      <img class="odf-logo odf-logo--light" src="../images/light.svg" alt="logo">
+<img class="odf-logo odf-logo--dark" src="../images/dark.svg" alt="logo">
+    </a>
+    ODF
+  </label>
+  
+    <div class="md-nav__source">
+      <a href="https://github.com/opendataframework/odf" title="Go to repository" class="md-source" data-md-component="source">
+  <div class="md-source__icon md-icon">
+    
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512"><!--! Font Awesome Free 7.1.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2025 Fonticons, Inc.--><path d="M439.6 236.1 244 40.5c-5.4-5.5-12.8-8.5-20.4-8.5s-15 3-20.4 8.4L162.5 81l51.5 51.5c27.1-9.1 52.7 16.8 43.4 43.7l49.7 49.7c34.2-11.8 61.2 31 35.5 56.7-26.5 26.5-70.2-2.9-56-37.3L240.3 199v121.9c25.3 12.5 22.3 41.8 9.1 55-6.4 6.4-15.2 10.1-24.3 10.1s-17.8-3.6-24.3-10.1c-17.6-17.6-11.1-46.9 11.2-56v-123c-20.8-8.5-24.6-30.7-18.6-45L142.6 101 8.5 235.1C3 240.6 0 247.9 0 255.5s3 15 8.5 20.4l195.6 195.7c5.4 5.4 12.7 8.4 20.4 8.4s15-3 20.4-8.4l194.7-194.7c5.4-5.4 8.4-12.8 8.4-20.4s-3-15-8.4-20.4"/></svg>
+  </div>
+  <div class="md-source__repository">
+    opendataframework/odf
+  </div>
+</a>
+    </div>
+  
+  <ul class="md-nav__list" data-md-scrollfix>
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href=".." class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Home
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+      
+        
+      
+        
+      
+    
+    
+    
+      
+        
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--section md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_2" >
+        
+          
+          <label class="md-nav__link" for="__nav_2" id="__nav_2_label" tabindex="">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    CLI
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_2_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_2">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    CLI
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../cli/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    CLI
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    
+    
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+    
+    
+    
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_2_2" >
+        
+          
+          <label class="md-nav__link" for="__nav_2_2" id="__nav_2_2_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Templates
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="2" aria-labelledby="__nav_2_2_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_2_2">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Templates
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../init-templates/default/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    default
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../init-templates/data-analytics/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    data-analytics
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../init-templates/data-science/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    data-science
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../init-templates/data-engineering/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    data-engineering
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../init-templates/ml/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    ml
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../init-templates/research/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    research
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../server/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Server
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../ui/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    UI
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../mcp/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    MCP Server
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../chat/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Chat
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../examples/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Examples
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+    
+  
+  
+  
+    <li class="md-nav__item md-nav__item--active">
+      
+      <input class="md-nav__toggle md-toggle" type="checkbox" id="__toc">
+      
+      
+        
+      
+      
+        <label class="md-nav__link md-nav__link--active" for="__toc">
+          
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Release Notes
+  
+
+    
+  </span>
+  
+  
+
+          <span class="md-nav__icon md-icon"></span>
+        </label>
+      
+      <a href="./" class="md-nav__link md-nav__link--active">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Release Notes
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+      
+        
+
+<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Table of contents
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#040" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        0.4.0
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="0.4.0">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#added" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Added
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#changed" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Changed
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#fixed" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Fixed
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#030" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        0.3.0
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="0.3.0">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#added_1" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Added
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#changed_1" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Changed
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#fixed_1" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Fixed
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#020" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        0.2.0
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="0.2.0">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#added_2" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Added
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#changed_2" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Changed
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#fixed_2" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Fixed
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="https://opendataframework.github.io/opendataframework/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    opendataframework (core)
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+  </ul>
+</nav>
+                  </div>
+                </div>
+              </div>
+            
+            
+              
+              <div class="md-sidebar md-sidebar--secondary" data-md-component="sidebar" data-md-type="toc" >
+                <div class="md-sidebar__scrollwrap">
+                  <div class="md-sidebar__inner">
+                    
+
+<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Table of contents
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#040" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        0.4.0
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="0.4.0">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#added" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Added
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#changed" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Changed
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#fixed" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Fixed
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#030" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        0.3.0
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="0.3.0">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#added_1" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Added
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#changed_1" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Changed
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#fixed_1" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Fixed
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#020" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        0.2.0
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="0.2.0">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#added_2" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Added
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#changed_2" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Changed
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#fixed_2" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Fixed
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+                  </div>
+                </div>
+              </div>
+            
+          
+          
+            <div class="md-content" data-md-component="content">
+              
+              <article class="md-content__inner md-typeset">
+                
+                  
+
+
+  
+  
+
+
+<h1 id="release-notes">Release Notes<a class="headerlink" href="#release-notes" title="Permanent link">&para;</a></h1>
+<h2 id="040">0.4.0<a class="headerlink" href="#040" title="Permanent link">&para;</a></h2>
+<h3 id="added">Added<a class="headerlink" href="#added" title="Permanent link">&para;</a></h3>
+<ul>
+<li><strong>UI</strong>: a project can ship its own theme: <code>[ui] theme</code>, <code>odf run --theme</code> and
+  <code>server.start(theme=...)</code> take a path to a theme directory (<code>"./my-theme"</code>, relative to
+  the working directory) as well as a built-in theme's name. The directory holds a
+  <code>theme.css</code> and a <code>favicon.svg</code>, plus an optional <code>theme.js</code> that sets the icon look
+  through <code>ODF.registerTheme()</code>, the same files as a built-in theme. A theme can also set
+  <code>pixelSize</code> there to draw the topology canvas at a coarser resolution, for pixel art,
+  and <code>labelFont</code>/<code>labelSize</code> to keep the node labels drawn on it legible, with
+  <code>labelSnap</code> to keep them crisp at any zoom on whole canvas pixels, and
+  <code>labelAlpha</code>, <code>labelShadow</code> (in its <code>theme.css</code>'s <code>--label-shadow</code> color) and
+  <code>labelBold</code> to make them read over busy tiles.
+  See <a href="../ui/#custom-themes">UI</a> and the
+  <a href="https://github.com/opendataframework/odf/tree/main/examples/24-custom-theme"><code>24-custom-theme</code></a>
+  example, which ships a theme of dark solids with a cyan and magenta chromatic-split
+  fringe.</li>
+<li><strong>UI</strong>: <code>[ui] grid = "flat"</code> in <code>config.toml</code> draws the topology as a flat, top-down
+  schematic instead of the isometric grid: faint dots where nodes snap, and every node a
+  rounded square in its type's color with its type's glyph and its label on a faint chip,
+  for large topologies. Node
+  positions and colors are shared by both grids. <strong>Customize</strong> picks a flat glyph, saved as
+  <code>flatIcon</code> apart from the isometric icon. See <a href="../ui/#flat-grid">UI</a> and the
+  <a href="https://github.com/opendataframework/odf/tree/main/examples/25-flat-grid"><code>25-flat-grid</code></a>
+  example.</li>
+<li><strong>UI</strong>: Jupyter notebooks in a document view open as their cells and saved outputs
+  (Markdown rendered, images inline, HTML outputs sanitized) instead of raw JSON, with
+  <strong>View source</strong> for the JSON. With the <code>notebook</code> package installed in the project
+  (<code>pip install odf[notebook]</code>), <strong>Edit in Jupyter</strong> in the reader's rail embeds Jupyter
+  Notebook's own editor in the reader. Jupyter starts on the first edit, with kernels in
+  the project directory, listens on <code>127.0.0.1</code> only and is served through the UI at
+  <code>/proxy/jupyter/</code>, so it works behind an HTTPS reverse proxy with no setup of its own.
+  Its token stays with the UI, which adds it to each request it forwards, so the
+  browser never holds one and a proxy's Basic auth login isn't replaced by it. The editor
+  follows the UI's light/dark mode (JupyterLab Light or Dark) unless your own Jupyter
+  settings pick a theme. It saves each notebook back through the repository's <code>save()</code>
+  via the new <code>PUT /api/repositories/{name}/records/{key}/media</code>. <code>[ui] notebooks = false</code>
+  in <code>config.toml</code> turns editing off. See <a href="../ui/#notebooks">UI</a> and the
+  <a href="https://github.com/opendataframework/odf/tree/main/examples/21-notebook-view"><code>21-notebook-view</code></a>
+  example.</li>
+<li><strong>CLI</strong>: <code>odf init --template ml</code> scaffolds a project for training and comparing models:
+  <code>Runs</code>, <code>Params</code>, <code>Metrics</code> (one row per training step) and <code>Artifacts</code> repositories, a
+  <code>train</code> <code>@Function</code> recording one run, a <code>Sweep</code> <code>@Task</code> recording one run per learning
+  rate in <code>[task.sweep]</code>, an <code>export_run</code> <code>@Function</code> writing a run's params, metrics and
+  artifacts to <code>exports/</code>, and a <code>RunComparison</code> chart of final loss and accuracy by
+  learning rate. An artifact can be a JSON summary or a file's bytes, such as a trained
+  model, which the document view downloads under its name. It needs only the standard
+  library. See <a href="../init-templates/ml/"><code>ml</code> template</a>, including when to pick it over
+  <code>data-science</code>, and the
+  <a href="https://github.com/opendataframework/odf/tree/main/examples/22-ml"><code>22-ml</code></a> example,
+  which trains a real scikit-learn classifier, exports it as <code>model.pkl</code>, and compares the
+  runs on an interactive Plotly page in the UI's theme. The <code>examples</code> extra now includes
+  <code>scikit-learn</code>.</li>
+<li><strong>UI</strong>: the timeseries view plots only the view's <code>fields</code> when set, and with <code>group</code>
+  set draws one line per value of that field, colored per group and dashed per field, with
+  every group on its field's y axis so they compare on one chart. The legend toggles
+  groups as well as fields. The ordering <code>field</code> can be any number, such as a training
+  step, not only a timestamp. Requires <code>opendataframework</code> 0.4.0. See
+  <a href="../ui/#grouped-timeseries">UI</a>.</li>
+<li><strong>UI</strong>: the topology shows runs as they happen, whoever started them (the UI, an MCP
+  client, chat, a pipeline, a service's <code>run()</code> loop). An edge animates only while a call
+  goes through it, where before every edge pulsed all the time. A running node gets a
+  ring that fades out with a ✓ when its call completes, or turns red with a <code>!</code> when it
+  fails, until the node is selected. Failures pop a notice with the error and a
+  <strong>Show logs</strong> button that opens the node's logs at the run. Successes pop one only for
+  actions started from that tab or its chat. The header status, <strong>System Nominal</strong> when
+  idle, shows the running call, an unseen failure (click it to open the logs) and a
+  just-completed call, so a run stays visible when the chat drawer covers the notices.
+  With reduced motion on, nothing moves. A
+  service's Start/Stop button now follows starts and stops made over MCP or chat. The
+  new <code>GET /api/events</code> streams every protocol call as server-sent events. Requires
+  <code>opendataframework</code> 0.4.0. See <a href="../ui/#run-activity">UI</a>.</li>
+<li><strong>UI</strong>: a theme's <code>theme.js</code> can replace how empty grid tiles are drawn with
+  <code>ODF.registerTheme({ emptyTile })</code>, fill opaque icon faces its own way, such as a
+  gradient spanning the whole icon, with <code>ODF.registerTheme({ faceFill })</code>, and draw on
+  the floor under each icon with <code>ODF.registerTheme({ groundShadow })</code>. See
+  <a href="../ui/#themes-icons-and-branding">UI</a>.</li>
+<li><strong>Examples</strong>: <a href="https://github.com/opendataframework/odf/tree/main/examples/23-reverse-proxy"><code>23-reverse-proxy</code></a>
+  deploys a project with <code>docker compose up</code>: <code>odf run</code> in one container with its ports
+  exposed only to the compose network, and Traefik in front of it with HTTPS (a
+  self-signed certificate generated on first start), a Basic auth login, and the MCP
+  server at <code>/mcp</code>. <strong>Edit in Jupyter</strong> works through it with nothing Jupyter-specific
+  in the proxy. <code>compose.oidc.yaml</code> swaps the login for an identity provider through
+  oauth2-proxy, and <code>ODF_INDEX_URL</code> installs odf from a local package index for trying
+  unreleased builds. See <a href="../ui/#deploying">UI</a>.</li>
+</ul>
+<h3 id="changed">Changed<a class="headerlink" href="#changed" title="Permanent link">&para;</a></h3>
+<ul>
+<li><strong>Deps</strong>: requires <code>opendataframework &gt;=0.4.0,&lt;0.5.0</code>, which the grouped timeseries
+  view and the run activity above build on.</li>
+<li><strong>UI</strong>: every built-in theme shows its favicon as the header mark next to "ODF". All
+  of them share one logo, a rounded tile of stacked layers in each theme's colors
+  (<code>[ui] logo</code> still replaces the mark, and <code>[ui] favicon</code> replaces both).</li>
+<li><strong>UI</strong>: the UI refuses requests another site's page makes the browser send, so a login
+  at a reverse proxy can't be used from there: any request but <code>GET</code>, <code>HEAD</code> and
+  <code>OPTIONS</code>, and every WebSocket (Jupyter's included), answers 403 when its <code>Origin</code>
+  isn't the host the UI was reached by (<code>Host</code>, or <code>X-Forwarded-Host</code>). Requests without
+  an <code>Origin</code>, from scripts or <code>curl</code>, are unaffected. Bound to a loopback address (the
+  default), the UI also answers only requests whose <code>Host</code> is <code>127.0.0.1</code>, <code>localhost</code>
+  or <code>[::1]</code> (421 otherwise), so a page that points its own name at your machine (DNS
+  rebinding) can't reach it. A proxy in front leaves <code>Host</code> to the upstream and passes
+  the browser's host as <code>X-Forwarded-Host</code>, as the documented Traefik setup does
+  (<code>passHostHeader = false</code>). The UI docs gain a deployment section: keeping the port
+  off the network, serving at a host's root (not under a subpath), the Traefik route,
+  adding a login with Basic auth or an identity provider through oauth2-proxy, serving
+  the MCP server behind the same proxy at <code>/mcp</code> with a login the client sends as a
+  header, and the settings nginx and other proxies need by hand. See
+  <a href="../ui/#deploying">UI</a>.</li>
+<li><strong>UI</strong>: each theme draws topology icons its own way instead of all as wireframes:
+  <code>emerald</code> as tinted glass, <code>ink</code> as tonal solids over a soft shadow, <code>onyx</code> as tonal
+  solids without outlines, while <code>default</code>
+  keeps its outlines but hides the lines behind each icon. Icons within each group
+  have more varied shapes and heights: a setback tower, pitched roofs, round tanks,
+  drums and turrets, sloped consoles, and five kinds of stand for the charts. Icon keys
+  are unchanged, so saved layouts keep their icons. Custom icon scripts get the new
+  solids in <code>ODF.iconKit</code> (<code>stepped</code>, <code>gable</code>, <code>wedge</code>, <code>cylinder</code>), and a theme sets
+  its icon look with <code>ODF.registerTheme({ faces })</code>. See
+  <a href="../ui/#themes-icons-and-branding">UI</a>.</li>
+<li><strong>CLI</strong>: <code>odf run</code> copies the UI URL (the MCP URL with <code>--no-ui</code>) to the clipboard on
+  start, marked <code>(copied)</code>, to paste into another browser or an MCP client's config. It
+  uses <code>pbcopy</code>, <code>wl-copy</code>, <code>xclip</code>, <code>xsel</code> or <code>clip</code>, and skips the copy when none is
+  installed. The URLs are also terminal links.</li>
+<li><strong>UI</strong>: the <code>neo</code> and <code>glitch</code> themes are no longer built in, so <code>[ui] theme = "neo"</code>
+  or <code>"glitch"</code> raises a <code>ValueError</code>. A project can ship a theme of its own instead, as
+  the <a href="https://github.com/opendataframework/odf/tree/main/examples/24-custom-theme"><code>24-custom-theme</code></a>
+  example does with <code>glitch</code>, which can be copied from there. The new built-in <code>ink</code>
+  theme is monochrome, white on black by night and black on white by day, with muted
+  kind colors. <code>17-custom-icon</code> now uses <code>ink</code>.</li>
+<li><strong>Chat</strong>: the default <code>[project.chat] model</code> is now <code>gpt-oss:20b</code> instead of <code>gpt-oss</code>.
+  See <a href="../chat/">Chat</a>.</li>
+</ul>
+<h3 id="fixed">Fixed<a class="headerlink" href="#fixed" title="Permanent link">&para;</a></h3>
+<ul>
+<li><strong>CLI</strong>: the <code>SQLite</code> storage of every <code>odf init</code> template, and of the examples built on
+  them, closes its connection in <code>on_stop()</code> when the project stops, instead of leaving it
+  open. See <a href="../examples/">Examples</a>.</li>
+</ul>
+<h2 id="030">0.3.0<a class="headerlink" href="#030" title="Permanent link">&para;</a></h2>
+<h3 id="added_1">Added<a class="headerlink" href="#added_1" title="Permanent link">&para;</a></h3>
+<ul>
+<li><strong>UI</strong>: <code>onyx</code> theme, a monochrome graphite take on Material Design 3, in both
+  light and dark mode. Select it with <code>odf run --theme onyx</code> or
+  <code>[ui] theme = "onyx"</code> in <code>config.toml</code>. See <a href="../cli/">CLI</a>.</li>
+<li>
+<p><strong>UI</strong>: 51 more built-in topology icons, and an icon picker split into group tabs:
+  <code>Defaults</code>, <code>Devices</code>, <code>Buildings</code>, <code>Charts</code>, <code>Research</code>, <code>ML</code> and <code>Shop</code>. Icons added
+  through <code>[ui] icon-scripts</code> are listed under <code>Custom</code>, or under the group named by the
+  optional <code>group</code> in <code>ODF.registerIcon(key, draw, meta)</code>. The helpers the built-in icons
+  are drawn with are available to custom icon scripts as <code>ODF.iconKit</code>.</p>
+</li>
+<li>
+<p><strong>UI</strong>: selecting a thumbnail in the image view opens that image full size, with the
+  record's other fields as a caption, previous/next buttons (or the arrow keys), and
+  the close button in the corner or <code>Esc</code> to return to the grid. Images are now served with the media type detected from
+  their bytes (JPEG, PNG, GIF, WebP, BMP, TIFF, AVIF, HEIC) instead of always
+  <code>image/jpeg</code>, and an image the browser can't decode, such as HEIC outside Safari, is
+  labelled with its type instead of showing a broken-image icon.</p>
+</li>
+<li><strong>UI</strong>: labelled boxes can be drawn on an open image in the image view. Pick <code>Draw a
+  box</code> in the tool rail at the top left of the image, drag to draw a box and type its label, or pick one already used from the list under the input; select a box to delete it,
+  or select its label to change it. A box inside a larger one stays on top, so it can
+  still be selected. With <code>Place a fixed-size box</code> picked in the rail, every new box takes the
+  width and height set beside it, in image pixels, for algorithms that need boxes of one
+  size: click or drag to place one centred on the pointer, kept whole inside the image. A label no box uses any more is dropped from the list. Boxes are saved to <code>annotations.json</code>, or the file
+  named by <code>[project] annotations-file</code> in <code>config.toml</code>, as pixel coordinates with each
+  image's size and an ordered label list per repository, for a later pipeline to read
+  with <code>json.load</code>. The
+  <a href="https://github.com/opendataframework/odf/tree/main/examples/11-image-view"><code>11-image-view</code></a>
+  example describes the format. <code>[ui] annotations = false</code> in <code>config.toml</code> turns
+  annotating off.</li>
+<li><strong>UI</strong>: the video and audio views list their records as cards, like the image view: a
+  video card previews a frame of its clip, an audio card its waveform (for clips up to
+  10 MB), both with the clip's length. Selecting a card opens the clip in a player and
+  starts it, with the record's other fields as a caption, previous/next buttons, and
+  the close button in the corner or <code>Esc</code> to return to the grid. Clips are now served with the media type detected from
+  their bytes (MP4, QuickTime, WebM, Ogg, AVI, WAV, MP3, AAC, FLAC) instead of always
+  <code>video/mp4</code> or <code>audio/wav</code>, and with <code>Range</code> requests honored, so a clip can be seeked
+  and plays in Safari. A clip the browser can't decode is labelled with its type.</li>
+<li><strong>UI</strong>: the document view lists its records as cards, like the image view, each
+  previewing the start of its document. Selecting a card opens the document, with the
+  record's other fields as a caption, previous/next buttons (or the arrow keys), and
+  the close button in the corner or <code>Esc</code> to return to the grid. A <code>DocumentView</code> field can now hold a file as well as a
+  JSON-shaped value: <code>bytes</code> are shown as a PDF (drawn by pdf.js, loaded from a CDN when
+  first needed) or as text, detected from their content, and a <code>str</code> as text, while a
+  <code>dict</code> or <code>list</code> is still a collapsible tree. Text that parses as JSON, such as a
+  <code>.json</code> file, is a tree as well, and text that reads as Markdown is rendered, each with
+  a button to switch to its source and back. Bytes of any other type are labelled
+  with that type and can be downloaded. The
+  <a href="https://github.com/opendataframework/odf/tree/main/examples/12-document-view"><code>12-document-view</code></a>
+  example shows each kind.</li>
+<li><strong>UI</strong>: an open document in the document view can be labelled. With <code>Label text</code> picked
+  in the tool rail, select text to label that span of it, or with <code>Draw a box</code> drag on a
+  PDF page to draw a labelled box, as on an image; select a
+  span or a box to delete it, or select its label to change it. Spans are drawn on text as
+  it is written, so <code>Label text</code> shows a Markdown or JSON document as its source, and spans
+  don't overlap. An image or document opens on the <code>Select</code> tool, which adds nothing and
+  leaves selected text to be copied; the tool picked is remembered in the browser, and
+  <code>V</code>, <code>B</code>, <code>F</code> and <code>T</code> pick one from the keyboard. A <code>dict</code> or <code>list</code> document takes no labels. They are saved to the same
+  <code>annotations.json</code> as image boxes: a span as its start and end in the text, counted in
+  characters as Python indexes a <code>str</code>, with the text it covers, and a page box in PDF
+  points with its page number and the page's size. The
+  <a href="https://github.com/opendataframework/odf/tree/main/examples/12-document-view"><code>12-document-view</code></a>
+  example describes the format. <code>[ui] annotations = false</code> in <code>config.toml</code> turns
+  annotating off.</li>
+<li><strong>UI</strong>: time ranges and points can be labelled on the chart of the timeseries view, for
+  the simple cases a one-off script would otherwise be written for, such as a stretch to
+  train on or leave out, an event, or a bad reading. Pick <code>Label a range</code> (<code>R</code>) beside the
+  legend and drag across the chart, or <code>Label a point</code> (<code>P</code>) and click to mark the nearest
+  record, then type a label or pick one already used; select a mark to delete it, or select
+  its label to change it. A mark covers every series and ranges may overlap. They are saved
+  to the same <code>annotations.json</code> as image boxes, as one list per repository: a range as its
+  start and end in the timestamp field's own units, and a point as its record's timestamp
+  and key. The
+  <a href="https://github.com/opendataframework/odf/tree/main/examples/13-timeseries-view"><code>13-timeseries-view</code></a>
+  example describes the format. <code>[ui] annotations = false</code> in <code>config.toml</code> turns
+  annotating off.</li>
+<li><strong>UI</strong>: time ranges and points can be labelled on a clip open in the video and audio
+  views, for marking its segments and events, such as speech, an action or an onset. A
+  timeline under the player spans the clip, with its waveform for audio and a line where
+  it is playing. Pick <code>Label a range</code> (<code>R</code>) in the tool rail and drag on the timeline, or
+  <code>Label a point</code> (<code>P</code>) and click it, then type a label or pick one already used. <code>M</code> marks
+  where the clip is playing instead, which is finer on a long clip: a point, or one end of
+  a range and then the other. Select a mark to delete it, or select its label to change
+  it; a click elsewhere on the timeline seeks the clip there. Marks are saved to the same
+  <code>annotations.json</code>, per record, in seconds from the start of the clip with the clip's
+  length beside them. The
+  <a href="https://github.com/opendataframework/odf/tree/main/examples/10-audio-view"><code>10-audio-view</code></a>
+  example describes the format. <code>[ui] annotations = false</code> in <code>config.toml</code> turns
+  annotating off.</li>
+<li><strong>UI</strong>: labelled regions can be drawn on the map of the location view, for "everything
+  inside this area", such as a region of interest, a geofence or a split by area. Pick
+  <code>Draw a region</code> (<code>B</code>) at the top right of the map, drag out a rectangle and type its
+  label or pick one already used. With <code>Select</code> (<code>V</code>) the map moves as before: select a
+  region to delete it, or select its label to change it. A region inside a larger one
+  stays on top. Regions are saved to the same <code>annotations.json</code>, as one list per
+  repository, each as its south, west, north and east bounds in degrees. The
+  <a href="https://github.com/opendataframework/odf/tree/main/examples/06-location-view"><code>06-location-view</code></a>
+  example describes the format. <code>[ui] annotations = false</code> in <code>config.toml</code> turns
+  annotating off.</li>
+<li><strong>UI</strong>: a record can be given a class, for simple classification such as good or bad,
+  relevant or not. Under an image, document, video or audio clip open from its grid there
+  is a row of the repository's classes: select one, or press its number (<code>1</code> to <code>9</code>), to
+  give it to the open record, select <code>+</code> to add a class, and select the record's own class
+  to take it away. The grid shows each record's class on its card. The table view has a
+  <code>class</code> column with the same choice per row. A record has one class, and a class no
+  record has any more is dropped from the list. Classes are saved to the same
+  <code>annotations.json</code>, apart from box, span and range labels, as a map from record key to
+  class with the list of classes in use. The
+  <a href="https://github.com/opendataframework/odf/tree/main/examples/11-image-view"><code>11-image-view</code></a>
+  example describes the format. <code>[ui] annotations = false</code> in <code>config.toml</code> turns
+  it off.</li>
+<li><strong>Agents</strong>: <code>@Agent</code> classes (new in <code>opendataframework</code> 0.3.0) appear in the topology
+  as <code>agent</code> nodes, with their own default icon and color, an entry in the type legend
+  under the canvas, an <code>Agents</code> count in the header, and an <code>agents</code> list in <code>[ui.topology]</code>. A node's <strong>Invoke</strong> action opens a
+  form built from the agent's <code>invoke()</code> arguments and shows the result. Over MCP each
+  agent is its own tool, <code>&lt;key&gt;.invoke</code> (<code>agent.librarian.invoke</code>), with <code>invoke()</code>'s
+  signature as its input schema, and <code>@agent.librarian</code> in the chat keeps that tool
+  available for the message. Every
+  call goes through <code>context.call()</code>, so it is logged to the agent's log. See the
+  <a href="https://github.com/opendataframework/odf/tree/main/examples/19-agent"><code>19-agent</code></a>
+  example.</li>
+<li><strong>Functions</strong>: <code>@Function</code> functions (new in <code>opendataframework</code> 0.3.0) appear in the
+  topology as <code>function</code> nodes, with their own default icon and color, an entry in the
+  type legend under the canvas, and a <code>Functions</code> count in the header. They are linked to the components injected into them and to the
+  classes and functions that ask for them through <code>Annotated[Callable[...], func]</code>. A
+  <code>functions</code> list in <code>[ui.topology]</code> filters them. A node's <strong>Call</strong> action opens the
+  same form as an agent's <strong>Invoke</strong>, with one field per argument the function takes
+  beyond its injected ones, and calls it through <code>context.call()</code>. Over MCP each
+  function is its own tool, <code>&lt;key&gt;.call</code> (<code>function.load-data.call</code>), with the same
+  arguments as its input schema, and <code>@function.load-data</code> in the chat keeps that tool
+  available for the message. <code>list_components</code> lists functions, with a <code>verb</code> on every
+  entry that has such a tool. The logs of their calls are served at
+  <code>/api/functions/{name}/logs</code> and by <code>component_logs</code>. See the
+  <a href="https://github.com/opendataframework/odf/tree/main/examples/20-function"><code>20-function</code></a>
+  example.</li>
+<li><strong>View</strong>: a repository implementing <code>content_metadata(entity)</code> (<code>ContentMetadata</code>, new
+  in <code>opendataframework</code> 0.3.0) names and types its records' content in the image,
+  video, audio and document views. A declared <code>content_type</code> is served instead of the
+  type detected from the bytes when it fits the view, and a document is still only ever
+  a PDF, plain text or a download. A declared <code>filename</code> labels the record's card and
+  its caption when open, is sent as <code>Content-Disposition</code>, and names the file saved by
+  the new <strong>Download</strong> action in the open record's tool rail. A text document declared
+  as Markdown (<code>text/markdown</code> or a <code>.md</code> name) is rendered, and one declared as
+  anything else is shown as written, instead of either being judged by its text. The
+  records payload
+  carries both under a <code>$content</code> key. See the
+  <a href="https://github.com/opendataframework/odf/tree/main/examples/12-document-view"><code>12-document-view</code></a>
+  example.</li>
+</ul>
+<h3 id="changed_1">Changed<a class="headerlink" href="#changed_1" title="Permanent link">&para;</a></h3>
+<ul>
+<li><strong>Deps</strong>: requires <code>opendataframework &gt;=0.3.0,&lt;0.4.0</code>. Upstream addresses every
+  component by its <code>&lt;namespace&gt;.&lt;name&gt;</code> key and adds <code>@Agent</code>, <code>@Function</code> and
+  <code>ContentMetadata</code>, which the entries above and below build on.</li>
+<li><strong>UI</strong>: the Activity and Chat buttons moved from the top-right corner of the map into
+  the header bar, as icon buttons next to the theme toggle. They no longer cover a
+  view's own controls, such as the table view's timeline dropdown and replay controls,
+  and the button of the open drawer stays highlighted.</li>
+<li><strong>UI</strong>: the popup shown when selecting a component lists its actions as one list of
+  full-width rows instead of buttons of different widths. The component's own actions,
+  such as View, Start or Execute, come first, followed by Show Logs and Customize. Its
+  type, layer and file are shown as labelled rows under the description.</li>
+<li><strong>CLI</strong>: <code>odf run</code> prints a project set-up error as one line instead of a traceback:
+  a check in <code>opendataframework</code> or <code>odf</code> that rejects the project, such as
+  <code>@Repository</code> on a class with no <code>@Entity</code>, an <code>async def</code> lifecycle method, a
+  dependency declared twice, an <code>McpTool</code> without a typed handler or an unknown theme.
+  When the error comes from a decorator, the line ends with the file and line of the
+  decorated class. An error raised by the project's own code keeps its traceback, and a
+  project that fails to start is stopped before <code>odf run</code> exits. Set-up errors that
+  were reported as <code>Invalid value</code> now read <code>Error</code>. See <a href="../cli/#odf-run">CLI</a>.</li>
+<li><strong>Keys</strong> (breaking): components are addressed by their <code>opendataframework</code> key,
+  <code>&lt;namespace&gt;.&lt;name&gt;</code> (<code>task.load-job</code>, <code>service.postgres</code>), everywhere <code>odf</code> names
+  one, so same-named classes in different namespaces no longer collide. A topology
+  node's <code>id</code> is its key, with <code>name</code> and <code>href</code> alongside. The UI's HTTP API serves
+  each execution type as its own collection by registered name, such as
+  <code>POST /api/tasks/load-job/execute</code> and <code>GET /api/agents/librarian/parameters</code>,
+  instead of everything under <code>/api/components/{id}</code>, and an action that doesn't
+  apply to a kind answers <code>404</code>. The MCP tools <code>start_component</code>, <code>stop_component</code>,
+  <code>execute_task</code>, <code>component_logs</code> and <code>query_repository</code> take a <code>key</code> argument
+  instead of <code>name</code> or <code>repo_id</code>, and a component's own tools are prefixed by its key
+  (<code>component.stock-room.low_stock</code>). Chat addresses a component as
+  <code>@&lt;namespace&gt;.&lt;name&gt;</code>. Saved positions, icons and colors in <code>layout.json</code> were keyed
+  by the old ids, so the topology resets them once after upgrading. See
+  <a href="../ui/">UI</a>, <a href="../mcp/">MCP Server</a> and <a href="../chat/">Chat</a>.</li>
+<li><strong>Templates</strong>: config sections are named after each class's key, following
+  <code>opendataframework</code> 0.3.0: <code>odf init</code> writes <code>[component.sqlite]</code> instead of <code>[sqlite]</code>,
+  and the <code>data-analytics</code> task reads <code>[task.summarize-items]</code>. The scaffolded <code>SQLite</code>
+  storage is registered as <code>@Component(name="sqlite")</code>, so its key is
+  <code>component.sqlite</code> rather than <code>component.s-q-lite</code>. The examples follow the same
+  layout. A project scaffolded by an earlier version keeps working as it is. See
+  <a href="../init-templates/default/">Templates</a>.</li>
+</ul>
+<h3 id="fixed_1">Fixed<a class="headerlink" href="#fixed_1" title="Permanent link">&para;</a></h3>
+<ul>
+<li><strong>Examples</strong>: <code>08-video-view</code> seeds playable clips on Linux. It encoded them as
+  H.264 only, which the <code>opencv-python</code> wheels for Linux can't write, so the clips
+  were empty; it now falls back to VP8 (WebM) or MPEG-4 Part 2. See
+  <a href="../examples/">Examples</a>.</li>
+</ul>
+<h2 id="020">0.2.0<a class="headerlink" href="#020" title="Permanent link">&para;</a></h2>
+<h3 id="added_2">Added<a class="headerlink" href="#added_2" title="Permanent link">&para;</a></h3>
+<ul>
+<li><strong>UI</strong>: selectable themes. <code>odf run --theme</code> or <code>[ui] theme</code> in <code>config.toml</code> picks one
+  of <code>default</code>, <code>glitch</code>, <code>neo</code> or <code>emerald</code>; <code>Server.start(theme=)</code> does the same. An unknown theme
+  is reported as a CLI parameter error. See <a href="../cli/">CLI</a> and <a href="../server/">Server</a>.</li>
+<li><strong>UI</strong>: collapsible left sidebar with an icon tab rail. The collapsed state and the
+  active tab persist per browser.</li>
+<li><strong>UI</strong>: <code>[ui.topology]</code> config controls what the topology shows. <code>connections = false</code>
+  hides the links between components, <code>config = false</code> hides the <code>Config</code> node, and
+  <code>repositories</code>/<code>services</code>/<code>tasks</code>/<code>pipelines</code>/<code>components</code> lists restrict which
+  components of that kind are shown (a kind without a list shows all of its components).
+  Links of hidden components are bridged so the remaining graph keeps its shape, and the
+  layout is recomputed on the visible set. An unknown key or a value of the wrong type
+  raises <code>ValueError</code>; a listed name that matches no component emits a warning. A saved
+  node position that collides with another node moves the other node to the nearest free
+  row in its column. See <a href="../server/">Server</a>.</li>
+<li><strong>MCP</strong>: <code>query_repository</code> tool for paged/filtered access to a repository's data,
+  using the same query pattern as the UI's data table.</li>
+<li><strong>MCP</strong>: components that expose <code>mcp_tools()</code> (new in <code>opendataframework</code> 0.2.0) get
+  their tools registered as <code>&lt;kebab(ClassName)&gt;.&lt;tool-name&gt;</code>, alongside the built-in
+  tools. A duplicate tool name within one component raises at construction.</li>
+<li><strong>Chat</strong>: <code>@component-id</code> addressing scopes a turn's tools to that component: its own
+  <code>mcp_tools()</code>, <code>query_repository</code> for a <code>Repository</code>, and the lifecycle tools. An
+  unrecognized handle falls back to the full tool set, and a message that mentions more
+  than one component returns an inline error. The chat input offers <code>@</code> autocomplete. See
+  <a href="../chat/">Chat</a>.</li>
+<li><strong>Chat</strong>: <code>[project.chat] debug</code> config flag (default <code>false</code>). See <a href="../chat/">Chat</a>.</li>
+<li><strong>Examples</strong>: <code>18-custom-mcp-tool</code>, a component exposing a parameterized MCP tool.
+  <code>17-custom-icon</code> now uses the <code>neo</code> theme. See <a href="../examples/">Examples</a>.</li>
+</ul>
+<h3 id="changed_2">Changed<a class="headerlink" href="#changed_2" title="Permanent link">&para;</a></h3>
+<ul>
+<li><strong>Deps</strong>: requires <code>opendataframework &gt;=0.2.0,&lt;0.3.0</code>. Upstream renamed
+  <code>ReplayProtocol.replay_field</code> to <code>field</code> and now raises on <code>Namespace</code> name
+  collisions instead of silently overwriting.</li>
+<li><strong>Chat</strong>: <code>tool_call</code>/<code>tool_result</code> events are only shown in the chat window when
+  <code>[project.chat] debug = true</code>. They were previously always shown. Tool execution is
+  unaffected.</li>
+</ul>
+<h3 id="fixed_2">Fixed<a class="headerlink" href="#fixed_2" title="Permanent link">&para;</a></h3>
+<ul>
+<li><strong>UI</strong>: the Customize popover now closes when a data, details, chart or logs view is
+  opened. It previously stayed on top of the view.</li>
+</ul>
+
+
+
+
+
+
+
+
+
+
+
+
+                
+              </article>
+            </div>
+          
+          
+<script>var target=document.getElementById(location.hash.slice(1));target&&target.name&&(target.checked=target.name.startsWith("__tabbed_"))</script>
+        </div>
+        
+          <button type="button" class="md-top md-icon" data-md-component="top" hidden>
+  
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M13 20h-2V8l-5.5 5.5-1.42-1.42L12 4.16l7.92 7.92-1.42 1.42L13 8z"/></svg>
+  Back to top
+</button>
+        
+      </main>
+      
+        <footer class="md-footer">
+  
+    
+      
+      <nav class="md-footer__inner md-grid" aria-label="Footer" >
+        
+          
+          <a href="../examples/" class="md-footer__link md-footer__link--prev" aria-label="Previous: Examples">
+            <div class="md-footer__button md-icon">
+              
+              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M20 11v2H8l5.5 5.5-1.42 1.42L4.16 12l7.92-7.92L13.5 5.5 8 11z"/></svg>
+            </div>
+            <div class="md-footer__title">
+              <span class="md-footer__direction">
+                Previous
+              </span>
+              <div class="md-ellipsis">
+                Examples
+              </div>
+            </div>
+          </a>
+        
+        
+      </nav>
+    
+  
+  <div class="md-footer-meta md-typeset">
+    <div class="md-footer-meta__inner md-grid">
+      <div class="md-copyright">
+  
+  
+    Made with
+    <a href="https://squidfunk.github.io/mkdocs-material/" target="_blank" rel="noopener">
+      Material for MkDocs
+    </a>
+  
+</div>
+      
+    </div>
+  </div>
+</footer>
+      
+    </div>
+    <div class="md-dialog" data-md-component="dialog">
+      <div class="md-dialog__inner md-typeset"></div>
+    </div>
+    
+    
+    
+      
+      
+      <script id="__config" type="application/json">{"annotate": null, "base": "..", "features": ["navigation.sections", "navigation.indexes", "navigation.top", "navigation.footer", "content.code.copy", "content.code.annotate", "toc.follow"], "search": "../assets/javascripts/workers/search.2c215733.min.js", "tags": null, "translations": {"clipboard.copied": "Copied to clipboard", "clipboard.copy": "Copy to clipboard", "search.result.more.one": "1 more on this page", "search.result.more.other": "# more on this page", "search.result.none": "No matching documents", "search.result.one": "1 matching document", "search.result.other": "# matching documents", "search.result.placeholder": "Type to start searching", "search.result.term.missing": "Missing", "select.version": "Select version"}, "version": null}</script>
+    
+    
+      <script src="../assets/javascripts/bundle.d7400e89.min.js"></script>
+      
+        <script src="../javascripts/topology-theme-sync.js"></script>
+      
+        <script src="../javascripts/scheme-favicon.js"></script>
+      
+        <script src="../termynal.js"></script>
+      
+    
+  </body>
+</html>

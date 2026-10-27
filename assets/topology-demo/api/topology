@@ -1,0 +1,40 @@
+{
+  "project": "table-view-example",
+  "nodes": [
+    {
+      "id": "books",
+      "label": "Books",
+      "type": "repository",
+      "layer": "storage",
+      "decorator": "@Repository(Book)",
+      "file": "app/repositories.py",
+      "desc": "In-memory ``Book`` repository.",
+      "col": 0,
+      "row": 0,
+      "details": false,
+      "chart": false
+    },
+    {
+      "id": "config",
+      "label": "Config",
+      "type": "config",
+      "layer": null,
+      "decorator": null,
+      "file": null,
+      "desc": "Immutable view over a configuration dictionary.",
+      "col": 0,
+      "row": 1,
+      "details": false,
+      "chart": false
+    }
+  ],
+  "edges": [],
+  "stats": {
+    "objects": 2,
+    "links": 0,
+    "types": {
+      "repository": 1,
+      "config": 1
+    }
+  }
+}
