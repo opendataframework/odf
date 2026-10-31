@@ -1,4 +1,5 @@
 import asyncio
+import json
 import threading
 
 import pytest
@@ -192,3 +193,115 @@ def test_sse_formats_events_and_ends_on_stop():
     assert chunks[0] == ": connected\n\n"
     assert [c.startswith("data: {") and c.endswith("}\n\n") for c in chunks[1:]] == [True, True]
     assert '"state": "completed"' in chunks[2]
+
+
+# --- notifications ----------------------------------------------------------------
+
+
+class _Ticket:
+    """A record id JSON can't hold as it is."""
+
+    def __str__(self) -> str:
+        return "ticket-7"
+
+
+def _publisher(NS):
+    from opendataframework.notifications import Notifications
+
+    @NS
+    @Task
+    class TakeOrder:
+        def __init__(self, notifications: Notifications) -> None:
+            self.notifications = notifications
+
+        def execute(self) -> None:
+            self.notifications.publish(
+                "orders.received",
+                {"id": 7, "items": {"baguette": 2}, "tags": {"rush"}},
+                summary="Le Petit: 2 baguettes",
+                level="warning",
+                subject="repository.orders",
+                record=_Ticket(),
+            )
+
+    return TakeOrder
+
+
+def test_serialize_notification_makes_payload_and_record_json_ready():
+    NS = make_ns()
+    TakeOrder = _publisher(NS)
+
+    seen = []
+    with Context(namespaces={NS}) as ctx:
+        ctx.notifications.subscribe(seen.append)
+        ctx.execute(ctx.key(TakeOrder))
+
+    item = events.serialize_notification(seen[0])
+    assert item == {
+        "type": "notification",
+        "key": ctx.key(TakeOrder),
+        "topic": "orders.received",
+        "summary": "Le Petit: 2 baguettes",
+        "level": "warning",
+        "subject": "repository.orders",
+        "record": "ticket-7",
+        "parent": item["parent"],
+        "ts": item["ts"],
+        "payload": {"id": 7, "items": {"baguette": 2}, "tags": ["rush"]},
+    }
+    assert item["parent"] is not None  # published inside execute()
+    json.dumps(item)
+
+
+def test_notification_hub_delivers_only_what_is_published_while_connected():
+    NS = make_ns()
+    TakeOrder = _publisher(NS)
+
+    with Context(namespaces={NS}) as ctx:
+        hub = events.NotificationHub(ctx)
+        hub.start()
+        ctx.execute(ctx.key(TakeOrder))  # no client yet
+        items = _collect(hub, lambda: ctx.execute(ctx.key(TakeOrder)))
+        hub.stop()
+
+    assert [i["topic"] for i in items] == ["orders.received"]
+
+
+def test_event_and_notification_hubs_stay_apart():
+    NS = make_ns()
+    TakeOrder = _publisher(NS)
+
+    with Context(namespaces={NS}) as ctx:
+        calls, notes = events.EventHub(ctx), events.NotificationHub(ctx)
+        calls.start()
+        notes.start()
+
+        async def main():
+            async with calls.client() as call_queue, notes.client() as note_queue:
+                await asyncio.to_thread(ctx.execute, ctx.key(TakeOrder))
+                await asyncio.sleep(0)
+                return _drain(call_queue), _drain(note_queue)
+
+        call_items, note_items = asyncio.run(main())
+        calls.stop()
+        notes.stop()
+
+    assert {i["type"] for i in call_items} == {"call"}
+    assert [i["type"] for i in note_items] == ["notification"]
+
+
+def test_notification_hub_stop_unsubscribes_and_ends_clients():
+    NS = make_ns()
+    TakeOrder = _publisher(NS)
+
+    with Context(namespaces={NS}) as ctx:
+        hub = events.NotificationHub(ctx)
+        hub.start()
+
+        def run():
+            hub.stop()
+            ctx.execute(ctx.key(TakeOrder))
+
+        items = _collect(hub, run)
+
+    assert items == [None]

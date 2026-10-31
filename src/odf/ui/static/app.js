@@ -1338,13 +1338,21 @@ function render() {
     ctx.restore();
   }
 
-  // 1.75 — Run rings around running, done and failed nodes' tiles
+  // 1.75 — Run rings around running, done and failed nodes' tiles, and a
+  // fading one around a node that just published a notification
   for (const id of Object.keys(nodeRun)) {
     const node = nodeMap[id];
     if (!node) continue;
     const {x, y} = gridPos(node.col, node.row);
     if (x < viewL || x > viewR || y < viewT || y > viewB) continue;
     drawRunRing(node, x, y, nodeRun[id]);
+  }
+  for (const id of Object.keys(nodeNotified)) {
+    const node = nodeMap[id];
+    if (!node || nodeRun[id]) continue;
+    const {x, y} = gridPos(node.col, node.row);
+    if (x < viewL || x > viewR || y < viewT || y > viewB) continue;
+    drawRunRing(node, x, y, { state: 'done', at: nodeNotified[id] });
   }
 
   // 2 — Edges (grid-aligned wires, drawn at ground level, behind buildings)
@@ -2119,10 +2127,16 @@ function updateFlowingEdges() {
 // top-level failure, and a success this tab asked for (an action clicked,
 // or a chat turn). A success goes after a few seconds; a failure stays
 // until closed, and a node failing again updates its toast's count.
+// Notifications (see "Notifications") use the same toasts, by their level:
+// an error one looks and stays like a failure, a warning one stays too.
 
 const failureToasts = {}; // node id -> {el, count}
 
-function showToast(node, { failed, text, since, call }) {
+// `node` is the node the toast is about: its label and accent head the
+// toast, and Show logs opens its logs (left out when it isn't on the
+// topology). `level` is a notification's; `open`, if given, backs an Open
+// button.
+function showToast(node, { failed, text, since, call, level, open }) {
   const box = document.getElementById('toasts');
   if (!box) return;
   const existing = failed && failureToasts[node.id];
@@ -2136,9 +2150,12 @@ function showToast(node, { failed, text, since, call }) {
     return;
   }
 
+  const alarming = failed || level === 'error';
+  const stays = alarming || level === 'warning';
+  const logs = !!nodeMap[node.id];
   const el = document.createElement('div');
-  el.className = `toast${failed ? ' failed' : ''}`;
-  el.setAttribute('role', failed ? 'alert' : 'status');
+  el.className = `toast${alarming ? ' failed' : level === 'warning' ? ' warning' : ''}`;
+  el.setAttribute('role', stays ? 'alert' : 'status');
   el.dataset.since = since;
   el.dataset.call = call || '';
   el.innerHTML =
@@ -2146,22 +2163,33 @@ function showToast(node, { failed, text, since, call }) {
     `<span class="toast-count"></span>` +
     `<button class="toast-close" title="Dismiss" aria-label="Dismiss">&times;</button></div>` +
     `<div class="toast-text"></div>` +
-    `<div class="toast-actions"><button class="toast-logs">Show logs <span>&rarr;</span></button></div>`;
+    (open || logs ? '<div class="toast-actions">' +
+      (open ? '<button class="toast-logs toast-open">Open <span>&rarr;</span></button>' : '') +
+      (logs ? '<button class="toast-logs toast-show-logs">Show logs <span>&rarr;</span></button>' : '') +
+      '</div>' : '');
   el.querySelector('.toast-text').textContent = text;
   const close = () => {
     el.remove();
     if (failureToasts[node.id] && failureToasts[node.id].el === el) delete failureToasts[node.id];
   };
   el.querySelector('.toast-close').addEventListener('click', close);
-  el.querySelector('.toast-logs').addEventListener('click', () => {
-    markRunSeen(node.id);
-    selectNode(node.id);
-    showLogsView(node.id, Number(el.dataset.since), el.dataset.call);
-    close();
-  });
+  if (open) {
+    el.querySelector('.toast-open').addEventListener('click', () => {
+      open();
+      close();
+    });
+  }
+  if (logs) {
+    el.querySelector('.toast-show-logs').addEventListener('click', () => {
+      markRunSeen(node.id);
+      selectNode(node.id);
+      showLogsView(node.id, Number(el.dataset.since), el.dataset.call);
+      close();
+    });
+  }
   box.prepend(el);
   if (failed) failureToasts[node.id] = { el, count: 1 };
-  else setTimeout(close, TOAST_DONE_MS);
+  else if (!stays) setTimeout(close, TOAST_DONE_MS);
 
   // Keep the stack short, dropping successes before failures.
   while (box.children.length > TOAST_MAX) {
@@ -2171,6 +2199,54 @@ function showToast(node, { failed, text, since, call }) {
     for (const id of Object.keys(failureToasts)) {
       if (failureToasts[id].el === victim) delete failureToasts[id];
     }
+  }
+}
+
+// ── Notifications ────────────────────────────────────────────────────────
+// GET /api/notifications streams what components publish about what happened
+// (a message arrived, a margin fell below cost), from whichever component and
+// whoever caused it (see odf.ui.events). A notification with a `summary` is
+// meant for people: every open tab shows it as a toast and a log line, and
+// rings its publisher's tile for a moment. One without is for components
+// only, and isn't shown. Only what is published while the tab is connected
+// arrives; nothing is replayed.
+
+const nodeNotified = {}; // node id -> performance.now() of its latest notification
+
+function initNotifications() {
+  if (!window.EventSource) return;
+  const source = new EventSource('/api/notifications');
+  source.onmessage = msg => {
+    const n = JSON.parse(msg.data);
+    if (n.type === 'notification') onNotification(n);
+  };
+}
+
+function onNotification(n) {
+  if (!n.summary) return;
+  // The publisher may be hidden by [ui.topology]: its key stands in.
+  const node = nodeMap[n.key] || { id: n.key, label: n.key, type: 'component' };
+  const color = n.level === 'error' ? ACCENT.alert
+    : n.level === 'warning' ? ACCENT.task : nodeAccent(node);
+  addLog(`${escapeHtml(node.label)} · ${escapeHtml(n.summary)}`, color);
+
+  const subject = n.subject && repoSchemas[n.subject] && repoSchemas[n.subject].view && nodeMap[n.subject];
+  showToast(node, {
+    failed: false,
+    text: n.summary,
+    since: n.ts,
+    call: n.parent,
+    level: n.level,
+    open: subject ? () => { selectNode(n.subject); showDataView(n.subject); } : null,
+  });
+
+  if (nodeMap[n.key]) {
+    const at = performance.now();
+    nodeNotified[n.key] = at;
+    setTimeout(() => {
+      if (nodeNotified[n.key] === at) { delete nodeNotified[n.key]; render(); }
+    }, RUN_DONE_MS);
+    render();
   }
 }
 
@@ -6467,6 +6543,7 @@ async function init() {
   initChat();
   initHeaderStatus();
   initRunEvents();
+  initNotifications();
 
   // Animation loop — powers blinking lights, pulsing beacons and wire pulses.
   // Capped at ~30fps (plenty for these subtle effects) and paused while the

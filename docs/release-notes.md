@@ -2,6 +2,24 @@
 
 ## 0.5.0
 
+### Added
+
+- **UI**: notifications. A notification a component publishes with a `summary`
+  (`opendataframework` 0.5.0's
+  [Notifications](https://opendataframework.github.io/opendataframework/notifications/))
+  pops a notice in every open tab, whoever caused it, adds a line to the activity log,
+  and rings the publisher's tile for a moment.
+  - `info` and `success` notices close by themselves, `warning` ones stay until closed,
+    and `error` ones stay and look like a failure.
+  - **Open** goes to the data view of the notification's `subject`.
+  - **Show logs** opens the publisher's logs, highlighting the call it was published
+    during.
+  - Notifications without a `summary` are for components only, and aren't shown.
+  - `GET /api/notifications` streams every notification as server-sent events, separate
+    from `GET /api/events`, from the moment a client connects.
+
+  See [UI](ui.md#run-activity).
+
 ### Changed
 
 - **UI**: **Show logs**, on a run's notice or the header status, now highlights that run
