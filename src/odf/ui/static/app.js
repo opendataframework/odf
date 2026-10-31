@@ -1993,7 +1993,7 @@ function finishRun(node, e, started, fromChat) {
   const prev = nodeRun[node.id];
   const since = started ? started.ts : e.ts - (e.elapsed_ms || 0) / 1000;
   if (failed) {
-    nodeRun[node.id] = { state: 'failed', at: performance.now(), since, count: prev && prev.state === 'failed' ? prev.count + 1 : 1 };
+    nodeRun[node.id] = { state: 'failed', at: performance.now(), since, call: e.call_id, count: prev && prev.state === 'failed' ? prev.count + 1 : 1 };
   } else if (!stillRunning && !(prev && prev.state === 'failed')) {
     const entry = { state: 'done', at: performance.now() };
     nodeRun[node.id] = entry;
@@ -2010,11 +2010,11 @@ function finishRun(node, e, started, fromChat) {
     // A step's failure is told by its pipeline's own, when that fails too;
     // one inside a service's run() loop has nothing above it to tell it.
     if (!activeCalls.has(e.parent)) {
-      showToast(node, { failed: true, text: e.error || `${methodLabel(e.method)} failed`, since });
+      showToast(node, { failed: true, text: e.error || `${methodLabel(e.method)} failed`, since, call: e.call_id });
     }
   } else if (topLevel) {
     addLog(`${escapeHtml(node.label)} ${verb}${took}`, nodeAccent(node));
-    if (pendingClicks[node.id] || fromChat) showToast(node, { failed: false, text: `${verb}${took}`, since });
+    if (pendingClicks[node.id] || fromChat) showToast(node, { failed: false, text: `${verb}${took}`, since, call: e.call_id });
     const done = { nodeId: node.id, text: `${verb}${took}` };
     lastDone = done;
     setTimeout(() => {
@@ -2086,10 +2086,10 @@ function initHeaderStatus() {
   el.addEventListener('click', () => {
     const id = el.dataset.node;
     if (!el.classList.contains('failed') || !nodeRun[id]) return;
-    const since = nodeRun[id].since;
+    const { since, call } = nodeRun[id];
     markRunSeen(id);
     selectNode(id);
-    showLogsView(id, since);
+    showLogsView(id, since, call);
   });
 }
 
@@ -2122,7 +2122,7 @@ function updateFlowingEdges() {
 
 const failureToasts = {}; // node id -> {el, count}
 
-function showToast(node, { failed, text, since }) {
+function showToast(node, { failed, text, since, call }) {
   const box = document.getElementById('toasts');
   if (!box) return;
   const existing = failed && failureToasts[node.id];
@@ -2131,6 +2131,7 @@ function showToast(node, { failed, text, since }) {
     existing.el.querySelector('.toast-text').textContent = text;
     existing.el.querySelector('.toast-count').textContent = `×${existing.count}`;
     existing.el.dataset.since = since;
+    existing.el.dataset.call = call || '';
     box.prepend(existing.el);
     return;
   }
@@ -2139,6 +2140,7 @@ function showToast(node, { failed, text, since }) {
   el.className = `toast${failed ? ' failed' : ''}`;
   el.setAttribute('role', failed ? 'alert' : 'status');
   el.dataset.since = since;
+  el.dataset.call = call || '';
   el.innerHTML =
     `<div class="toast-head"><span class="toast-label" style="color:${nodeAccentCss(node)}">${escapeHtml(node.label)}</span>` +
     `<span class="toast-count"></span>` +
@@ -2154,7 +2156,7 @@ function showToast(node, { failed, text, since }) {
   el.querySelector('.toast-logs').addEventListener('click', () => {
     markRunSeen(node.id);
     selectNode(node.id);
-    showLogsView(node.id, Number(el.dataset.since));
+    showLogsView(node.id, Number(el.dataset.since), el.dataset.call);
     close();
   });
   box.prepend(el);
@@ -6178,16 +6180,21 @@ const LOG_LEVEL_COLOR = {
 
 let activeLogComponentId = null;
 let logsPollTimer = null;
-// Lines from this local time on ('YYYY-MM-DD HH:MM:SS', the log files'
-// format) are marked as the run a toast opened the logs for; the first is
-// scrolled to once.
+// The run a toast opened the logs for is marked, and its first line scrolled
+// to once: the lines from its call's `started` record to its `completed` or
+// `failed` one, which takes in what the component logged meanwhile (only the
+// call's own records carry its id). Once those have been tailed away, the
+// lines from its start time (epoch seconds) on.
 let logsSince = null;
+let logsCall = null;
 let logsScrollToSince = false;
 
-// `since`, optional, is a run's start as epoch seconds (an event's `ts`).
-async function showLogsView(id, since) {
+// `since`, optional, is a run's start as epoch seconds (an event's `ts`), and
+// `call` its `call_id`.
+async function showLogsView(id, since, call) {
   activeLogComponentId = id;
-  logsSince = since ? logTimestamp(since) : null;
+  logsSince = since || null;
+  logsCall = call || null;
   logsScrollToSince = !!logsSince;
   const node = nodeMap[id];
   setMapMode('logs');
@@ -6218,15 +6225,19 @@ function renderLogs(entries) {
     return;
   }
   const wasAtBottom = body.scrollTop + body.clientHeight >= body.scrollHeight - 4;
+  const run = runSpan(entries);
   let html = '<div class="map-logs-lines">';
-  for (const e of entries) {
+  entries.forEach((e, i) => {
     const color = LOG_LEVEL_COLOR[e.level] || 'var(--text-muted)';
-    const match = logsSince && e.ts && e.ts >= logsSince;
+    // A record's ts is ISO 8601 with milliseconds and the UTC offset.
+    const at = e.ts ? Date.parse(e.ts) / 1000 : NaN;
+    const match = run ? i >= run.from && i <= run.to : logsSince && at >= logsSince;
+    const ts = Number.isNaN(at) ? e.ts : logTimestamp(at);
     html += `<div class="log-line${match ? ' run-match' : ''}">` +
       `<span class="dot" style="background:${color}"></span>` +
-      (e.ts ? `<span class="ts">${escapeHtml(e.ts)}</span>` : '') +
+      (ts ? `<span class="ts">${escapeHtml(ts)}</span>` : '') +
       `<span>${escapeHtml(e.message)}</span></div>`;
-  }
+  });
   html += '</div>';
   body.innerHTML = html;
   const first = logsScrollToSince && body.querySelector('.run-match');
@@ -6238,6 +6249,21 @@ function renderLogs(entries) {
   }
 }
 
+// Indexes of the first and last of `entries` belonging to the run `logsCall`
+// names: its `started` record, up to its `completed`/`failed` one (or the
+// last line, if that isn't logged yet). Null if its start isn't among them.
+function runSpan(entries) {
+  if (!logsCall) return null;
+  const from = entries.findIndex(e => e.call === logsCall && e.state === 'started');
+  if (from < 0) return null;
+  let to = entries.length - 1;
+  for (let i = from + 1; i < entries.length; i++) {
+    if (entries[i].call === logsCall && entries[i].state !== 'started') { to = i; break; }
+  }
+  return { from, to };
+}
+
+// 'YYYY-MM-DD HH:MM:SS' in local time, as a log line shows it.
 function logTimestamp(epochSeconds) {
   const d = new Date(epochSeconds * 1000);
   const pad = n => String(n).padStart(2, '0');

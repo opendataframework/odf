@@ -66,7 +66,10 @@ steps, or a service's `run()` loop.
   keeps failing), which stays until you select the node.
 - A failure also pops a notice in the top-right corner, with the error and a
   **Show logs** button that opens the node's logs at the run, highlighting its
-  lines. It stays until closed. A step's failure is reported by its pipeline
+  lines: from the call's `started` record to its `completed` or `failed` one,
+  found by its call id, with whatever the component logged in between (or,
+  once those records are no longer among the last lines, everything from the
+  run's start on). It stays until closed. A step's failure is reported by its pipeline
   when the pipeline fails too. A success pops a notice only for an action you
   started in that tab, from its buttons or its chat, and closes by itself.
 - The header status, **System Nominal** when idle, tells the same story where

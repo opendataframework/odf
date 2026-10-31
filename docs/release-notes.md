@@ -1,5 +1,26 @@
 # Release Notes
 
+## 0.5.0
+
+### Changed
+
+- **UI**: **Show logs**, on a run's notice or the header status, now highlights that run
+  by its call id: the lines from the call's `started` record to its `completed` or
+  `failed` one, including what the component logged in between. It used to highlight
+  every line from the run's start time on, which took in later runs and, with
+  `opendataframework` 0.5.0's timestamps, every line of that day. It falls back to the
+  start time once the call's records are no longer among the last lines. See
+  [UI](ui.md#run-activity).
+
+- **Dependencies** (breaking): `odf` now requires `opendataframework` 0.5.0, whose log
+  files are structured. A component's log is `logs/<namespace>.<name>.jsonl` by default,
+  one JSON record per line, unless `[project.logging] format = "text"` keeps readable
+  `.log` files, and `logger.debug()` records are dropped unless `[project.logging]`
+  enables them. `GET /api/{collection}/{name}/logs` and the MCP `component_logs` tool
+  return the full records, with the call, its parent and any structured fields next to
+  `ts`, `level` and `message`. The UI's logs view still shows each line's local time. See
+  [Logger](https://opendataframework.github.io/opendataframework/logger/).
+
 ## 0.4.0
 
 ### Added
