@@ -1,0 +1,6 @@
+[project]
+name = "notifications-example"
+
+# Seconds between the orders the counter takes.
+[service.counter]
+interval = 4.0

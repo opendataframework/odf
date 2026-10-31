@@ -86,5 +86,5 @@ server.wait()  # blocks until Ctrl+C/SIGTERM
 
 ## Examples
 
-See [Examples](examples.md) for 25 small projects, one concept each,
+See [Examples](examples.md) for 26 small projects, one concept each,
 including the five that mirror `odf init --template` layouts.

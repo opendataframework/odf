@@ -56,4 +56,4 @@ server.wait()  # blocks until Ctrl+C/SIGTERM
   on the project through the MCP tools.
 
 See the [documentation](https://opendataframework.github.io/odf/) for each, and
-[`examples/`](https://github.com/opendataframework/odf/tree/main/examples) for 22 small projects, one concept each.
+[`examples/`](https://github.com/opendataframework/odf/tree/main/examples) for 26 small projects, one concept each.

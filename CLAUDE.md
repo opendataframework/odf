@@ -159,7 +159,7 @@ not per commit; format mirrors `opendataframework`'s release notes).
 
 ## Examples
 
-`examples/` has 25 examples. `01-table-view/` (a repository with no
+`examples/` has 26 examples. `01-table-view/` (a repository with no
 `data_view()` at all, so the UI falls back to the implicit default table)
 and `06-location-view/` (`data_view() -> LocationView` overriding that
 default with a map) are the two ends of the `data_view()` concept.
@@ -178,8 +178,10 @@ functions adopted with `@Function`), `21-notebook-view/` (notebooks in a
 repositories, with a grouped `TimeseriesView`), `23-reverse-proxy/`
 (`docker compose up` with Traefik in front: HTTPS, a login, MCP at `/mcp`,
 as `docs/ui.md#deploying` describes), `24-custom-theme/` (a glitch theme of
-the project's own, selected by `[ui] theme = "./themes/glitch"`)
-and `25-flat-grid/` (`[ui] grid = "flat"`: one node of each kind showing its
-type's glyph, with a `layout.json` `flatIcon` override) were added here since. Treat new examples here as small and focused, one concept each, matching
+the project's own, selected by `[ui] theme = "./themes/glitch"`),
+`25-flat-grid/` (`[ui] grid = "flat"`: one node of each kind showing its
+type's glyph, with a `layout.json` `flatIcon` override) and
+`26-notifications/` (notifications a café counter publishes, shown as toasts
+with Open and Show logs) were added here since. Treat new examples here as small and focused, one concept each, matching
 `opendataframework/examples/`'s style rather than `demo/`'s
 everything-at-once approach.

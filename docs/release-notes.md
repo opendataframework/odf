@@ -18,7 +18,9 @@
   - `GET /api/notifications` streams every notification as server-sent events, separate
     from `GET /api/events`, from the moment a client connects.
 
-  See [UI](ui.md#run-activity).
+  See [UI](ui.md#run-activity) and the
+  [`26-notifications`](https://github.com/opendataframework/odf/tree/main/examples/26-notifications)
+  example, a café counter whose orders, low stock and empty pantry come up as notices.
 
 ### Changed
 
