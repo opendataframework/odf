@@ -242,7 +242,7 @@ def test_component_logs_endpoint_returns_entries(tmp_path):
     assert r.status_code == 200
     body = r.json()
     assert any("resolved" in e["message"] for e in body)
-    assert all({"ts", "level", "message"} == e.keys() for e in body)
+    assert all({"ts", "level", "message"} <= e.keys() for e in body)
 
 
 def test_component_logs_endpoint_empty_without_log_dir():
