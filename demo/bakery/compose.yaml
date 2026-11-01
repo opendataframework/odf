@@ -1,0 +1,114 @@
+# The bakery and its existing tools. `docker compose up --build`, then open the
+# odf UI at http://localhost:4747 and the world console at http://localhost:8000.
+# Every port is published on the host's loopback only.
+
+x-tools: &tools
+  build:
+    context: .
+    dockerfile: tools/Dockerfile
+  image: bakery-tools
+  restart: unless-stopped
+
+x-credentials: &credentials
+  POS_TOKEN: ${POS_TOKEN:-pos-dev-token}
+  POS_WEBHOOK_SECRET: ${POS_WEBHOOK_SECRET:-pos-dev-secret}
+  MESSENGER_TOKEN: ${MESSENGER_TOKEN:-messenger-dev-token}
+  MESSENGER_APP_SECRET: ${MESSENGER_APP_SECRET:-messenger-dev-secret}
+
+services:
+  # The demo clock, the people using the tools, and the console to steer them.
+  world:
+    <<: *tools
+    command: ["uvicorn", "tools.world:app", "--host", "0.0.0.0", "--port", "8000"]
+    environment:
+      <<: *credentials
+      SEED: ${SEED:-7}
+      SPEED: ${SPEED:-60}
+      SHARED_DRIVE: /shared-drive
+    volumes:
+      - world-data:/data
+      - shared-drive:/shared-drive
+    ports:
+      - "127.0.0.1:8000:8000"
+    # Healthy once the tools hold their history, so the bakery onboards after.
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/health')"]
+      interval: 5s
+      timeout: 3s
+      retries: 60
+      start_period: 10s
+
+  # The café's point of sale.
+  pos:
+    <<: *tools
+    command: ["uvicorn", "tools.pos:app", "--host", "0.0.0.0", "--port", "8001"]
+    environment:
+      <<: *credentials
+      POS_WEBHOOK_URL: http://bakery:4750/webhooks/pos
+    volumes:
+      - pos-data:/data
+    ports:
+      - "127.0.0.1:8001:8001"
+
+  # The business messenger restaurants send order changes through.
+  messenger:
+    <<: *tools
+    command: ["uvicorn", "tools.messenger:app", "--host", "0.0.0.0", "--port", "8002"]
+    environment:
+      <<: *credentials
+      MESSENGER_WEBHOOK_URL: http://bakery:4750/webhooks/messenger
+    volumes:
+      - messenger-data:/data
+    ports:
+      - "127.0.0.1:8002:8002"
+
+  # The bakery's email: SMTP for whoever writes to it, POP3 for the bakery to
+  # read it, and an inbox UI.
+  mailpit:
+    image: axllent/mailpit:v1.31.6
+    restart: unless-stopped
+    environment:
+      MP_DATABASE: /data/mailpit.db
+      MP_POP3_AUTH: "bakery:${MAIL_PASSWORD:-bakery}"
+    volumes:
+      - mail-data:/data
+    ports:
+      - "127.0.0.1:8025:8025"
+
+  # The bakery's odf project, integrating all of the above.
+  bakery:
+    build:
+      context: ../..
+      dockerfile: demo/bakery/Dockerfile
+    restart: unless-stopped
+    environment:
+      <<: *credentials
+      MAIL_PASSWORD: ${MAIL_PASSWORD:-bakery}
+      OLLAMA_URL: ${OLLAMA_URL:-}
+      OLLAMA_MODEL: ${OLLAMA_MODEL:-llama3.2}
+    # So OLLAMA_URL=http://host.docker.internal:11434 reaches the host's Ollama on Linux too.
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    volumes:
+      - bakery-data:/srv/bakery/data
+      - shared-drive:/shared-drive
+    ports:
+      - "127.0.0.1:4747:4747"
+      - "127.0.0.1:4748:4748"
+    depends_on:
+      world:
+        condition: service_healthy
+      pos:
+        condition: service_started
+      messenger:
+        condition: service_started
+      mailpit:
+        condition: service_started
+
+volumes:
+  world-data:
+  pos-data:
+  messenger-data:
+  mail-data:
+  bakery-data:
+  shared-drive:

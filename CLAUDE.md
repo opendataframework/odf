@@ -39,7 +39,7 @@ poetry run odf run
 ```
 
 Requires Python >=3.14, managed with Poetry. `pyproject.toml` depends on
-`opendataframework (>=0.4.0,<0.5.0)` by version, resolved from PyPI. When
+`opendataframework (>=0.5.0,<0.6.0)` by version, resolved from PyPI. When
 developing both repos side by side against unreleased `opendataframework`
 changes, temporarily override the dependency to a local path/git source —
 and revert that override (and regenerate `poetry.lock`) before releasing a
@@ -159,7 +159,7 @@ not per commit; format mirrors `opendataframework`'s release notes).
 
 ## Examples
 
-`examples/` has 25 examples. `01-table-view/` (a repository with no
+`examples/` has 26 examples. `01-table-view/` (a repository with no
 `data_view()` at all, so the UI falls back to the implicit default table)
 and `06-location-view/` (`data_view() -> LocationView` overriding that
 default with a map) are the two ends of the `data_view()` concept.
@@ -169,7 +169,8 @@ each mirror one `odf init --template <name>` scaffold layout, so they
 belong with the CLI that describes them, not the core package).
 `07-streaming-video-view/` through `16-mcp-chat/` are the UI-only surface
 (streaming/video/audio/image/document/timeseries views, chart, chart via
-Plotly, MCP + chat) ported from the original monorepo's `demo/` project.
+Plotly, MCP + chat) ported from the original monorepo's demo project (not
+this repo's `demo/`).
 `17-custom-icon/`, `18-custom-mcp-tool/`, `19-agent/` (an `@Agent`
 invoked from the UI, over MCP and from chat), `20-function/` (plain
 functions adopted with `@Function`), `21-notebook-view/` (notebooks in a
@@ -178,8 +179,24 @@ functions adopted with `@Function`), `21-notebook-view/` (notebooks in a
 repositories, with a grouped `TimeseriesView`), `23-reverse-proxy/`
 (`docker compose up` with Traefik in front: HTTPS, a login, MCP at `/mcp`,
 as `docs/ui.md#deploying` describes), `24-custom-theme/` (a glitch theme of
-the project's own, selected by `[ui] theme = "./themes/glitch"`)
-and `25-flat-grid/` (`[ui] grid = "flat"`: one node of each kind showing its
-type's glyph, with a `layout.json` `flatIcon` override) were added here since. Treat new examples here as small and focused, one concept each, matching
-`opendataframework/examples/`'s style rather than `demo/`'s
-everything-at-once approach.
+the project's own, selected by `[ui] theme = "./themes/glitch"`),
+`25-flat-grid/` (`[ui] grid = "flat"`: one node of each kind showing its
+type's glyph, with a `layout.json` `flatIcon` override) and
+`26-notifications/` (notifications a café counter publishes, shown as toasts
+with Open and Show logs) were added here since. Treat new examples here as small and focused, one concept each, matching
+`opendataframework/examples/`'s style. Anything that needs most of ODF at
+once belongs in `demo/` instead.
+
+## Demos
+
+`demo/` holds whole applications built with `odf`, closer to a real
+business than an example, each run with `docker compose up` and listed in
+`demo/README.md`. `demo/bakery/` joins a bakery's existing tools (a café POS,
+a business messenger, email, spreadsheets on a shared drive) through
+webhooks, a polled mailbox, a watched drive and a scheduler, with agents
+that draft and people who confirm. Its Dockerfile installs `odf` from this
+repository's own source, so it always runs the `odf` next to it. Its tests
+live under `tests/demo/bakery/`, and bandit skips `demo/` as it does
+`examples/`. The demo is still in progress: parts of it wait on upcoming
+`opendataframework` features (e.g. declared listeners in 0.6.0), so it isn't
+yet mentioned in `docs/` or the release notes.

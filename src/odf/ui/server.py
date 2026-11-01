@@ -164,6 +164,7 @@ class UiServer:
         self._grid = grid
         self._notebooks: NotebookServer | None = None
         self._events = events.EventHub(context)
+        self._notifications = events.NotificationHub(context)
         self._server: uvicorn.Server | None = None
         self._thread: threading.Thread | None = None
 
@@ -523,6 +524,15 @@ class UiServer:
                 headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
             )
 
+        @app.get("/api/notifications")
+        def notifications() -> StreamingResponse:
+            """Stream every notification published from now on, as server-sent events."""
+            return StreamingResponse(
+                events.sse(self._notifications),
+                media_type="text/event-stream",
+                headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
+            )
+
         @app.get("/api/{collection}/{name}/logs")
         def component_logs(collection: str, name: str) -> list[dict]:
             """Return a component's tailed log records."""
@@ -841,6 +851,7 @@ class UiServer:
     def start(self) -> None:
         """Start serving in a background daemon thread. Returns immediately."""
         self._events.start()
+        self._notifications.start()
         config = uvicorn.Config(
             HostCheck(self._app, self._host), host=self._host, port=self._port, log_level="warning"
         )
@@ -850,8 +861,9 @@ class UiServer:
 
     def stop(self) -> None:
         """Signal the server to exit and wait for the background thread to finish."""
-        # Ends the open event streams first, which shutdown would wait on.
+        # Ends the open streams first, which shutdown would wait on.
         self._events.stop()
+        self._notifications.stop()
         if self._server is not None:
             self._server.should_exit = True
         if self._thread is not None:

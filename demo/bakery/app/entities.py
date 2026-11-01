@@ -1,0 +1,322 @@
+"""What the bakery keeps track of. Each entity's first field is its key."""
+
+from dataclasses import dataclass
+
+from opendataframework import Entity
+
+
+@Entity
+@dataclass
+class Product:
+    """Something the bakery makes or serves, from the products sheet.
+
+    Attributes:
+        sku: The stock code the POS and the sheets share.
+        name: Its name.
+        kind: ``"bread"``, ``"pastry"`` or ``"cafe"``.
+        cafe_price: Its price in the café, in pounds.
+        wholesale_price: Its list price to restaurants, or ``None`` if the
+            café only serves it.
+    """
+
+    sku: str
+    name: str
+    kind: str
+    cafe_price: float
+    wholesale_price: float | None
+
+
+@Entity
+@dataclass
+class Restaurant:
+    """A restaurant the bakery delivers to, from the restaurants sheet.
+
+    Attributes:
+        id: Primary key.
+        name: Its name, as the other sheets refer to it.
+        phone: The number it messages from.
+        email: The address it emails from.
+        address: Where the bread goes.
+        lat: Latitude, for the map.
+        lon: Longitude, for the map.
+        kitchen_opens: When the bread has to be there, ``"HH:MM"``.
+    """
+
+    id: int | None
+    name: str
+    phone: str
+    email: str
+    address: str
+    lat: float
+    lon: float
+    kitchen_opens: str
+
+
+@Entity
+@dataclass
+class StandingOrder:
+    """What a restaurant usually takes on a weekday, from the standing orders sheet.
+
+    Attributes:
+        id: Primary key.
+        restaurant: The restaurant's name.
+        weekday: ``"Monday"`` to ``"Sunday"``.
+        sku: The product.
+        quantity: How many.
+    """
+
+    id: int | None
+    restaurant: str
+    weekday: str
+    sku: str
+    quantity: int
+
+
+@Entity
+@dataclass
+class Contract:
+    """The price a restaurant pays for a product this quarter, from the contracts sheet.
+
+    Attributes:
+        id: Primary key.
+        restaurant: The restaurant's name.
+        sku: The product.
+        price: The agreed price, in pounds.
+        valid_until: The last day it holds, ``"YYYY-MM-DD"``.
+    """
+
+    id: int | None
+    restaurant: str
+    sku: str
+    price: float
+    valid_until: str
+
+
+@Entity
+@dataclass
+class Message:
+    """A message to the bakery, by chat or email.
+
+    Attributes:
+        id: Primary key.
+        received_at: When it was sent, as a Unix time.
+        channel: ``"messenger"`` or ``"email"``.
+        sender: Who sent it: a phone number or an email address.
+        restaurant: The restaurant that sent it, if it's one of them.
+        subject: An email's subject; ``None`` for a chat message.
+        text: What it says.
+        external_id: Its id in the tool it came from, so it's never taken twice.
+        status: ``"new"`` until someone deals with it.
+    """
+
+    id: int | None
+    received_at: float
+    channel: str
+    sender: str
+    restaurant: str | None
+    subject: str | None
+    text: str
+    external_id: str
+    status: str = "new"
+
+
+@Entity
+@dataclass
+class CafeSale:
+    """One line of a café order taken at the POS.
+
+    Attributes:
+        id: Primary key.
+        sold_at: When it was rung up, as a Unix time.
+        order_id: The POS order it's part of.
+        sku: The product.
+        product: Its name.
+        quantity: How many.
+        revenue: What they came to, in pounds.
+    """
+
+    id: int | None
+    sold_at: float
+    order_id: str
+    sku: str
+    product: str
+    quantity: int
+    revenue: float
+
+
+@Entity
+@dataclass
+class OrderChange:
+    """A confirmed change to what a restaurant takes, on one day or from one day on.
+
+    Attributes:
+        id: Primary key.
+        restaurant: The restaurant's name.
+        sku: The product.
+        date: The day it applies to, or the first day of a lasting one, ``"YYYY-MM-DD"``.
+        mode: ``"add"`` (``quantity`` more, or fewer if negative, that day),
+            ``"set"`` (exactly ``quantity`` that day) or ``"set-from"`` (exactly
+            ``quantity`` on every day it's usually ordered, from ``date`` on).
+        quantity: How many.
+        message: The message that asked for it.
+        draft: The draft it was confirmed from.
+    """
+
+    id: int | None
+    restaurant: str
+    sku: str
+    date: str
+    mode: str
+    quantity: int
+    message: int | None
+    draft: int | None
+
+
+@Entity
+@dataclass
+class Draft:
+    """Something an agent prepared, waiting for a person to confirm or reject it.
+
+    Attributes:
+        id: Primary key.
+        created_at: When it was drafted, as a Unix time.
+        kind: ``"order-change"`` or ``"specials"``.
+        status: ``"pending"`` (ready to confirm), ``"needs-review"`` (the
+            agent couldn't read it, so a person has to), ``"confirmed"`` or
+            ``"rejected"``.
+        title: What it's about, such as ``"Order change for Le Petit"``.
+        date: The day it's for, ``"YYYY-MM-DD"``.
+        restaurant: The restaurant it's for, if any.
+        message: The message it answers, if any.
+        changes: What confirming it does, as JSON: order changes, or the
+            specials.
+        reply: The reply confirming it sends, if any.
+        author: Who drafted it: ``"rules"`` or ``"model:<name>"``, or
+            ``"nobody"`` when neither could.
+        note: Why it needs review, or why it was rejected.
+        body: The draft as a person reads it, in Markdown.
+    """
+
+    id: int | None
+    created_at: float
+    kind: str
+    status: str
+    title: str
+    date: str
+    restaurant: str | None
+    message: int | None
+    changes: str
+    reply: str
+    author: str
+    note: str
+    body: str
+
+
+@Entity
+@dataclass
+class Forecast:
+    """How many of a product the café expects to sell on a day.
+
+    Attributes:
+        id: Primary key.
+        date: The day, ``"YYYY-MM-DD"``.
+        sku: The product.
+        product: Its name.
+        baseline: The average sold on the same weekday over recent weeks.
+        weather: The weather's factor: below 1 for rain, above for warmth.
+        holiday: The bank holiday factor, or 1.
+        quantity: The forecast: the baseline times both factors, rounded up.
+        rain_mm: The rain forecast for the day, in millimetres.
+    """
+
+    id: int | None
+    date: str
+    sku: str
+    product: str
+    baseline: float
+    weather: float
+    holiday: float
+    quantity: int
+    rain_mm: float
+
+
+@Entity
+@dataclass
+class BakeSheetLine:
+    """One product on a night's bake sheet.
+
+    Attributes:
+        id: Primary key.
+        date: The morning it's baked for, ``"YYYY-MM-DD"``.
+        sku: The product.
+        product: Its name.
+        wholesale: How many the restaurants take.
+        cafe: How many the café is forecast to sell.
+        buffer: Extra for the café, in case it's busier than forecast.
+        total: What to bake.
+    """
+
+    id: int | None
+    date: str
+    sku: str
+    product: str
+    wholesale: int
+    cafe: int
+    buffer: int
+    total: int
+
+
+@Entity
+@dataclass
+class Leftover:
+    """What the café didn't sell of a product baked for it.
+
+    Attributes:
+        id: Primary key.
+        date: The day, ``"YYYY-MM-DD"``.
+        sku: The product.
+        product: Its name.
+        baked: How many were baked for the café, buffer included.
+        sold: How many the café sold.
+        unsold: What's left.
+    """
+
+    id: int | None
+    date: str
+    sku: str
+    product: str
+    baked: int
+    sold: int
+    unsold: int
+
+
+@Entity
+@dataclass
+class DeliveryStop:
+    """One stop on a morning's delivery run; stop 0 is the bakery, where the van sets off.
+
+    Attributes:
+        id: Primary key.
+        date: The morning, ``"YYYY-MM-DD"``.
+        stop: Its place on the run, from 0.
+        restaurant: Who it's for.
+        address: Where.
+        lat: Latitude, for the map.
+        lon: Longitude, for the map.
+        arrive_by: When the kitchen opens, ``"HH:MM"``.
+        eta: When the van gets there, ``"HH:MM"``.
+        load: What's dropped off, such as ``"12 × Baguette, 6 × Croissant"``.
+        items: How many items that is.
+    """
+
+    id: int | None
+    date: str
+    stop: int
+    restaurant: str
+    address: str
+    lat: float
+    lon: float
+    arrive_by: str
+    eta: str
+    load: str
+    items: int

@@ -1,0 +1,58 @@
+# The bakery's odf project. Addresses here are the compose services'; secrets
+# (tokens, webhook secrets, the mailbox password) come from the environment,
+# which compose.yaml sets from .env. An environment variable overrides any
+# value here (see app/settings.py).
+
+[project]
+name = "bakery"
+
+[component.sqlite]
+path = "data/bakery.db"
+
+[component.clock]
+world-url = "http://world:8000"
+
+[component.pos]
+url = "http://pos:8001"
+
+[component.messenger]
+url = "http://messenger:8002"
+phone-number-id = "100200300"
+
+[component.drive]
+path = "/shared-drive"
+
+# The world serves an Open-Meteo-style forecast, offline.
+[component.weather]
+url = "http://world:8000"
+lat = 51.454
+lon = -2.592
+
+# Replies to emailed order changes, through the demo's mail server.
+[component.mail]
+host = "mailpit"
+port = 1025
+address = "orders@bakery.example"
+
+# A local Ollama for the agents. Empty: rules only, and what they can't read
+# waits for a person. OLLAMA_URL and OLLAMA_MODEL override (see .env.example).
+[component.model]
+url = ""
+name = "llama3.2"
+
+[service.webhook-receiver]
+host = "0.0.0.0"
+port = 4750
+
+[service.mailbox]
+host = "mailpit"
+port = 1110
+user = "bakery"
+interval = 5
+
+[service.shared-drive]
+interval = 5
+
+[ui.topology]
+config = false
+components = ["clock", "pos", "messenger", "drive", "weather", "mail", "model"]  # all but SQLite

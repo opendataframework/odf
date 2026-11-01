@@ -1338,13 +1338,21 @@ function render() {
     ctx.restore();
   }
 
-  // 1.75 — Run rings around running, done and failed nodes' tiles
+  // 1.75 — Run rings around running, done and failed nodes' tiles, and a
+  // fading one around a node that just published a notification
   for (const id of Object.keys(nodeRun)) {
     const node = nodeMap[id];
     if (!node) continue;
     const {x, y} = gridPos(node.col, node.row);
     if (x < viewL || x > viewR || y < viewT || y > viewB) continue;
     drawRunRing(node, x, y, nodeRun[id]);
+  }
+  for (const id of Object.keys(nodeNotified)) {
+    const node = nodeMap[id];
+    if (!node || nodeRun[id]) continue;
+    const {x, y} = gridPos(node.col, node.row);
+    if (x < viewL || x > viewR || y < viewT || y > viewB) continue;
+    drawRunRing(node, x, y, { state: 'done', at: nodeNotified[id] });
   }
 
   // 2 — Edges (grid-aligned wires, drawn at ground level, behind buildings)
@@ -1993,7 +2001,7 @@ function finishRun(node, e, started, fromChat) {
   const prev = nodeRun[node.id];
   const since = started ? started.ts : e.ts - (e.elapsed_ms || 0) / 1000;
   if (failed) {
-    nodeRun[node.id] = { state: 'failed', at: performance.now(), since, count: prev && prev.state === 'failed' ? prev.count + 1 : 1 };
+    nodeRun[node.id] = { state: 'failed', at: performance.now(), since, call: e.call_id, count: prev && prev.state === 'failed' ? prev.count + 1 : 1 };
   } else if (!stillRunning && !(prev && prev.state === 'failed')) {
     const entry = { state: 'done', at: performance.now() };
     nodeRun[node.id] = entry;
@@ -2010,11 +2018,11 @@ function finishRun(node, e, started, fromChat) {
     // A step's failure is told by its pipeline's own, when that fails too;
     // one inside a service's run() loop has nothing above it to tell it.
     if (!activeCalls.has(e.parent)) {
-      showToast(node, { failed: true, text: e.error || `${methodLabel(e.method)} failed`, since });
+      showToast(node, { failed: true, text: e.error || `${methodLabel(e.method)} failed`, since, call: e.call_id });
     }
   } else if (topLevel) {
     addLog(`${escapeHtml(node.label)} ${verb}${took}`, nodeAccent(node));
-    if (pendingClicks[node.id] || fromChat) showToast(node, { failed: false, text: `${verb}${took}`, since });
+    if (pendingClicks[node.id] || fromChat) showToast(node, { failed: false, text: `${verb}${took}`, since, call: e.call_id });
     const done = { nodeId: node.id, text: `${verb}${took}` };
     lastDone = done;
     setTimeout(() => {
@@ -2086,10 +2094,10 @@ function initHeaderStatus() {
   el.addEventListener('click', () => {
     const id = el.dataset.node;
     if (!el.classList.contains('failed') || !nodeRun[id]) return;
-    const since = nodeRun[id].since;
+    const { since, call } = nodeRun[id];
     markRunSeen(id);
     selectNode(id);
-    showLogsView(id, since);
+    showLogsView(id, since, call);
   });
 }
 
@@ -2119,10 +2127,16 @@ function updateFlowingEdges() {
 // top-level failure, and a success this tab asked for (an action clicked,
 // or a chat turn). A success goes after a few seconds; a failure stays
 // until closed, and a node failing again updates its toast's count.
+// Notifications (see "Notifications") use the same toasts, by their level:
+// an error one looks and stays like a failure, a warning one stays too.
 
 const failureToasts = {}; // node id -> {el, count}
 
-function showToast(node, { failed, text, since }) {
+// `node` is the node the toast is about: its label and accent head the
+// toast, and Show logs opens its logs (left out when it isn't on the
+// topology). `level` is a notification's; `open`, if given, backs an Open
+// button.
+function showToast(node, { failed, text, since, call, level, open }) {
   const box = document.getElementById('toasts');
   if (!box) return;
   const existing = failed && failureToasts[node.id];
@@ -2131,35 +2145,51 @@ function showToast(node, { failed, text, since }) {
     existing.el.querySelector('.toast-text').textContent = text;
     existing.el.querySelector('.toast-count').textContent = `×${existing.count}`;
     existing.el.dataset.since = since;
+    existing.el.dataset.call = call || '';
     box.prepend(existing.el);
     return;
   }
 
+  const alarming = failed || level === 'error';
+  const stays = alarming || level === 'warning';
+  const logs = !!nodeMap[node.id];
   const el = document.createElement('div');
-  el.className = `toast${failed ? ' failed' : ''}`;
-  el.setAttribute('role', failed ? 'alert' : 'status');
+  el.className = `toast${alarming ? ' failed' : level === 'warning' ? ' warning' : ''}`;
+  el.setAttribute('role', stays ? 'alert' : 'status');
   el.dataset.since = since;
+  el.dataset.call = call || '';
   el.innerHTML =
     `<div class="toast-head"><span class="toast-label" style="color:${nodeAccentCss(node)}">${escapeHtml(node.label)}</span>` +
     `<span class="toast-count"></span>` +
     `<button class="toast-close" title="Dismiss" aria-label="Dismiss">&times;</button></div>` +
     `<div class="toast-text"></div>` +
-    `<div class="toast-actions"><button class="toast-logs">Show logs <span>&rarr;</span></button></div>`;
+    (open || logs ? '<div class="toast-actions">' +
+      (open ? '<button class="toast-logs toast-open">Open <span>&rarr;</span></button>' : '') +
+      (logs ? '<button class="toast-logs toast-show-logs">Show logs <span>&rarr;</span></button>' : '') +
+      '</div>' : '');
   el.querySelector('.toast-text').textContent = text;
   const close = () => {
     el.remove();
     if (failureToasts[node.id] && failureToasts[node.id].el === el) delete failureToasts[node.id];
   };
   el.querySelector('.toast-close').addEventListener('click', close);
-  el.querySelector('.toast-logs').addEventListener('click', () => {
-    markRunSeen(node.id);
-    selectNode(node.id);
-    showLogsView(node.id, Number(el.dataset.since));
-    close();
-  });
+  if (open) {
+    el.querySelector('.toast-open').addEventListener('click', () => {
+      open();
+      close();
+    });
+  }
+  if (logs) {
+    el.querySelector('.toast-show-logs').addEventListener('click', () => {
+      markRunSeen(node.id);
+      selectNode(node.id);
+      showLogsView(node.id, Number(el.dataset.since), el.dataset.call);
+      close();
+    });
+  }
   box.prepend(el);
   if (failed) failureToasts[node.id] = { el, count: 1 };
-  else setTimeout(close, TOAST_DONE_MS);
+  else if (!stays) setTimeout(close, TOAST_DONE_MS);
 
   // Keep the stack short, dropping successes before failures.
   while (box.children.length > TOAST_MAX) {
@@ -2169,6 +2199,54 @@ function showToast(node, { failed, text, since }) {
     for (const id of Object.keys(failureToasts)) {
       if (failureToasts[id].el === victim) delete failureToasts[id];
     }
+  }
+}
+
+// ── Notifications ────────────────────────────────────────────────────────
+// GET /api/notifications streams what components publish about what happened
+// (a message arrived, a margin fell below cost), from whichever component and
+// whoever caused it (see odf.ui.events). A notification with a `summary` is
+// meant for people: every open tab shows it as a toast and a log line, and
+// rings its publisher's tile for a moment. One without is for components
+// only, and isn't shown. Only what is published while the tab is connected
+// arrives; nothing is replayed.
+
+const nodeNotified = {}; // node id -> performance.now() of its latest notification
+
+function initNotifications() {
+  if (!window.EventSource) return;
+  const source = new EventSource('/api/notifications');
+  source.onmessage = msg => {
+    const n = JSON.parse(msg.data);
+    if (n.type === 'notification') onNotification(n);
+  };
+}
+
+function onNotification(n) {
+  if (!n.summary) return;
+  // The publisher may be hidden by [ui.topology]: its key stands in.
+  const node = nodeMap[n.key] || { id: n.key, label: n.key, type: 'component' };
+  const color = n.level === 'error' ? ACCENT.alert
+    : n.level === 'warning' ? ACCENT.task : nodeAccent(node);
+  addLog(`${escapeHtml(node.label)} · ${escapeHtml(n.summary)}`, color);
+
+  const subject = n.subject && repoSchemas[n.subject] && repoSchemas[n.subject].view && nodeMap[n.subject];
+  showToast(node, {
+    failed: false,
+    text: n.summary,
+    since: n.ts,
+    call: n.parent,
+    level: n.level,
+    open: subject ? () => { selectNode(n.subject); showDataView(n.subject); } : null,
+  });
+
+  if (nodeMap[n.key]) {
+    const at = performance.now();
+    nodeNotified[n.key] = at;
+    setTimeout(() => {
+      if (nodeNotified[n.key] === at) { delete nodeNotified[n.key]; render(); }
+    }, RUN_DONE_MS);
+    render();
   }
 }
 
@@ -6178,16 +6256,21 @@ const LOG_LEVEL_COLOR = {
 
 let activeLogComponentId = null;
 let logsPollTimer = null;
-// Lines from this local time on ('YYYY-MM-DD HH:MM:SS', the log files'
-// format) are marked as the run a toast opened the logs for; the first is
-// scrolled to once.
+// The run a toast opened the logs for is marked, and its first line scrolled
+// to once: the lines from its call's `started` record to its `completed` or
+// `failed` one, which takes in what the component logged meanwhile (only the
+// call's own records carry its id). Once those have been tailed away, the
+// lines from its start time (epoch seconds) on.
 let logsSince = null;
+let logsCall = null;
 let logsScrollToSince = false;
 
-// `since`, optional, is a run's start as epoch seconds (an event's `ts`).
-async function showLogsView(id, since) {
+// `since`, optional, is a run's start as epoch seconds (an event's `ts`), and
+// `call` its `call_id`.
+async function showLogsView(id, since, call) {
   activeLogComponentId = id;
-  logsSince = since ? logTimestamp(since) : null;
+  logsSince = since || null;
+  logsCall = call || null;
   logsScrollToSince = !!logsSince;
   const node = nodeMap[id];
   setMapMode('logs');
@@ -6218,15 +6301,19 @@ function renderLogs(entries) {
     return;
   }
   const wasAtBottom = body.scrollTop + body.clientHeight >= body.scrollHeight - 4;
+  const run = runSpan(entries);
   let html = '<div class="map-logs-lines">';
-  for (const e of entries) {
+  entries.forEach((e, i) => {
     const color = LOG_LEVEL_COLOR[e.level] || 'var(--text-muted)';
-    const match = logsSince && e.ts && e.ts >= logsSince;
+    // A record's ts is ISO 8601 with milliseconds and the UTC offset.
+    const at = e.ts ? Date.parse(e.ts) / 1000 : NaN;
+    const match = run ? i >= run.from && i <= run.to : logsSince && at >= logsSince;
+    const ts = Number.isNaN(at) ? e.ts : logTimestamp(at);
     html += `<div class="log-line${match ? ' run-match' : ''}">` +
       `<span class="dot" style="background:${color}"></span>` +
-      (e.ts ? `<span class="ts">${escapeHtml(e.ts)}</span>` : '') +
+      (ts ? `<span class="ts">${escapeHtml(ts)}</span>` : '') +
       `<span>${escapeHtml(e.message)}</span></div>`;
-  }
+  });
   html += '</div>';
   body.innerHTML = html;
   const first = logsScrollToSince && body.querySelector('.run-match');
@@ -6238,6 +6325,21 @@ function renderLogs(entries) {
   }
 }
 
+// Indexes of the first and last of `entries` belonging to the run `logsCall`
+// names: its `started` record, up to its `completed`/`failed` one (or the
+// last line, if that isn't logged yet). Null if its start isn't among them.
+function runSpan(entries) {
+  if (!logsCall) return null;
+  const from = entries.findIndex(e => e.call === logsCall && e.state === 'started');
+  if (from < 0) return null;
+  let to = entries.length - 1;
+  for (let i = from + 1; i < entries.length; i++) {
+    if (entries[i].call === logsCall && entries[i].state !== 'started') { to = i; break; }
+  }
+  return { from, to };
+}
+
+// 'YYYY-MM-DD HH:MM:SS' in local time, as a log line shows it.
 function logTimestamp(epochSeconds) {
   const d = new Date(epochSeconds * 1000);
   const pad = n => String(n).padStart(2, '0');
@@ -6441,6 +6543,7 @@ async function init() {
   initChat();
   initHeaderStatus();
   initRunEvents();
+  initNotifications();
 
   // Animation loop — powers blinking lights, pulsing beacons and wire pulses.
   // Capped at ~30fps (plenty for these subtle effects) and paused while the

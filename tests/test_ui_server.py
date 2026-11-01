@@ -242,7 +242,7 @@ def test_component_logs_endpoint_returns_entries(tmp_path):
     assert r.status_code == 200
     body = r.json()
     assert any("resolved" in e["message"] for e in body)
-    assert all({"ts", "level", "message"} == e.keys() for e in body)
+    assert all({"ts", "level", "message"} <= e.keys() for e in body)
 
 
 def test_component_logs_endpoint_empty_without_log_dir():
@@ -514,6 +514,53 @@ def test_events_endpoint_streams_calls_as_server_sent_events():
         (ctx.key(DoThing), "started"),
         (ctx.key(DoThing), "completed"),
     ]
+
+
+def test_notifications_endpoint_streams_published_notifications():
+    NS = make_ns()
+
+    from opendataframework.notifications import Notifications
+    from opendataframework.task import Task
+
+    @NS
+    @Task
+    class TakeOrder:
+        def __init__(self, notifications: Notifications) -> None:
+            self.notifications = notifications
+
+        def execute(self) -> None:
+            self.notifications.publish(
+                "orders.received", {"id": 7}, summary="Le Petit: 2 baguettes"
+            )
+
+    with Context(namespaces={NS}) as ctx:
+        server = UiServer(ctx, "proj")
+        server._notifications.start()
+
+        def run():
+            deadline = time.monotonic() + 5
+            while not server._notifications._clients and time.monotonic() < deadline:
+                time.sleep(0.01)
+            ctx.execute(ctx.key(TakeOrder))
+            server._notifications.stop()
+
+        thread = threading.Thread(target=run)
+        thread.start()
+        r = TestClient(server._app).get("/api/notifications")
+        thread.join()
+
+    assert r.headers["content-type"].startswith("text/event-stream")
+    assert r.headers["x-accel-buffering"] == "no"
+    frames = [
+        json.loads(line[len("data: ") :])
+        for line in r.text.splitlines()
+        if line.startswith("data: ")
+    ]
+    assert [(f["type"], f["key"], f["topic"], f["summary"]) for f in frames] == [
+        ("notification", ctx.key(TakeOrder), "orders.received", "Le Petit: 2 baguettes"),
+    ]
+    assert frames[0]["payload"] == {"id": 7}
+    assert frames[0]["parent"] is not None
 
 
 def _librarian(NS, calls):

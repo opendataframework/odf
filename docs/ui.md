@@ -66,7 +66,10 @@ steps, or a service's `run()` loop.
   keeps failing), which stays until you select the node.
 - A failure also pops a notice in the top-right corner, with the error and a
   **Show logs** button that opens the node's logs at the run, highlighting its
-  lines. It stays until closed. A step's failure is reported by its pipeline
+  lines: from the call's `started` record to its `completed` or `failed` one,
+  found by its call id, with whatever the component logged in between (or,
+  once those records are no longer among the last lines, everything from the
+  run's start on). It stays until closed. A step's failure is reported by its pipeline
   when the pipeline fails too. A success pops a notice only for an action you
   started in that tab, from its buttons or its chat, and closes by itself.
 - The header status, **System Nominal** when idle, tells the same story where
@@ -77,10 +80,29 @@ steps, or a service's `run()` loop.
   (`Loader executed in 1.2 s`).
 - A service's **Start**/**Stop** button follows the service, so it's correct
   after a start or stop over MCP or chat too.
+- A [notification](https://opendataframework.github.io/opendataframework/notifications/)
+  a component publishes with a `summary` pops a notice in every open tab,
+  whoever caused it, adds a line to the activity log, and rings the
+  publisher's tile for a moment:
+    - Its `level` sets how the notice looks and stays. `info` and `success`
+      close by themselves, `warning` stays until closed, and `error` stays
+      and looks like a failure.
+    - **Open** goes to the data view of its `subject`, when that's a
+      repository on the topology.
+    - **Show logs** opens the publisher's logs. A notification published
+      during a call highlights that call's lines (its `parent`).
+    - A notification without a `summary` is for other components only, and
+      isn't shown.
+    - Only what is published while a tab is open reaches it. Nothing
+      published before, or while the page reloads, is replayed.
+    - A summary reaches everyone who has the UI open, and so does a payload
+      over `GET /api/notifications`. Leave out of both whatever they
+      shouldn't see.
 
 With the system's reduced-motion setting on, nothing moves: edges in use are
 drawn brighter instead of carrying a pulse, and a running node's ring holds
-still. The run state comes from `GET /api/events` (see [HTTP API](#http-api)).
+still. The run state comes from `GET /api/events`, and notifications from
+`GET /api/notifications` (see [HTTP API](#http-api)).
 
 ### Choosing what the topology shows
 
@@ -385,7 +407,8 @@ subdomain, such as `odf.example.com`.
 The proxy has to pass WebSocket upgrades on (Jupyter's kernels use them),
 pass the host the browser asked for on as `X-Forwarded-Host` (the UI refuses
 saves, Runs and Jupyter's WebSockets otherwise, see below), stream responses
-as they come (`GET /api/events` is a long-lived stream), and accept request
+as they come (`GET /api/events` and `GET /api/notifications` are long-lived
+streams), and accept request
 bodies as large as your notebooks, since saving one sends it whole.
 [Traefik](https://doc.traefik.io/traefik/) does all of that by default, so a
 route to the UI is all it needs, here in its file provider's TOML:
@@ -536,8 +559,9 @@ location / {
 }
 ```
 
-`GET /api/events` needs nothing more: the UI sends `X-Accel-Buffering: no`
-with it, so nginx passes events on as they happen. The MCP server's `location`
+`GET /api/events` and `GET /api/notifications` need nothing more: the UI
+sends `X-Accel-Buffering: no` with them, so nginx passes events on as they
+happen. The MCP server's `location`
 turns buffering off itself, since its responses can be event streams, and
 keeps a client's stream open:
 
@@ -576,6 +600,7 @@ registered name:
 | `POST /api/notebooks/session` | starting Jupyter for notebook editing; returns the `url` it is served at through the UI (`/proxy/jupyter/`) |
 | `/proxy/jupyter/...` | Jupyter itself, HTTP and WebSockets, while notebook editing is on |
 | `GET /api/events` | every protocol call the project makes, as server-sent events (see below) |
+| `GET /api/notifications` | every notification the project's components publish, as server-sent events (see below) |
 
 The collection comes from the execution type, not the key's namespace: a `@Task`
 registered as `loader` is `/api/tasks/loader`, whatever its key. An action that
@@ -596,3 +621,21 @@ moment the client connects:
 `completed`/`failed` share a `call_id`, and `parent` is the `call_id` of the
 call it was made from (`null` for a top-level call). A client that falls more
 than 1000 events behind gets `{"type": "reset"}` in place of what it missed.
+
+`GET /api/notifications` streams `opendataframework`'s
+[`Notification`s](https://opendataframework.github.io/opendataframework/notifications/)
+the same way, one `data:` line of JSON per notification published, with or
+without a `summary`, from the moment the client connects:
+
+```json
+{"type": "notification", "key": "service.messenger-inbox", "topic": "messages.received",
+ "summary": "Le Petit: 2 extra baguettes tomorrow", "level": "info",
+ "subject": "repository.messages", "record": 42, "parent": "…", "ts": 1792776224.61,
+ "payload": {"restaurant": "Le Petit", "text": "2 extra baguettes tomorrow"}}
+```
+
+`parent` is the `call_id` of the call it was published during (`null` outside
+one), matching the `call_id`s on `GET /api/events`. `payload` and `record` are
+sent as JSON: a mapping as an object, a set as a list, and anything else JSON
+can't hold as its text. The two streams never carry each other's items, and
+a client that falls behind gets the same `{"type": "reset"}`.

@@ -9,7 +9,7 @@ RUN if [ -n "$ODF_INDEX_URL" ]; then \
         host=$(printf '%s' "$ODF_INDEX_URL" | sed -E 's#^[a-z]+://([^/@]*@)?([^/:]+).*#\2#'); \
         set -- --extra-index-url "$ODF_INDEX_URL" --trusted-host "$host"; \
     fi; \
-    pip install --no-cache-dir "$@" "odf[ui,mcp,notebook]>=0.4.0,<0.5.0"
+    pip install --no-cache-dir "$@" "odf[ui,mcp,notebook]>=0.5.0,<0.6.0"
 
 RUN useradd --create-home odf && install -d -o odf /srv/odf
 WORKDIR /srv/odf

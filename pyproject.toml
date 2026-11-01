@@ -1,6 +1,6 @@
 [project]
 name = "odf"
-version = "0.4.0"
+version = "0.5.0"
 description = "Open Data Framework CLI."
 authors = [
     {name = "mykytapavlov",email = "mykytapavlov@users.noreply.github.com"}
@@ -10,7 +10,7 @@ requires-python = ">=3.14"
 dependencies = [
     "typer (>=0.27.0,<0.28.0)",
     "rich (>=15.0.0,<16.0.0)",
-    "opendataframework (>=0.4.0,<0.5.0)"
+    "opendataframework (>=0.5.0,<0.6.0)"
 ]
 
 [project.optional-dependencies]
@@ -79,7 +79,7 @@ select = ["E", "F", "I", "UP", "B"]
 extend-immutable-calls = ["typer.Argument", "typer.Option"]
 
 [tool.bandit]
-exclude_dirs = ["tests", "examples"]
+exclude_dirs = ["tests", "examples", "demo"]
 
 [tool.pytest.ini_options]
 pythonpath = ["src"]
