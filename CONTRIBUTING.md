@@ -85,12 +85,15 @@ make `git checkout`/`git push` ambiguous.
 
 ### Releasing (maintainers)
 
-1. Cut `release/X.Y.Z` from `main`. Merge PRs into it as they land.
-2. When ready, add a final commit on the release branch that bumps
-   `version` in `pyproject.toml` and `CITATION.cff` and completes the
-   notes in `docs/release-notes.md`. Make sure `opendataframework`
-   resolves from PyPI — no local path, git or index override left in
-   `pyproject.toml` or `poetry.lock`.
+1. Cut `release/X.Y.Z` from `main`. Make its first commit the version
+   bump: `version` in `pyproject.toml` and `CITATION.cff`, plus an
+   empty `## X.Y.Z` section at the top of `docs/release-notes.md`. Merge
+   PRs into the branch as they land; each one adds its entry to that
+   section.
+2. When ready, check that the notes in `docs/release-notes.md` are
+   complete and that `opendataframework` resolves from PyPI — no local
+   path, git or index override left in `pyproject.toml` or
+   `poetry.lock`.
 3. Run `poetry run pytest` on the release branch and confirm CI is green.
 4. Open a PR `release/X.Y.Z` → `main` and **merge it with a merge
    commit** (not squash, not rebase).
