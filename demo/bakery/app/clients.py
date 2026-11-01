@@ -8,10 +8,13 @@ import csv
 import hashlib
 import hmac
 import json
+import smtplib
 import time
 import urllib.request
 from collections.abc import Iterator
-from datetime import datetime
+from datetime import date, datetime
+from email.message import EmailMessage
+from email.utils import format_datetime, formataddr, make_msgid
 from pathlib import Path
 from urllib.parse import urlencode
 
@@ -205,3 +208,84 @@ class Drive:
     def versions(self) -> dict[str, float]:
         """Return each sheet's last-modified time; a missing sheet is left out."""
         return {s: (self.path / s).stat().st_mtime for s in self.SHEETS if (self.path / s).exists()}
+
+
+@Api
+@Component
+class Weather:
+    """The weather forecast, from an Open-Meteo-style API (the world serves one, offline)."""
+
+    def __init__(self, config: Config) -> None:
+        """Read ``[component.weather]``: ``url`` (``WEATHER_URL`` overrides), ``lat``, ``lon``.
+
+        Args:
+            config: Project config.
+        """
+        section = "component.weather"
+        self.url = setting(config, section, "url", "WEATHER_URL", "")
+        self.lat = float(setting(config, section, "lat", "WEATHER_LAT", 51.454))
+        self.lon = float(setting(config, section, "lon", "WEATHER_LON", -2.592))
+
+    def daily(self, day: date) -> dict[str, float] | None:
+        """Return ``{"rain_mm", "temp_max"}`` forecast for ``day``, or ``None`` if there's none.
+
+        The forecast is only a factor in the café's forecast, so a weather
+        service that's down leaves it out rather than failing the night run.
+        """
+        if not self.url:
+            return None
+        query = urlencode(
+            {
+                "latitude": self.lat,
+                "longitude": self.lon,
+                "daily": "precipitation_sum,temperature_2m_max",
+                "start_date": day.isoformat(),
+                "end_date": day.isoformat(),
+            }
+        )
+        try:
+            with urllib.request.urlopen(f"{self.url}/v1/forecast?{query}", timeout=5) as r:  # nosec B310
+                daily = json.load(r)["daily"]
+            return {
+                "rain_mm": float(daily["precipitation_sum"][0]),
+                "temp_max": float(daily["temperature_2m_max"][0]),
+            }
+        except OSError, ValueError, KeyError, IndexError, TypeError:
+            return None
+
+    def details(self) -> dict[str, str]:
+        """Show where the forecast comes from."""
+        return {"source": self.url or "none", "location": f"{self.lat}, {self.lon}"}
+
+
+@Api
+@Component
+class Mail:
+    """Sending email from the bakery's address, over SMTP."""
+
+    def __init__(self, config: Config) -> None:
+        """Read ``[component.mail]``: ``host``, ``port`` and ``address`` (``MAIL_*`` override).
+
+        Args:
+            config: Project config.
+        """
+        section = "component.mail"
+        self.host = setting(config, section, "host", "MAIL_HOST", "mailpit")
+        self.port = int(setting(config, section, "port", "MAIL_SMTP_PORT", 1025))
+        self.address = setting(
+            config, section, "address", "MAIL_ADDRESS", "orders@bakery.example"
+        ).lower()
+        self.name = setting(config, section, "name", "MAIL_NAME", "The Bakery")
+
+    def send(self, to: str, subject: str, text: str) -> str:
+        """Email ``text`` to ``to``. Returns the email's ``Message-ID``."""
+        mail = EmailMessage()
+        mail["From"] = formataddr((self.name, self.address))
+        mail["To"] = to
+        mail["Subject"] = subject
+        mail["Date"] = format_datetime(datetime.now().astimezone())
+        mail["Message-ID"] = make_msgid(domain=self.address.split("@")[-1])
+        mail.set_content(text)
+        with smtplib.SMTP(self.host, self.port, timeout=10) as smtp:
+            smtp.send_message(mail)
+        return mail["Message-ID"]

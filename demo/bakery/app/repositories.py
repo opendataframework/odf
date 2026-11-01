@@ -2,10 +2,31 @@
 
 import dataclasses
 from collections.abc import Iterable
+from datetime import date
 
-from opendataframework import DocumentView, LocationView, Repository, Storage, TimeseriesView
+from opendataframework import (
+    ContentMetadata,
+    DocumentView,
+    LocationView,
+    Repository,
+    Storage,
+    TimeseriesView,
+)
 
-from app.entities import CafeSale, Contract, Message, Product, Restaurant, StandingOrder
+from app.entities import (
+    BakeSheetLine,
+    CafeSale,
+    Contract,
+    DeliveryStop,
+    Draft,
+    Forecast,
+    Leftover,
+    Message,
+    OrderChange,
+    Product,
+    Restaurant,
+    StandingOrder,
+)
 from app.storages import SQLite
 
 
@@ -70,6 +91,31 @@ class _Table:
             )
             self.db.conn.commit()
 
+    def where(self, column: str, value: object) -> list:
+        """Return the rows whose ``column`` (one of the entity's fields) equals ``value``."""
+        if column not in self._columns:
+            raise KeyError(column)
+        return self._select(f"WHERE {column} = ?", (value,))  # nosec B608
+
+    def replace_where(self, column: str, value: object, items: Iterable) -> int:
+        """Replace the rows whose ``column`` equals ``value`` with ``items``. Returns the count.
+
+        A day's forecast or bake sheet worked out again replaces that day's
+        rows, and leaves the other days' alone.
+        """
+        if column not in self._columns:
+            raise KeyError(column)
+        items = list(items)
+        with self.db.lock:
+            self.db.conn.execute(
+                f"DELETE FROM {self.table} WHERE {column} = ?",  # nosec B608
+                (value,),
+            )
+            self.db.conn.commit()
+        for item in items:
+            self.save(item)
+        return len(items)
+
     def replace_all(self, items: Iterable) -> int:
         """Replace every row with ``items``: a re-imported sheet is the truth. Returns the count."""
         items = list(items)
@@ -112,6 +158,10 @@ class StandingOrders(_Table):
     """Each restaurant's usual order by weekday, from the standing orders sheet."""
 
     table, entity = "standing_orders", StandingOrder
+
+    def for_weekday(self, weekday: str) -> list[StandingOrder]:
+        """Return every restaurant's usual order on ``weekday`` (``"Monday"`` to ``"Sunday"``)."""
+        return self._select("WHERE weekday = ?", (weekday,), order="restaurant, sku")
 
 
 @Storage
@@ -195,6 +245,143 @@ class CafeSales(_Table):
             self.db.conn.commit()
         return len(rows)
 
+    def daily(self, since: date, until: date) -> dict[tuple[str, str], int]:
+        """Return how many of each product sold each day, from ``since`` to ``until`` inclusive.
+
+        Returns:
+            ``{("YYYY-MM-DD", sku): quantity}``, leaving out what didn't sell.
+        """
+        with self.db.lock:
+            rows = self.db.conn.execute(
+                "SELECT date(sold_at, 'unixepoch', 'localtime') AS day, sku, SUM(quantity)"
+                " FROM cafe_sales GROUP BY day, sku HAVING day BETWEEN ? AND ?",
+                (since.isoformat(), until.isoformat()),
+            ).fetchall()
+        return {(day, sku): quantity for day, sku, quantity in rows}
+
     def data_view(self) -> TimeseriesView:
         """Chart quantity and revenue over time, one line per product."""
         return TimeseriesView(field="sold_at", fields=("quantity", "revenue"), group="product")
+
+
+@Storage
+@Repository(OrderChange)
+class OrderChanges(_Table):
+    """Confirmed changes to what the restaurants take, on top of their standing orders."""
+
+    table, entity = "order_changes", OrderChange
+
+    def for_day(self, day: date) -> list[OrderChange]:
+        """Return the changes that apply on ``day``: that day's, and lasting ones from before it."""
+        return self._select(
+            "WHERE date = ? OR (mode = 'set-from' AND date <= ?)",
+            (day.isoformat(), day.isoformat()),
+            order="date, id",
+        )
+
+
+@Storage
+@Repository(Draft)
+class Drafts(_Table):
+    """What the agents prepared, newest first: the control room, each draft opened as a document."""
+
+    table, entity = "drafts", Draft
+
+    OPEN = ("pending", "needs-review")
+
+    def all(self) -> list[Draft]:
+        """Return every draft, newest first."""
+        return self._select(order="created_at DESC, id DESC")
+
+    def get(self, draft_id: int) -> Draft:
+        """Return the draft ``draft_id``.
+
+        Raises:
+            KeyError: If there's no such draft.
+        """
+        found = self.where("id", draft_id)
+        if not found:
+            raise KeyError(f"no draft {draft_id}")
+        return found[0]
+
+    def open_for_message(self, message_id: int) -> Draft | None:
+        """Return the draft still waiting on a person for message ``message_id``, if any."""
+        found = self._select(
+            "WHERE message = ? AND status IN (?, ?)", (message_id, *self.OPEN), order="id DESC"
+        )
+        return found[0] if found else None
+
+    def open_for(self, kind: str, day: str) -> Draft | None:
+        """Return the ``kind`` draft for ``day`` still waiting on a person, if any."""
+        found = self._select(
+            "WHERE kind = ? AND date = ? AND status IN (?, ?)", (kind, day, *self.OPEN), order="id"
+        )
+        return found[0] if found else None
+
+    def data_view(self) -> DocumentView:
+        """Open each draft as the Markdown a person reads it in."""
+        return DocumentView(field="body")
+
+    def content_metadata(self, draft: Draft) -> ContentMetadata:
+        """Declare each draft's body Markdown, so the UI renders it."""
+        return ContentMetadata(filename=f"draft-{draft.id}.md", content_type="text/markdown")
+
+
+@Storage
+@Repository(Forecast)
+class Forecasts(_Table):
+    """What the café expects to sell, per product per day."""
+
+    table, entity = "forecasts", Forecast
+
+    def all(self) -> list[Forecast]:
+        """Return every forecast, newest day first."""
+        return self._select(order="date DESC, sku")
+
+
+@Storage
+@Repository(BakeSheetLine)
+class BakeSheets(_Table):
+    """What to bake each night, per product, for the restaurants and the café."""
+
+    table, entity = "bake_sheets", BakeSheetLine
+
+    def all(self) -> list[BakeSheetLine]:
+        """Return every bake sheet's lines, newest day first."""
+        return self._select(order="date DESC, sku")
+
+    def dates(self) -> list[str]:
+        """Return the days there's a bake sheet for, ``"YYYY-MM-DD"``, oldest first."""
+        with self.db.lock:
+            rows = self.db.conn.execute(
+                "SELECT DISTINCT date FROM bake_sheets ORDER BY date"
+            ).fetchall()
+        return [row[0] for row in rows]
+
+
+@Storage
+@Repository(Leftover)
+class Leftovers(_Table):
+    """What the café didn't sell each day, of what was baked for it."""
+
+    table, entity = "leftovers", Leftover
+
+    def all(self) -> list[Leftover]:
+        """Return every day's leftovers, newest day first."""
+        return self._select(order="date DESC, sku")
+
+
+@Storage
+@Repository(DeliveryStop)
+class DeliveryRuns(_Table):
+    """The morning delivery runs, the latest one on a map."""
+
+    table, entity = "delivery_runs", DeliveryStop
+
+    def all(self) -> list[DeliveryStop]:
+        """Return the latest run's stops, in order: one run on the map at a time."""
+        return self._select("WHERE date = (SELECT MAX(date) FROM delivery_runs)", order="stop")
+
+    def data_view(self) -> LocationView:
+        """Show the run's stops on a map."""
+        return LocationView(fields=("lat", "lon"))

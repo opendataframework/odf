@@ -84,6 +84,11 @@ services:
     environment:
       <<: *credentials
       MAIL_PASSWORD: ${MAIL_PASSWORD:-bakery}
+      OLLAMA_URL: ${OLLAMA_URL:-}
+      OLLAMA_MODEL: ${OLLAMA_MODEL:-llama3.2}
+    # So OLLAMA_URL=http://host.docker.internal:11434 reaches the host's Ollama on Linux too.
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     volumes:
       - bakery-data:/srv/bakery/data
       - shared-drive:/shared-drive

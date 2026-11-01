@@ -12,8 +12,10 @@ bakery's tools. It's the simulation's stage manager:
 - **The history.** On first start it writes the shared drive's sheets and
   seeds the tools with what a bakery that's been trading a while has: 12
   weeks of café orders, two weeks of chats, a month of email.
+- **The weather.** A forecast in Open-Meteo's JSON shape, made up from the
+  seed and the date, offline. Rain keeps café customers away.
 - **Scenarios.** Buttons on the console: a party order, a café rush, a
-  missed webhook, and so on.
+  missed webhook, a rainy week, and so on.
 """
 
 import random
@@ -22,7 +24,7 @@ import threading
 import time
 from collections import deque
 from contextlib import asynccontextmanager
-from datetime import datetime, timedelta
+from datetime import date, datetime, timedelta
 from email.message import EmailMessage
 from email.utils import format_datetime, formataddr, make_msgid
 from pathlib import Path
@@ -65,6 +67,10 @@ LINKS = {
 CAFE_RATE = {7: 0.35, 8: 0.6, 9: 0.55, 10: 0.4, 11: 0.35, 12: 0.5, 13: 0.45, 14: 0.25}
 # Chance per restaurant per simulated minute, 17:00-23:00, of an order change.
 EVENING_RATE = 0.0012
+# How rain changes the café's footfall: (millimetres at least, factor).
+RAIN_FOOTFALL = ((5.0, 0.6), (1.0, 0.85))
+# A typical day's high by month, in °C.
+MONTH_HIGH = (8, 9, 11, 14, 17, 20, 22, 22, 19, 15, 11, 8)
 # What café customers pick, and how often.
 CAFE_PICKS = (
     ("FLW", 6),
@@ -194,6 +200,33 @@ def _basket(r: random.Random) -> list[dict]:
     return [{"sku": sku, "quantity": q} for sku, q in basket.items()]
 
 
+def weather(day: date) -> dict[str, float]:
+    """Return ``day``'s weather: ``{"rain_mm", "temp_max"}``, the same every time it's asked.
+
+    Made up from the seed and the date. Days in a rainy spell (the
+    ``rainy-week`` scenario) pour.
+    """
+    r = random.Random(f"{SEED}-{day.isoformat()}")
+    roll = r.random()
+    if roll < 0.6:
+        rain = 0.0
+    elif roll < 0.85:
+        rain = round(r.uniform(0.2, 4.0), 1)
+    else:
+        rain = round(r.uniform(5.0, 14.0), 1)
+    spell = _get("rain_from"), _get("rain_until")
+    if spell[0] and spell[0] <= day.isoformat() <= spell[1]:
+        rain = round(r.uniform(8.0, 20.0), 1)
+    high = MONTH_HIGH[day.month - 1] + r.uniform(-3, 3) - (2 if rain >= 5 else 0)
+    return {"rain_mm": rain, "temp_max": round(high, 1)}
+
+
+def footfall(day: date) -> float:
+    """Return how the day's rain changes the number of café customers: 1 when it's dry."""
+    rain = weather(day)["rain_mm"]
+    return next((factor for at_least, factor in RAIN_FOOTFALL if rain >= at_least), 1.0)
+
+
 def _order_change(r: random.Random) -> str:
     """Return a templated order change, as a restaurant would write it."""
     product = r.choice(WHOLESALE)
@@ -285,7 +318,8 @@ def tick(previous: datetime, now: datetime) -> None:
                 _log(f"Café: {cafe_hour['orders']} orders, {start:%H:00}–{hour:%H:00}")
             cafe_hour.update(hour=hour, orders=0)
         weekend = 1.3 if minute.weekday() >= 5 else 1.0
-        if rng.random() < CAFE_RATE.get(minute.hour, 0.0) * weekend and cafe_order():
+        rate = CAFE_RATE.get(minute.hour, 0.0) * weekend * footfall(minute.date())
+        if rng.random() < rate and cafe_order():
             cafe_hour["orders"] += 1
         if 17 <= minute.hour < 23:
             for restaurant in RESTAURANTS:
@@ -311,9 +345,10 @@ def seed_history() -> None:
     for day in range(HISTORY_WEEKS * 7, 0, -1):
         date = (start - timedelta(days=day)).replace(hour=7, minute=0, second=0, microsecond=0)
         weekend = 1.3 if date.weekday() >= 5 else 1.0
+        rain = footfall(date.date())
         for offset in range(8 * 60):
             at = date + timedelta(minutes=offset, seconds=r.randint(0, 59))
-            if r.random() < CAFE_RATE.get(at.hour, 0.0) * weekend:
+            if r.random() < CAFE_RATE.get(at.hour, 0.0) * weekend * rain:
                 number += 1
                 orders.append(_history_order(r, at, number))
     for i in range(0, len(orders), 1000):
@@ -418,6 +453,7 @@ SCENARIOS = {
     "email-change": "A restaurant emails an order change",
     "cafe-rush": "Ten café customers at once",
     "missed-webhook": "The POS drops the next order's webhook",
+    "rainy-week": "It pours from now on for a week, which nobody forecast for today",
 }
 
 
@@ -433,6 +469,10 @@ def run_scenario(name: str) -> None:
     elif name == "cafe-rush":
         taken = sum(1 for _ in range(10) if cafe_order(r))
         _log(f"Café rush: {taken} orders at once")
+    elif name == "rainy-week":
+        today = clock.now().date()
+        _set(rain_from=today.isoformat(), rain_until=(today + timedelta(days=6)).isoformat())
+        _log(f"Weather: rain from now until {today + timedelta(days=6):%A}, café footfall down")
     elif name == "missed-webhook":
         http_json(
             "POST",
@@ -500,6 +540,35 @@ async def set_clock(request: Request) -> dict:
         to=body.get("to"),
     )
     return get_clock()
+
+
+@app.get("/v1/forecast")
+def forecast(
+    latitude: float,
+    longitude: float,
+    start_date: str,
+    end_date: str,
+    daily: str = "precipitation_sum,temperature_2m_max",
+) -> dict:
+    """Return the daily forecast in Open-Meteo's shape, for the days asked (at most 16)."""
+    try:
+        first, last = date.fromisoformat(start_date), date.fromisoformat(end_date)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    days = [first + timedelta(days=n) for n in range(min((last - first).days + 1, 16))]
+    found = [weather(d) for d in days]
+    fields = {"precipitation_sum": "rain_mm", "temperature_2m_max": "temp_max"}
+    wanted = [f for f in daily.split(",") if f in fields]
+    return {
+        "latitude": latitude,
+        "longitude": longitude,
+        "timezone": "Europe/London",
+        "daily_units": {"time": "iso8601", "precipitation_sum": "mm", "temperature_2m_max": "°C"},
+        "daily": {
+            "time": [d.isoformat() for d in days],
+            **{f: [w[fields[f]] for w in found] for f in wanted},
+        },
+    }
 
 
 @app.get("/health")

@@ -11,6 +11,7 @@ import poplib
 import threading
 import time
 from collections.abc import Callable, Mapping
+from datetime import datetime
 from email import policy
 from email.parser import BytesParser
 from email.utils import parseaddr, parsedate_to_datetime
@@ -19,10 +20,10 @@ from typing import Annotated
 
 from opendataframework import Api, Config, Logger, Messaging, Service
 
-from app.clients import Clock, Drive, Messenger, Pos
+from app.clients import Clock, Drive, Mail, Messenger, Pos
 from app.ingest import import_sheets, ingest_message, ingest_sale
-from app.pipelines import Onboard
-from app.repositories import CafeSales
+from app.pipelines import CloseCafe, NightRun, Onboard
+from app.repositories import BakeSheets, CafeSales
 from app.settings import setting
 from app.storages import SQLite
 from app.tasks import ReconcilePos
@@ -151,13 +152,16 @@ class Mailbox:
 
     Messages stay on the server, as most mail clients leave them: the ones
     already taken in are remembered by their POP3 ``UIDL``. The very first
-    check takes in the mailbox's history without announcing it.
+    check takes in the mailbox's history without announcing it. The
+    bakery's own replies, which the demo's mail server also holds, are
+    skipped.
     """
 
     def __init__(
         self,
         config: Config,
         sqlite: SQLite,
+        mail: Mail,
         take_message: Annotated[Callable[..., int | None], ingest_message],
         logger: Logger,
     ) -> None:
@@ -167,6 +171,7 @@ class Mailbox:
             config: Project config; reads ``[service.mailbox]`` (``MAIL_PASSWORD``
                 for the password).
             sqlite: Where the ``UIDL``s taken in are remembered.
+            mail: The bakery's own address, whose emails aren't taken in.
             take_message: ``ingest_message``.
             logger: The service's logger.
         """
@@ -177,6 +182,7 @@ class Mailbox:
         self.password = setting(config, section, "password", "MAIL_PASSWORD", "bakery")
         self.interval = float(setting(config, section, "interval", "MAIL_INTERVAL", 5))
         self.db, self.take_message, self.logger = sqlite, take_message, logger
+        self.own_address = mail.address
         self._stopping = threading.Event()
 
     def _seen(self) -> set[str]:
@@ -204,6 +210,9 @@ class Mailbox:
                 if uidl in seen:
                     continue
                 mail = parse_email(b"\r\n".join(box.retr(int(number))[1]))
+                if mail["from"] == self.own_address:
+                    self._remember(uidl)
+                    continue
                 self.take_message(
                     "email",
                     mail["id"] or uidl,
@@ -284,20 +293,28 @@ class SharedDrive:
 
 @Service
 class Scheduler:
-    """Runs what's due on the demo clock: onboarding once, the POS reconciliation each night.
+    """Runs what's due on the demo clock: onboarding once, then the day's runs.
 
-    The time comes from ``Clock``, so a faster demo clock runs the night
-    sooner.
+    Each day, at ``CLOSE_CAFE_AT`` the café closes (leftovers, then the
+    specials draft), at ``NIGHT_RUN_AT`` tomorrow is planned, and at
+    ``RECONCILE_AT`` the POS is reconciled. A run is due once a day, from
+    its time on, so starting the demo late in the day runs what it missed.
+    The time comes from ``Clock``, so a faster demo clock runs them sooner.
     """
 
+    CLOSE_CAFE_AT = "15:00"
+    NIGHT_RUN_AT = "21:00"
     RECONCILE_AT = "23:30"
 
     def __init__(
         self,
         clock: Clock,
         onboard: Onboard,
+        close_cafe: CloseCafe,
+        night_run: NightRun,
         reconcile: ReconcilePos,
         sales: CafeSales,
+        sheets: BakeSheets,
         logger: Logger,
     ) -> None:
         """Store what it runs; leave the service stopped.
@@ -305,14 +322,33 @@ class Scheduler:
         Args:
             clock: The demo clock.
             onboard: Run once, on a bakery with no sales yet.
+            close_cafe: Run each day at ``CLOSE_CAFE_AT``.
+            night_run: Run each day at ``NIGHT_RUN_AT``; also plans today
+                once, if there's no bake sheet for it yet.
             reconcile: Run each night at ``RECONCILE_AT``.
             sales: To tell whether onboarding has happened.
+            sheets: To tell whether today has been planned.
             logger: The service's logger.
         """
         self.clock, self.onboard, self.reconcile = clock, onboard, reconcile
-        self.sales, self.logger = sales, logger
-        self._reconciled_on: str | None = None
+        self.close_cafe, self.night_run = close_cafe, night_run
+        self.sales, self.sheets, self.logger = sales, sheets, logger
+        self._done: dict[str, str] = {}
         self._stopping = threading.Event()
+
+    def due(self, now: datetime) -> list[str]:
+        """Return the runs due at ``now`` that haven't run today: ``"close-cafe"`` and so on."""
+        today = now.date().isoformat()
+        times = {
+            "close-cafe": self.CLOSE_CAFE_AT,
+            "night-run": self.NIGHT_RUN_AT,
+            "pos-reconcile": self.RECONCILE_AT,
+        }
+        return [
+            name
+            for name, at in times.items()
+            if now.strftime("%H:%M") >= at and self._done.get(name) != today
+        ]
 
     def setup(self) -> None:
         """Get ready, before ``run()`` starts."""
@@ -325,16 +361,26 @@ class Scheduler:
         than stopping the scheduler.
         """
         onboarded = self.sales.count_orders() > 0
+        runs = {
+            "close-cafe": self.close_cafe.execute,
+            "night-run": self.night_run.execute,
+            "pos-reconcile": self.reconcile.execute,
+        }
         while not self._stopping.is_set():
             try:
                 if not onboarded:
                     self.onboard.execute()
                     onboarded = True
                 now = self.clock.now()
-                today = now.date().isoformat()
-                if now.strftime("%H:%M") >= self.RECONCILE_AT and self._reconciled_on != today:
-                    self.reconcile.execute()
-                    self._reconciled_on = today
+                today = now.date()
+                if self._done.get("today") != today.isoformat():
+                    # A first day: the bakery baked before odf, so plan it as if it had.
+                    if today.isoformat() not in self.sheets.dates():
+                        self.night_run.plan(today)
+                    self._done["today"] = today.isoformat()
+                for name in self.due(now):
+                    runs[name]()
+                    self._done[name] = today.isoformat()
             except OSError as exc:
                 self.logger.warning(f"a tool couldn't be reached, trying again: {exc!r}")
             self._stopping.wait(5)

@@ -22,6 +22,24 @@ phone-number-id = "100200300"
 [component.drive]
 path = "/shared-drive"
 
+# The world serves an Open-Meteo-style forecast, offline.
+[component.weather]
+url = "http://world:8000"
+lat = 51.454
+lon = -2.592
+
+# Replies to emailed order changes, through the demo's mail server.
+[component.mail]
+host = "mailpit"
+port = 1025
+address = "orders@bakery.example"
+
+# A local Ollama for the agents. Empty: rules only, and what they can't read
+# waits for a person. OLLAMA_URL and OLLAMA_MODEL override (see .env.example).
+[component.model]
+url = ""
+name = "llama3.2"
+
 [service.webhook-receiver]
 host = "0.0.0.0"
 port = 4750
@@ -37,4 +55,4 @@ interval = 5
 
 [ui.topology]
 config = false
-components = ["clock", "pos", "messenger", "drive"]  # all but the SQLite connection
+components = ["clock", "pos", "messenger", "drive", "weather", "mail", "model"]  # all but SQLite

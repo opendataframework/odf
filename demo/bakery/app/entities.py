@@ -142,3 +142,181 @@ class CafeSale:
     product: str
     quantity: int
     revenue: float
+
+
+@Entity
+@dataclass
+class OrderChange:
+    """A confirmed change to what a restaurant takes, on one day or from one day on.
+
+    Attributes:
+        id: Primary key.
+        restaurant: The restaurant's name.
+        sku: The product.
+        date: The day it applies to, or the first day of a lasting one, ``"YYYY-MM-DD"``.
+        mode: ``"add"`` (``quantity`` more, or fewer if negative, that day),
+            ``"set"`` (exactly ``quantity`` that day) or ``"set-from"`` (exactly
+            ``quantity`` on every day it's usually ordered, from ``date`` on).
+        quantity: How many.
+        message: The message that asked for it.
+        draft: The draft it was confirmed from.
+    """
+
+    id: int | None
+    restaurant: str
+    sku: str
+    date: str
+    mode: str
+    quantity: int
+    message: int | None
+    draft: int | None
+
+
+@Entity
+@dataclass
+class Draft:
+    """Something an agent prepared, waiting for a person to confirm or reject it.
+
+    Attributes:
+        id: Primary key.
+        created_at: When it was drafted, as a Unix time.
+        kind: ``"order-change"`` or ``"specials"``.
+        status: ``"pending"`` (ready to confirm), ``"needs-review"`` (the
+            agent couldn't read it, so a person has to), ``"confirmed"`` or
+            ``"rejected"``.
+        title: What it's about, such as ``"Order change for Le Petit"``.
+        date: The day it's for, ``"YYYY-MM-DD"``.
+        restaurant: The restaurant it's for, if any.
+        message: The message it answers, if any.
+        changes: What confirming it does, as JSON: order changes, or the
+            specials.
+        reply: The reply confirming it sends, if any.
+        author: Who drafted it: ``"rules"`` or ``"model:<name>"``, or
+            ``"nobody"`` when neither could.
+        note: Why it needs review, or why it was rejected.
+        body: The draft as a person reads it, in Markdown.
+    """
+
+    id: int | None
+    created_at: float
+    kind: str
+    status: str
+    title: str
+    date: str
+    restaurant: str | None
+    message: int | None
+    changes: str
+    reply: str
+    author: str
+    note: str
+    body: str
+
+
+@Entity
+@dataclass
+class Forecast:
+    """How many of a product the café expects to sell on a day.
+
+    Attributes:
+        id: Primary key.
+        date: The day, ``"YYYY-MM-DD"``.
+        sku: The product.
+        product: Its name.
+        baseline: The average sold on the same weekday over recent weeks.
+        weather: The weather's factor: below 1 for rain, above for warmth.
+        holiday: The bank holiday factor, or 1.
+        quantity: The forecast: the baseline times both factors, rounded up.
+        rain_mm: The rain forecast for the day, in millimetres.
+    """
+
+    id: int | None
+    date: str
+    sku: str
+    product: str
+    baseline: float
+    weather: float
+    holiday: float
+    quantity: int
+    rain_mm: float
+
+
+@Entity
+@dataclass
+class BakeSheetLine:
+    """One product on a night's bake sheet.
+
+    Attributes:
+        id: Primary key.
+        date: The morning it's baked for, ``"YYYY-MM-DD"``.
+        sku: The product.
+        product: Its name.
+        wholesale: How many the restaurants take.
+        cafe: How many the café is forecast to sell.
+        buffer: Extra for the café, in case it's busier than forecast.
+        total: What to bake.
+    """
+
+    id: int | None
+    date: str
+    sku: str
+    product: str
+    wholesale: int
+    cafe: int
+    buffer: int
+    total: int
+
+
+@Entity
+@dataclass
+class Leftover:
+    """What the café didn't sell of a product baked for it.
+
+    Attributes:
+        id: Primary key.
+        date: The day, ``"YYYY-MM-DD"``.
+        sku: The product.
+        product: Its name.
+        baked: How many were baked for the café, buffer included.
+        sold: How many the café sold.
+        unsold: What's left.
+    """
+
+    id: int | None
+    date: str
+    sku: str
+    product: str
+    baked: int
+    sold: int
+    unsold: int
+
+
+@Entity
+@dataclass
+class DeliveryStop:
+    """One stop on a morning's delivery run; stop 0 is the bakery, where the van sets off.
+
+    Attributes:
+        id: Primary key.
+        date: The morning, ``"YYYY-MM-DD"``.
+        stop: Its place on the run, from 0.
+        restaurant: Who it's for.
+        address: Where.
+        lat: Latitude, for the map.
+        lon: Longitude, for the map.
+        arrive_by: When the kitchen opens, ``"HH:MM"``.
+        eta: When the van gets there, ``"HH:MM"``.
+        load: What's dropped off, such as ``"12 × Baguette, 6 × Croissant"``.
+        items: How many items that is.
+    """
+
+    id: int | None
+    date: str
+    stop: int
+    restaurant: str
+    address: str
+    lat: float
+    lon: float
+    arrive_by: str
+    eta: str
+    load: str
+    items: int

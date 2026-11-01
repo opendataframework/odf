@@ -4,7 +4,7 @@ from email.utils import format_datetime, make_msgid
 
 import pytest
 from app import services
-from app.clients import Drive, Messenger, Pos
+from app.clients import Drive, Mail, Messenger, Pos
 from app.ingest import gist, import_sheets, ingest_message, ingest_sale
 from app.repositories import (
     CafeSales,
@@ -352,6 +352,7 @@ def test_mailbox_catches_up_quietly_then_announces_new_mail(db, monkeypatch):
     mailbox = Mailbox(
         Config({}),
         db,
+        Mail(Config({})),
         lambda *args, **kwargs: taken.append((args, kwargs)) or 1,
         LogManager().logger_for("service.mailbox"),
     )
@@ -364,6 +365,27 @@ def test_mailbox_catches_up_quietly_then_announces_new_mail(db, monkeypatch):
     assert (first, second, third) == (1, 1, 0)
     assert [kwargs["announce"] for _, kwargs in taken] == [False, True]
     assert [kwargs["subject"] for _, kwargs in taken] == ["Old", "New"]
+
+
+def test_mailbox_skips_the_bakerys_own_replies(db, monkeypatch):
+    # The demo's mail server holds the replies the bakery sends, too.
+    monkeypatch.setattr(services.poplib, "POP3", _FakePOP3)
+    _FakePOP3.messages = {
+        "u1": _email("kitchen@lepetit.example", "Order change", "Hi,\n\n3 baguettes"),
+        "u2": _email("orders@bakery.example", "Re: Order change", "Thanks, noted"),
+    }
+    taken = []
+    mailbox = Mailbox(
+        Config({}),
+        db,
+        Mail(Config({})),
+        lambda *args, **kwargs: taken.append(args) or 1,
+        LogManager().logger_for("service.mailbox"),
+    )
+
+    assert mailbox.check() == 1
+    assert [args[2] for args in taken] == ["kitchen@lepetit.example"]
+    assert mailbox.check() == 0
 
 
 class _FakePos:
@@ -418,5 +440,13 @@ def test_config_hides_only_the_sqlite_connection():
 
     config = tomllib.loads((Path(data.__file__).parents[1] / "config.toml").read_text())
 
-    assert config["ui"]["topology"]["components"] == ["clock", "pos", "messenger", "drive"]
+    assert config["ui"]["topology"]["components"] == [
+        "clock",
+        "pos",
+        "messenger",
+        "drive",
+        "weather",
+        "mail",
+        "model",
+    ]
     assert config["service"]["webhook-receiver"]["port"] == 4750

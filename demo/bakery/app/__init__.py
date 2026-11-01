@@ -1,12 +1,29 @@
 """The bakery's ``odf`` project: registers every class and function for ``odf run`` to discover."""
 
-from app import clients, entities, ingest, pipelines, repositories, services, storages, tasks
+from app import (
+    agents,
+    clients,
+    drafts,
+    entities,
+    ingest,
+    model,
+    pipelines,
+    planning,
+    repositories,
+    services,
+    storages,
+    tasks,
+)
 
 __all__ = [
+    "agents",
     "clients",
+    "drafts",
     "entities",
     "ingest",
+    "model",
     "pipelines",
+    "planning",
     "repositories",
     "services",
     "storages",

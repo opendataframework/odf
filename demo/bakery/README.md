@@ -17,9 +17,11 @@ APIs and webhooks, a mailbox, and the shared drive. The result is one place
 where the bakery's people, and later its agents, can see and work with
 everything at once.
 
-> **Work in progress.** This is phase 3 of the plan: the tools, the
-> integrations, and the UI showing what arrives. Drafts, the bake sheet,
-> deliveries, margins and allergens come next.
+> **Work in progress.** So far: the tools, the integrations, the UI showing
+> what arrives, and the daily loop: agents drafting order changes and
+> specials for a person to confirm, the café's forecast, the bake sheet and
+> the delivery run. Agents starting on their own when a message arrives,
+> purchasing, margins and allergens come next.
 
 The bakery, the restaurants, the people and the data are all fictional. Phone
 numbers are in the 07700 900xxx range set aside for drama, and email domains
@@ -69,6 +71,12 @@ docker compose up --build
 mailbox and the shared drive, so the next start seeds and onboards again from
 scratch.
 
+**With a local model.** The agents read the usual phrasings with plain
+rules, and leave the rest (a freeform party order, say) for a person to
+review. To have a model read those, run [Ollama](https://ollama.com) on the
+host with a model pulled (`ollama pull llama3.2`), and set
+`OLLAMA_URL=http://host.docker.internal:11434` in `.env`.
+
 Settings are in `.env.example`. Copy it to `.env` to change the seed, the
 clock's speed or the credentials. New credentials take effect at the next
 `docker compose up`. The seed and the speed only apply when you start over,
@@ -91,6 +99,27 @@ Things to try:
   "2 extra baguettes tomorrow please". A notice appears in the `odf` UI within
   a second or two. **Open** goes to the Messages, and **Show logs** shows the
   call that took the message in.
+- **Draft the order change.** In the `odf` UI, find the message's id in
+  Messages, then invoke the **order-desk** agent with it. A draft appears in
+  Drafts: the message, each product before and after, and the reply. Rules
+  read the usual phrasings; a freeform message is marked for review unless
+  there's a model.
+- **Confirm it** by calling **confirm-draft** with the draft's id. The reply
+  goes back to the restaurant (watch the messenger's thread, or Mailpit for
+  an emailed change), and the change reaches the bake sheet. If tomorrow's
+  sheet was already worked out, it's worked out again. **reject-draft** sends
+  nothing, and keeps a reason.
+- **Watch the day go by.** At 15:00 on the demo clock the café closes: the
+  `close-cafe` pipeline counts its leftovers, and the **specials** agent drafts
+  tomorrow's specials board from them. At 21:00 the `night-run` pipeline
+  forecasts tomorrow's café, works out the bake sheet, and plans the
+  delivery run, which `DeliveryRuns` shows on a map. Either runs any time
+  with **Execute**.
+- **Make it rain** with the console's rainy-week scenario. Nobody forecast
+  today's rain, so the café sells less than it baked and leftovers grow;
+  tomorrow's forecast knows, and bakes less for the café.
+- **Ask from anywhere.** Every agent and function is an MCP tool too, at
+  `localhost:4748`, for an assistant of your own to draft and confirm with.
 - **Ring up a sale** at the POS's till. It arrives in `CafeSales` by webhook,
   with no notice (a sale every few minutes isn't news), but the topology shows
   the call.
@@ -122,7 +151,9 @@ Each kind of integration is one `odf` component:
 | Push | `WebhookReceiver` (`@Api @Service`) checks each webhook's signature and hands each order or message on | POS, messenger |
 | Poll | `Mailbox` (`@Messaging @Service`) reads new mail over POP3, leaving it on the server | Mailpit |
 | Files | `SharedDrive` (`@Service`) re-imports the sheets when one changes | the shared drive |
-| Schedule | `Scheduler` (`@Service`) onboards once, and reconciles the POS each night on the demo clock | POS |
+| Schedule | `Scheduler` (`@Service`) onboards once, then each day closes the café at 15:00, runs the night run at 21:00 and reconciles the POS at 23:30, on the demo clock | POS |
+| Pull | `Weather` (`@Api @Component`) reads the weather forecast that the café's forecast uses | the world, in Open-Meteo's shape |
+| Outbound | Confirming a draft sends its reply through `Messenger` or `Mail` (SMTP) | messenger, Mailpit |
 
 Whatever brings an item in, the item goes through one function in
 `app/ingest.py` (`ingest_message`, `ingest_sale`, `import_sheets`). That
@@ -137,6 +168,28 @@ shows on the topology, and its notice's **Show logs** finds it.
 | `sheets.changed` | yes |
 | `pos.reconciled` | yes, a warning |
 | `bakery.onboarded` | yes, once |
+| `drafts.created` | yes: "Order change for Le Petit awaits confirmation", a warning when it needs review |
+| `drafts.confirmed`, `drafts.rejected` | yes |
+| `night-run.done` | yes: "Night run for Tue 3 Nov: bake 645 items, 8 deliveries" |
+
+## Agents draft, people confirm
+
+| Agent | Started by | Reads with | Drafts |
+|---|---|---|---|
+| `order-desk` | a person, on a message (UI, MCP) | rules for the usual phrasings, then the model, else marked for review | an order change and its reply |
+| `specials` | `close-cafe` at 15:00, or a person | rules pick the dishes and prices; the model only writes the lines | tomorrow's specials board |
+
+`Model` (`app/model.py`) is a local Ollama, or nothing. An agent asks it only
+what its rules can't read, checks what it answers (products that exist, dates
+in range, sensible quantities), and marks anything it isn't sure of for review
+rather than guessing. Nothing an agent drafts reaches a restaurant or the
+bake sheet until a person calls `confirm-draft`.
+
+The numbers a person checks a draft against are plain arithmetic, in
+`app/planning.py`: `forecast` (the weekday's average over six weeks, times the
+weather and bank holidays), `bake_sheet` (the restaurants' standing orders
+with every confirmed change, plus the café's forecast and a tenth more),
+`plan_deliveries` (earliest kitchen first) and `count_leftovers`.
 
 ## Structure
 
@@ -147,17 +200,22 @@ bakery/
 ├── Dockerfile            # the bakery: odf from this repository's source, plus app/
 ├── config.toml           # the bakery's odf config: the tools' addresses, ports, intervals
 ├── app/                  # the bakery's odf project
-│   ├── clients.py        # Clock, Pos, Messenger, Drive: one per tool
+│   ├── clients.py        # Clock, Pos, Messenger, Drive, Weather, Mail: one per tool
 │   ├── ingest.py         # ingest_message, ingest_sale, import_sheets
 │   ├── services.py       # WebhookReceiver, Mailbox, SharedDrive, Scheduler
 │   ├── tasks.py          # history imports, POS reconciliation
-│   ├── pipelines.py      # Onboard
-│   ├── repositories.py   # Products, Restaurants (map), Messages, CafeSales (chart), ...
+│   ├── pipelines.py      # Onboard, NightRun, CloseCafe
+│   ├── agents.py         # order-desk, specials
+│   ├── drafts.py         # confirm_draft, reject_draft
+│   ├── rules.py          # what the agents read without a model
+│   ├── model.py          # Model: a local Ollama, or nothing
+│   ├── planning.py       # forecast, bake_sheet, plan_deliveries, count_leftovers
+│   ├── repositories.py   # Products, Restaurants (map), Messages, Drafts, DeliveryRuns (map), ...
 │   ├── entities.py
 │   ├── storages.py       # one SQLite database
 │   └── settings.py       # environment over config.toml
 └── tools/                # the simulated tools, one small web app each
-    ├── world.py          # demo clock, actors, history, scenarios, console
+    ├── world.py          # demo clock, actors, weather, history, scenarios, console
     ├── pos.py            # till, REST API, signed webhooks with retries
     ├── messenger.py      # chats, signed webhooks, send and history APIs
     ├── common.py, data.py
