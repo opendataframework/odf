@@ -1,0 +1,40 @@
+# The bakery's odf project. Addresses here are the compose services'; secrets
+# (tokens, webhook secrets, the mailbox password) come from the environment,
+# which compose.yaml sets from .env. An environment variable overrides any
+# value here (see app/settings.py).
+
+[project]
+name = "bakery"
+
+[component.sqlite]
+path = "data/bakery.db"
+
+[component.clock]
+world-url = "http://world:8000"
+
+[component.pos]
+url = "http://pos:8001"
+
+[component.messenger]
+url = "http://messenger:8002"
+phone-number-id = "100200300"
+
+[component.drive]
+path = "/shared-drive"
+
+[service.webhook-receiver]
+host = "0.0.0.0"
+port = 4750
+
+[service.mailbox]
+host = "mailpit"
+port = 1110
+user = "bakery"
+interval = 5
+
+[service.shared-drive]
+interval = 5
+
+[ui.topology]
+config = false
+components = ["clock", "pos", "messenger", "drive"]  # all but the SQLite connection

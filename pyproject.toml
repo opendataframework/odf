@@ -79,7 +79,7 @@ select = ["E", "F", "I", "UP", "B"]
 extend-immutable-calls = ["typer.Argument", "typer.Option"]
 
 [tool.bandit]
-exclude_dirs = ["tests", "examples"]
+exclude_dirs = ["tests", "examples", "demo"]
 
 [tool.pytest.ini_options]
 pythonpath = ["src"]

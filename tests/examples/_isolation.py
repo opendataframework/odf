@@ -99,6 +99,6 @@ def restore() -> None:
         cls._namespace.update(kept)
     _original_namespaces = None
 
-    examples_dir = Path(__file__).resolve().parents[2] / "examples"
-    prefix = str(examples_dir) + "/"
-    sys.path[:] = [p for p in sys.path if not p.startswith(prefix)]
+    root = Path(__file__).resolve().parents[2]
+    prefixes = tuple(str(root / d) + "/" for d in ("examples", "demo"))
+    sys.path[:] = [p for p in sys.path if not p.startswith(prefixes)]
