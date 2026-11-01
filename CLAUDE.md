@@ -169,7 +169,8 @@ each mirror one `odf init --template <name>` scaffold layout, so they
 belong with the CLI that describes them, not the core package).
 `07-streaming-video-view/` through `16-mcp-chat/` are the UI-only surface
 (streaming/video/audio/image/document/timeseries views, chart, chart via
-Plotly, MCP + chat) ported from the original monorepo's `demo/` project.
+Plotly, MCP + chat) ported from the original monorepo's demo project (not
+this repo's `demo/`).
 `17-custom-icon/`, `18-custom-mcp-tool/`, `19-agent/` (an `@Agent`
 invoked from the UI, over MCP and from chat), `20-function/` (plain
 functions adopted with `@Function`), `21-notebook-view/` (notebooks in a
@@ -183,5 +184,19 @@ the project's own, selected by `[ui] theme = "./themes/glitch"`),
 type's glyph, with a `layout.json` `flatIcon` override) and
 `26-notifications/` (notifications a café counter publishes, shown as toasts
 with Open and Show logs) were added here since. Treat new examples here as small and focused, one concept each, matching
-`opendataframework/examples/`'s style rather than `demo/`'s
-everything-at-once approach.
+`opendataframework/examples/`'s style. Anything that needs most of ODF at
+once belongs in `demo/` instead.
+
+## Demos
+
+`demo/` holds whole applications built with `odf`, closer to a real
+business than an example, each run with `docker compose up` and listed in
+`demo/README.md`. `demo/bakery/` joins a bakery's existing tools (a café POS,
+a business messenger, email, spreadsheets on a shared drive) through
+webhooks, a polled mailbox, a watched drive and a scheduler, with agents
+that draft and people who confirm. Its Dockerfile installs `odf` from this
+repository's own source, so it always runs the `odf` next to it. Its tests
+live under `tests/demo/bakery/`, and bandit skips `demo/` as it does
+`examples/`. The demo is still in progress: parts of it wait on upcoming
+`opendataframework` features (e.g. declared listeners in 0.6.0), so it isn't
+yet mentioned in `docs/` or the release notes.
