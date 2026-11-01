@@ -63,6 +63,7 @@ def _sheets(drive, db, hub, announce=False):
         Restaurants(db),
         StandingOrders(db),
         Contracts(db),
+        Messages(db),
         hub.bound_to("function.import-sheets"),
         announce=announce,
     )
@@ -291,6 +292,33 @@ def test_parse_email_reads_sender_subject_text_and_date():
     assert mail["text"] == "Hi,\n\n2 extra loaves"
     assert mail["sent"] == data_datetime().timestamp()
     assert mail["id"].endswith("@lepetit.example>")
+
+
+def test_parse_email_reads_crlf_lines_as_plain_newlines():
+    # POP3 hands each line over separately; joined with CRLF as on the wire.
+    raw = b"\r\n".join(_email("kitchen@lepetit.example", "Order change", "Hi,\n\nTwo").split(b"\n"))
+
+    assert parse_email(raw)["text"] == "Hi,\n\nTwo"
+
+
+def test_import_sheets_matches_messages_that_came_before_their_restaurant(drive, db, hub):
+    # The mailbox can take in mail before onboarding has imported the restaurants.
+    ingest_message(
+        "email",
+        "<early@kiln.example>",
+        "kitchen@kiln.example",
+        "No rye on Friday",
+        1.0,
+        Messages(db),
+        Restaurants(db),
+        hub.bound_to("function.ingest-message"),
+        announce=False,
+    )
+    assert Messages(db).all()[0].restaurant is None
+
+    _sheets(drive, db, hub)
+
+    assert Messages(db).all()[0].restaurant == "Kiln"
 
 
 class _FakePOP3:

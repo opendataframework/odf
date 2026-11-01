@@ -25,7 +25,9 @@ The bakery, the restaurants, the people and the data are all fictional. Phone
 numbers are in the 07700 900xxx range set aside for drama, and email domains
 are `.example`.
 
-## Run it
+## Start, stop, start over
+
+**Start** the tools and the bakery:
 
 ```bash
 cd demo/bakery
@@ -36,6 +38,34 @@ The first start seeds the tools with the history of a bakery that's been
 trading a while (12 weeks of café orders, two weeks of chats, a month of
 email). The bakery's project then onboards: it imports that history through
 the tools' APIs.
+
+**Stop** it, keeping everything for next time:
+
+```bash
+docker compose down
+```
+
+The next `docker compose up` carries on where it stopped: same data, same
+time on the demo clock, no seeding or onboarding again.
+
+**Start over**, with a fresh bakery and new history:
+
+```bash
+docker compose down -v
+docker compose up --build
+```
+
+`-v` also deletes the volumes holding the tools' and the bakery's data, the
+mailbox and the shared drive, so the next start seeds and onboards again from
+scratch.
+
+Settings are in `.env.example`. Copy it to `.env` to change the seed, the
+clock's speed or the credentials. New credentials take effect at the next
+`docker compose up`. The seed and the speed only apply when you start over,
+since the history is already seeded and the clock remembers its speed; the
+console changes the speed any time.
+
+## Try it
 
 | Open | For |
 |---|---|
@@ -63,9 +93,6 @@ Things to try:
   imports the sheets again and says so.
 - **Speed the clock up** in the console. At the default 60×, a day takes 24
   minutes. Restaurants write in the evening, from 17:00.
-
-Settings are in `.env.example`. Copy it to `.env` to change the seed, the
-clock's speed or the credentials. `docker compose down -v` starts over.
 
 ## How it fits together
 

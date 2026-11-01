@@ -139,7 +139,7 @@ def parse_email(raw: bytes) -> dict:
         "from": address.lower(),
         "name": name or address,
         "subject": str(mail.get("Subject", "")),
-        "text": body.get_content().strip() if body is not None else "",
+        "text": body.get_content().replace("\r\n", "\n").strip() if body is not None else "",
         "sent": parsedate_to_datetime(str(date)).timestamp() if date else time.time(),
     }
 

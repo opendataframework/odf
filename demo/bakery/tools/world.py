@@ -194,20 +194,33 @@ def _order_change(r: random.Random) -> str:
     )
 
 
-def cafe_order(r: random.Random = rng) -> None:
-    """A café customer pays at the till."""
-    basket = _basket(r)
+def cafe_order(r: random.Random = rng) -> dict | None:
+    """A café customer pays at the till. Returns the order, or ``None`` if the POS failed.
+
+    Orders aren't logged one by one, which would bury everything else in the
+    feed: ``tick()`` logs each hour's count.
+    """
     try:
-        order = http_json(
+        return http_json(
             "POST",
             f"{POS_URL}/v1/orders",
-            {"line_items": basket, "tender": "card"},
+            {"line_items": _basket(r), "tender": "card"},
             {"Authorization": f"Bearer {POS_TOKEN}"},
         )
-        items = ", ".join(f"{line['quantity']} × {line['name']}" for line in order["line_items"])
-        _log(f"Café: {items}")
     except OSError as exc:
         _log(f"Café order failed: {exc}")
+        return None
+
+
+def _items(order: dict | None) -> str:
+    """Return an order's items as text, such as "2 × Flat white, 1 × Croissant"."""
+    if order is None:
+        return "nothing (the POS failed)"
+    return ", ".join(f"{line['quantity']} × {line['name']}" for line in order["line_items"])
+
+
+# Café orders taken in the current simulated hour, logged when it ends.
+cafe_hour: dict[str, object] = {"hour": None, "orders": 0}
 
 
 def message(restaurant: Restaurant, text: str) -> None:
@@ -257,9 +270,15 @@ def tick(previous: datetime, now: datetime) -> None:
     minute = max(previous, now - timedelta(hours=1)).replace(second=0, microsecond=0)
     while minute < now:
         minute += timedelta(minutes=1)
+        hour = minute.replace(minute=0)
+        if cafe_hour["hour"] != hour:
+            if cafe_hour["orders"]:
+                start = cafe_hour["hour"]
+                _log(f"Café: {cafe_hour['orders']} orders, {start:%H:00}–{hour:%H:00}")
+            cafe_hour.update(hour=hour, orders=0)
         weekend = 1.3 if minute.weekday() >= 5 else 1.0
-        if rng.random() < CAFE_RATE.get(minute.hour, 0.0) * weekend:
-            cafe_order()
+        if rng.random() < CAFE_RATE.get(minute.hour, 0.0) * weekend and cafe_order():
+            cafe_hour["orders"] += 1
         if 17 <= minute.hour < 23:
             for restaurant in RESTAURANTS:
                 if rng.random() < EVENING_RATE:
@@ -404,8 +423,8 @@ def run_scenario(name: str) -> None:
     elif name == "email-change":
         restaurant_email(r.choice(RESTAURANTS), _order_change(r))
     elif name == "cafe-rush":
-        for _ in range(10):
-            cafe_order(r)
+        taken = sum(1 for _ in range(10) if cafe_order(r))
+        _log(f"Café rush: {taken} orders at once")
     elif name == "missed-webhook":
         http_json(
             "POST",
@@ -413,8 +432,7 @@ def run_scenario(name: str) -> None:
             None,
             {"Authorization": f"Bearer {POS_TOKEN}"},
         )
-        _log("POS: the next order's webhook will be dropped")
-        cafe_order(r)
+        _log(f"POS: dropped the webhook of an order for {_items(cafe_order(r))}")
     else:
         raise KeyError(name)
 

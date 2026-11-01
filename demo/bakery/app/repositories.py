@@ -133,6 +133,20 @@ class Messages(_Table):
         """Return every message, newest first."""
         return self._select(order="received_at DESC")
 
+    def match_restaurants(self, restaurants: Iterable[Restaurant]) -> None:
+        """Set each message's restaurant from its sender: a phone number or email address."""
+        by_contact = {}
+        for r in restaurants:
+            by_contact[r.phone] = r.name
+            by_contact[r.email.lower()] = r.name
+        with self.db.lock:
+            rows = self.db.conn.execute("SELECT id, sender FROM messages").fetchall()
+            self.db.conn.executemany(
+                "UPDATE messages SET restaurant = ? WHERE id = ?",
+                [(by_contact.get(sender.lower()), id_) for id_, sender in rows],
+            )
+            self.db.conn.commit()
+
     def by_external_id(self, external_id: str) -> Message | None:
         """Return the message with this id in the tool it came from, if it's been taken in."""
         found = self._select("WHERE external_id = ?", (external_id,))

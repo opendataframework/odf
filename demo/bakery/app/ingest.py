@@ -148,12 +148,15 @@ def import_sheets(
     restaurants: Restaurants,
     standing_orders: StandingOrders,
     contracts: Contracts,
+    messages: Messages,
     notifications: Notifications,
     announce: bool = True,
 ) -> dict:
     """Read the shared drive's sheets into the bakery's repositories, replacing what was there.
 
-    The sheets are where the owner keeps this data, so they win. Publishes
+    The sheets are where the owner keeps this data, so they win. Messages are
+    then matched to the restaurants again, so a message that came in before
+    its restaurant was on the sheet is linked to it now. Publishes
     ``sheets.changed``.
 
     Args:
@@ -162,6 +165,7 @@ def import_sheets(
         restaurants: Replaced from ``restaurants.csv``, injected.
         standing_orders: Replaced from ``standing_orders.csv``, injected.
         contracts: Replaced from ``contracts.csv``, injected.
+        messages: Matched to the restaurants again, injected.
         notifications: Bound to this function, injected.
         announce: ``False`` while onboarding: imported, not announced.
 
@@ -197,6 +201,7 @@ def import_sheets(
             for r in drive.rows("contracts.csv")
         ),
     }
+    messages.match_restaurants(restaurants.all())
     if announce:
         notifications.publish(
             "sheets.changed",
