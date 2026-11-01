@@ -7,7 +7,15 @@ FROM python:3.14-slim
 WORKDIR /src/odf
 COPY pyproject.toml README.md ./
 COPY src src
-RUN pip install --no-cache-dir ".[ui,mcp,chat]"
+# A package index to look in besides PyPI, for an opendataframework release
+# that isn't published yet (see "Unreleased opendataframework" in the README).
+# Unset, everything comes from PyPI.
+ARG ODF_INDEX_URL=""
+RUN if [ -n "$ODF_INDEX_URL" ]; then \
+        host=$(printf '%s' "$ODF_INDEX_URL" | sed -E 's#^[a-z]+://([^/@]*@)?([^/:]+).*#\2#'); \
+        set -- --extra-index-url "$ODF_INDEX_URL" --trusted-host "$host"; \
+    fi; \
+    pip install --no-cache-dir "$@" ".[ui,mcp,chat]"
 
 RUN useradd --create-home bakery && install -d -o bakery /srv/bakery /srv/bakery/data /shared-drive
 WORKDIR /srv/bakery

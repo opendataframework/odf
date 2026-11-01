@@ -83,6 +83,24 @@ clock's speed or the credentials. New credentials take effect at the next
 since the history is already seeded and the clock remembers its speed; the
 console changes the speed any time.
 
+**Unreleased opendataframework.** The image installs `odf` from this
+repository and resolves `opendataframework` from PyPI. When `odf` here needs
+an `opendataframework` version that isn't on PyPI yet, serve its wheel from
+a local package index and point the build at it with `ODF_INDEX_URL`, which
+pip looks in besides PyPI:
+
+```bash
+# in opendataframework/
+poetry build
+mkdir -p /tmp/wheels && cp dist/*.whl /tmp/wheels/
+
+docker run -d --rm -p 8080:8080 -v /tmp/wheels:/data/packages \
+  pypiserver/pypiserver:latest run -a . -P .
+
+cd demo/bakery
+ODF_INDEX_URL=http://host.docker.internal:8080/simple/ docker compose up --build
+```
+
 ## Try it
 
 | Open | For |

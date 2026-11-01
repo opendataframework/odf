@@ -80,6 +80,12 @@ services:
     build:
       context: ../..
       dockerfile: demo/bakery/Dockerfile
+      # An extra package index for the build, e.g. a local one holding an
+      # opendataframework release not on PyPI yet. Empty: PyPI only.
+      args:
+        ODF_INDEX_URL: ${ODF_INDEX_URL:-}
+      extra_hosts:
+        - "host.docker.internal:host-gateway"
     restart: unless-stopped
     environment:
       <<: *credentials
