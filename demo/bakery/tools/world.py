@@ -134,6 +134,14 @@ class Clock:
             return sim
         return sim + timedelta(seconds=(time.time() - real) * speed)
 
+    def hold(self) -> None:
+        """Save the time now, so the world can carry on from it after it's been down."""
+        _set(anchor_sim=self.now().isoformat(), anchor_real=time.time())
+
+    def resume(self) -> None:
+        """Carry on from the time saved by ``hold()``, not counting the time the world was down."""
+        _set(anchor_real=time.time())
+
     def update(
         self,
         speed: float | None = None,
@@ -438,7 +446,11 @@ def run_scenario(name: str) -> None:
 
 
 def _actors() -> None:
-    """Seed the history once, then act out each simulated minute as the clock moves."""
+    """Seed the history once, then act out each simulated minute as the clock moves.
+
+    The clock is saved every second too, so a world that's killed rather than
+    stopped carries on from within a second of where it was.
+    """
     try:
         seed_history()
     except OSError as exc:
@@ -446,6 +458,7 @@ def _actors() -> None:
     previous = clock.now()
     while True:
         time.sleep(1)
+        clock.hold()
         now = clock.now()
         if now > previous:
             tick(previous, now)
@@ -454,9 +467,16 @@ def _actors() -> None:
 
 @asynccontextmanager
 async def lifespan(_: FastAPI):
-    """Start the actors with the app."""
+    """Start the actors with the app, and keep the clock still while the app is down.
+
+    Stopping the stack (``docker compose stop`` or ``down``) stops the world
+    gracefully, which saves the time; starting it again carries on from
+    there. The actors also save it every second, for a world that's killed.
+    """
+    clock.resume()
     threading.Thread(target=_actors, daemon=True).start()
     yield
+    clock.hold()
 
 
 app = FastAPI(title="World", docs_url=None, redoc_url=None, lifespan=lifespan)

@@ -140,6 +140,19 @@ def test_world_clock_pauses_and_moves_on():
     clock.update(paused=False)
 
 
+def test_world_clock_carries_on_from_where_it_was_held(monkeypatch):
+    clock = world.clock
+    now = world.time.time()
+    monkeypatch.setattr(world.time, "time", lambda: now)
+    clock.hold()
+    held = clock.now()
+    monkeypatch.setattr(world.time, "time", lambda: now + 3600)  # an hour with the world down
+
+    clock.resume()
+
+    assert clock.now() == held
+
+
 def test_quarter_end_is_the_last_day_of_the_quarter():
     assert world._quarter_end(world.datetime(2026, 11, 3)).date().isoformat() == "2026-12-31"
     assert world._quarter_end(world.datetime(2026, 2, 3)).date().isoformat() == "2026-03-31"

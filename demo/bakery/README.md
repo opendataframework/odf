@@ -48,6 +48,16 @@ docker compose down
 The next `docker compose up` carries on where it stopped: same data, same
 time on the demo clock, no seeding or onboarding again.
 
+**Without rebuilding.** `--build` rebuilds the images first, which you only
+need the first time and after changing the demo's code. Otherwise:
+
+```bash
+docker compose up -d     # start in the background, with the images already built
+docker compose stop      # pause: stop the containers, keep them and their data
+docker compose start     # carry on after a stop
+docker compose logs -f   # follow what the services print
+```
+
 **Start over**, with a fresh bakery and new history:
 
 ```bash
