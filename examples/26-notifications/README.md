@@ -38,11 +38,13 @@ The UI shows two things as they happen, from two separate streams:
 - **Notifications** are what the café's code chooses to say about the
   business: an order came in, the oat milk ran out. Only component code
   publishes one, with a topic, a payload, and optionally a summary for
-  people.
+  people. Each publisher declares its topics with `@Publisher`: `take_order`
+  the four in the table above, `Restock` `pantry.restocked`.
 
-`Kitchen` shows the other side. It subscribes to `kitchen.ticket` without
-knowing who publishes it, and its **Details** count the tickets it has
-received. Those tickets have no summary, so they never reach the UI.
+`Kitchen` shows the other side. It is a `@Subscriber("kitchen.ticket")`, so
+it gets each ticket through `on_notification()` without knowing who publishes
+it, and its **Details** count the tickets it has received. Those tickets have
+no summary, so they never reach the UI.
 
 `Counter` hands each order to `take_order` instead of handling it inside its
 own `run()` loop. That way every order is a call of its own, logged and shown
@@ -58,10 +60,10 @@ on its own, with its notifications pointing back to it.
     ├── __init__.py       # imports every module so decorators register at startup
     ├── entities.py       # Order(id, table, item), Supply(id, name, stock) — @Entity
     ├── repositories.py   # Orders, Pantry — @Storage @Repository, in-memory
-    ├── functions.py      # take_order(table, item) — @Function publishing the notifications
+    ├── functions.py      # take_order(table, item) — @Publisher @Function publishing the notifications
     ├── services.py       # Counter — @Service taking the next order every few seconds
-    ├── components.py     # Kitchen — @Component subscribed to kitchen.ticket
-    └── tasks.py          # Restock — @Task refilling the pantry
+    ├── components.py     # Kitchen — @Subscriber @Component receiving kitchen.ticket
+    └── tasks.py          # Restock — @Publisher @Task refilling the pantry
 ```
 
 ## Run it

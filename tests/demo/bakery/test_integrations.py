@@ -17,7 +17,7 @@ from app.repositories import (
 from app.services import Mailbox, WebhookReceiver, parse_email
 from app.storages import SQLite
 from app.tasks import ImportPosHistory, ReconcilePos
-from opendataframework import Config
+from opendataframework import Config, Events, Publisher, TaskProtocol
 from opendataframework.logger import LogManager
 from opendataframework.notifications import Notifications
 from tools import data
@@ -25,7 +25,9 @@ from tools import data
 # Deliberately builds the components directly rather than going through
 # Project/Context — opening a Context starts the services, which would bind
 # ports and reach for the tools. A bare Notifications hub stands in for the
-# Context's: `key_of` resolves the repositories given as `subject`.
+# Context's: `key_of` resolves the repositories given as `subject`, and
+# `bound_to(key, Publisher.of(...))` gives each publisher the view the Context
+# would inject.
 
 KEYS = {
     Messages: "repository.messages",
@@ -50,6 +52,17 @@ def hub():
     return notifications
 
 
+@pytest.fixture(autouse=True)
+def in_a_call():
+    """Run each test inside one protocol call, as the Context runs a publisher's.
+
+    An injected ``Notifications`` publishes only while a call is in progress,
+    so the notification records it as its ``parent``.
+    """
+    with Events().notify("test.bakery", TaskProtocol, "execute"):
+        yield
+
+
 @pytest.fixture
 def drive(tmp_path):
     data.write_sheets(tmp_path / "drive", 7, "2026-12-31")
@@ -64,7 +77,7 @@ def _sheets(drive, db, hub, announce=False):
         StandingOrders(db),
         Contracts(db),
         Messages(db),
-        hub.bound_to("function.import-sheets"),
+        hub.bound_to("function.import-sheets", Publisher.of(import_sheets)),
         announce=announce,
     )
 
@@ -108,7 +121,7 @@ def test_import_sheets_replaces_what_was_there(drive, db, hub):
 def test_ingest_message_matches_the_restaurant_and_announces_it_once(drive, db, hub):
     _sheets(drive, db, hub)
     messages, restaurants = Messages(db), Restaurants(db)
-    notifications = hub.bound_to("function.ingest-message")
+    notifications = hub.bound_to("function.ingest-message", Publisher.of(ingest_message))
 
     def take(external_id, sender):
         return ingest_message(
@@ -156,7 +169,7 @@ def test_ingest_message_matches_an_email_address_in_any_case(drive, db, hub):
         1.0,
         Messages(db),
         Restaurants(db),
-        hub.bound_to("function.ingest-message"),
+        hub.bound_to("function.ingest-message", Publisher.of(ingest_message)),
         subject="Order change",
     )
 
@@ -175,7 +188,7 @@ def test_ingest_message_while_catching_up_announces_nothing(db, hub):
         1.0,
         Messages(db),
         Restaurants(db),
-        hub.bound_to("function.ingest-message"),
+        hub.bound_to("function.ingest-message", Publisher.of(ingest_message)),
         announce=False,
     )
 
@@ -194,7 +207,7 @@ def test_gist_skips_greetings():
 
 def test_ingest_sale_takes_an_order_once_without_a_summary(db, hub):
     sales = CafeSales(db)
-    notifications = hub.bound_to("function.ingest-sale")
+    notifications = hub.bound_to("function.ingest-sale", Publisher.of(ingest_sale))
 
     assert ingest_sale(_order(), sales, notifications) is True
     assert ingest_sale(_order(), sales, notifications) is False
@@ -311,7 +324,7 @@ def test_import_sheets_matches_messages_that_came_before_their_restaurant(drive,
         1.0,
         Messages(db),
         Restaurants(db),
-        hub.bound_to("function.ingest-message"),
+        hub.bound_to("function.ingest-message", Publisher.of(ingest_message)),
         announce=False,
     )
     assert Messages(db).all()[0].restaurant is None
@@ -418,11 +431,17 @@ def test_import_pos_history_takes_every_order_once(db):
 
 def test_reconcile_pos_takes_in_missed_orders_and_warns(db, hub):
     sales = CafeSales(db)
-    ingest_sale(_order("ord_1"), sales, hub.bound_to("function.ingest-sale"))
-    pos = _FakePos([_order("ord_1"), _order("ord_2")])
-    take = lambda order: ingest_sale(order, sales, hub.bound_to("function.ingest-sale"))  # noqa: E731
+    notifications = hub.bound_to("function.ingest-sale", Publisher.of(ingest_sale))
 
-    recovered = ReconcilePos(pos, _FakeClock(), take, hub.bound_to("task.reconcile-pos")).execute()
+    def take(order):
+        return ingest_sale(order, sales, notifications)
+
+    take(_order("ord_1"))
+    pos = _FakePos([_order("ord_1"), _order("ord_2")])
+
+    recovered = ReconcilePos(
+        pos, _FakeClock(), take, hub.bound_to("task.reconcile-pos", Publisher.of(ReconcilePos))
+    ).execute()
 
     assert recovered == 1
     assert pos.asked == ["2026-10-31T23:30:00"]

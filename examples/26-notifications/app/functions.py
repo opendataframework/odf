@@ -1,6 +1,6 @@
 """Taking an order, and the notifications it publishes."""
 
-from opendataframework import Function, Notifications
+from opendataframework import Function, Notifications, Publisher
 
 from app.entities import Order
 from app.repositories import Orders, Pantry
@@ -16,6 +16,7 @@ MENU: dict[str, str] = {
 LOW_STOCK = 1
 
 
+@Publisher("orders.received", "kitchen.ticket", "pantry.low", "pantry.out")
 @Function
 def take_order(
     table: int,

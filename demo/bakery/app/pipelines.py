@@ -4,7 +4,7 @@ from collections.abc import Callable
 from datetime import date, timedelta
 from typing import Annotated
 
-from opendataframework import Notifications, Pipeline
+from opendataframework import Notifications, Pipeline, Publisher
 
 from app.agents import Specials
 from app.clients import Clock
@@ -13,6 +13,7 @@ from app.repositories import BakeSheets, CafeSales
 from app.tasks import ImportMessengerHistory, ImportPosHistory, ImportSheets
 
 
+@Publisher("bakery.onboarded")
 @Pipeline
 class Onboard:
     """Imports the sheets, the POS's order history and the messenger's chats, in that order.
@@ -61,6 +62,7 @@ class Onboard:
         )
 
 
+@Publisher("night-run.done")
 @Pipeline
 class NightRun:
     """Plans tomorrow: the café's forecast, then the bake sheet, then the delivery run.

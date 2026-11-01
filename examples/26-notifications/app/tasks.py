@@ -1,10 +1,11 @@
 """Restocking the pantry."""
 
-from opendataframework import Notifications, Task
+from opendataframework import Notifications, Publisher, Task
 
 from app.repositories import Pantry
 
 
+@Publisher("pantry.restocked")
 @Task
 class Restock:
     """Puts every ingredient back to its starting stock, and says so."""

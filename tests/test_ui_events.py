@@ -206,8 +206,9 @@ class _Ticket:
 
 
 def _publisher(NS):
-    from opendataframework.notifications import Notifications
+    from opendataframework.notifications import Notifications, Publisher
 
+    @Publisher("orders.received")
     @NS
     @Task
     class TakeOrder:

@@ -13,7 +13,7 @@ them. Starting ``order-desk`` on its own when a message arrives comes with
 import json
 from datetime import date, datetime, timedelta
 
-from opendataframework import Agent, Notifications
+from opendataframework import Agent, Notifications, Publisher
 
 from app.clients import Clock
 from app.entities import Draft, Message, OrderChange
@@ -85,6 +85,7 @@ def _describe(change: Change, names: dict[str, str]) -> str:
     return f"{change.quantity} {item} on {day}"
 
 
+@Publisher("drafts.created")
 @Agent
 class OrderDesk:
     """Reads a restaurant's message and drafts the order change it asks for, with a reply.
@@ -325,6 +326,7 @@ as given. Don't add ingredients, prices or claims that aren't in the description
 British English. Answer with one line per SKU given."""
 
 
+@Publisher("drafts.created")
 @Agent
 class Specials:
     """Turns what the café didn't sell into tomorrow's specials board, as a draft.

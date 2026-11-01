@@ -8,7 +8,7 @@ notification it publishes records that call as its ``parent``.
 
 from datetime import datetime
 
-from opendataframework import Function, Notifications
+from opendataframework import Function, Notifications, Publisher
 
 from app.clients import Drive
 from app.entities import CafeSale, Contract, Message, Product, Restaurant, StandingOrder
@@ -30,6 +30,7 @@ def gist(text: str) -> str:
     return next((line for line in lines if not _is_greeting(line)), lines[0] if lines else "")
 
 
+@Publisher("messages.received")
 @Function
 def ingest_message(
     channel: str,
@@ -107,6 +108,7 @@ def sale_lines(order: dict) -> list[CafeSale]:
     ]
 
 
+@Publisher("pos.sale")
 @Function
 def ingest_sale(order: dict, sales: CafeSales, notifications: Notifications) -> bool:
     """Take in a café order from the POS, once.
@@ -141,6 +143,7 @@ def _price(value: str) -> float | None:
     return float(value) if value.strip() else None
 
 
+@Publisher("sheets.changed")
 @Function
 def import_sheets(
     drive: Drive,

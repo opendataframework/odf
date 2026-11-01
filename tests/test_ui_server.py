@@ -519,9 +519,10 @@ def test_events_endpoint_streams_calls_as_server_sent_events():
 def test_notifications_endpoint_streams_published_notifications():
     NS = make_ns()
 
-    from opendataframework.notifications import Notifications
+    from opendataframework.notifications import Notifications, Publisher
     from opendataframework.task import Task
 
+    @Publisher("orders.received")
     @NS
     @Task
     class TakeOrder:

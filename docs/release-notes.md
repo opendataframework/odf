@@ -1,5 +1,18 @@
 # Release Notes
 
+## 0.6.0
+
+### Changed
+
+- **Dependencies**: requires `opendataframework` 0.6.x. A component or function that
+  publishes through an injected `notifications: Notifications` must now declare its topics
+  with `@Publisher(...)` on top of its execution type (see `opendataframework` 0.6.0's
+  [Notifications](https://opendataframework.github.io/opendataframework/notifications/)).
+- **Examples**: in
+  [`26-notifications`](https://github.com/opendataframework/odf/tree/main/examples/26-notifications),
+  `take_order` and `Restock` declare what they publish with `@Publisher`, and `Kitchen` is a
+  `@Subscriber("kitchen.ticket")` that receives tickets through `on_notification()`.
+
 ## 0.5.0
 
 ### Added

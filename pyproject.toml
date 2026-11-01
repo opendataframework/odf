@@ -1,6 +1,6 @@
 [project]
 name = "odf"
-version = "0.5.0"
+version = "0.6.0"
 description = "Open Data Framework CLI."
 authors = [
     {name = "mykytapavlov",email = "mykytapavlov@users.noreply.github.com"}
@@ -10,8 +10,19 @@ requires-python = ">=3.14"
 dependencies = [
     "typer (>=0.27.0,<0.28.0)",
     "rich (>=15.0.0,<16.0.0)",
-    "opendataframework (>=0.5.0,<0.6.0)"
+    "opendataframework (>=0.6.0,<0.7.0)"
 ]
+
+# TEMPORARY: resolve opendataframework 0.6.0 from the local index until it is
+# on PyPI. Remove this block and the source below (and regenerate poetry.lock)
+# before releasing.
+[tool.poetry.dependencies]
+opendataframework = {source = "local-pypi"}
+
+[[tool.poetry.source]]
+name = "local-pypi"
+url = "http://localhost:8080/simple/"
+priority = "explicit"
 
 [project.optional-dependencies]
 ui = [

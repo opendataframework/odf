@@ -8,7 +8,7 @@ import json
 from collections.abc import Callable
 from typing import Annotated
 
-from opendataframework import Function, Notifications
+from opendataframework import Function, Notifications, Publisher
 
 from app.clients import Mail, Messenger
 from app.entities import OrderChange
@@ -16,6 +16,7 @@ from app.planning import bake_sheet, plan_deliveries
 from app.repositories import BakeSheets, Drafts, Messages, OrderChanges
 
 
+@Publisher("drafts.confirmed")
 @Function
 def confirm_draft(
     draft_id: int,
@@ -110,6 +111,7 @@ def confirm_draft(
     return {"draft": draft.id, "changes": changes, "replied": replied, "rebaked": rebaked}
 
 
+@Publisher("drafts.rejected")
 @Function
 def reject_draft(
     draft_id: int,

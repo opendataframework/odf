@@ -4,7 +4,7 @@ from collections.abc import Callable
 from datetime import datetime, timedelta
 from typing import Annotated
 
-from opendataframework import Logger, Notifications, Task
+from opendataframework import Logger, Notifications, Publisher, Task
 
 from app.clients import Clock, Messenger, Pos
 from app.ingest import import_sheets, ingest_message, ingest_sale, sale_lines
@@ -88,6 +88,7 @@ class ImportMessengerHistory:
         return new
 
 
+@Publisher("pos.reconciled")
 @Task
 class ReconcilePos:
     """Catches café orders whose webhook never arrived, by reading the POS's last two days.

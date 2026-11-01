@@ -86,7 +86,7 @@ def test_a_local_package_index_is_optional():
 
     assert 'ARG ODF_INDEX_URL=""' in dockerfile
     assert 'if [ -n "$ODF_INDEX_URL" ]; then' in dockerfile
-    assert '"odf[ui,mcp,notebook]>=0.5.0,<0.6.0"' in dockerfile
+    assert '"odf[ui,mcp,notebook]>=0.6.0,<0.7.0"' in dockerfile
     assert "        ODF_INDEX_URL: ${ODF_INDEX_URL:-}" in odf
 
 

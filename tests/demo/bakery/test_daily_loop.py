@@ -48,7 +48,7 @@ from app.rules import (
 from app.services import Scheduler
 from app.storages import SQLite
 from fastapi.testclient import TestClient
-from opendataframework import Config
+from opendataframework import Config, Events, Publisher, TaskProtocol
 from opendataframework.notifications import Notifications
 from tools import data, world
 
@@ -120,6 +120,17 @@ def hub():
     return notifications
 
 
+@pytest.fixture(autouse=True)
+def in_a_call():
+    """Run each test inside one protocol call, as the Context runs a publisher's.
+
+    An injected ``Notifications`` publishes only while a call is in progress,
+    so the notification records it as its ``parent``.
+    """
+    with Events().notify("test.bakery", TaskProtocol, "execute"):
+        yield
+
+
 @pytest.fixture
 def bakery(tmp_path, db, hub):
     """A bakery with the sheets imported, and its repositories by name."""
@@ -146,7 +157,7 @@ def bakery(tmp_path, db, hub):
         repos["standing_orders"],
         repos["contracts"],
         repos["messages"],
-        hub.bound_to("function.import-sheets"),
+        hub.bound_to("function.import-sheets", Publisher.of(import_sheets)),
         announce=False,
     )
     return repos
@@ -161,7 +172,7 @@ def _message(bakery, hub, text, sender="+447700900201", channel="messenger", n=1
         datetime(2026, 11, 2, 20, 15).timestamp(),
         bakery["messages"],
         bakery["restaurants"],
-        hub.bound_to("function.ingest-message"),
+        hub.bound_to("function.ingest-message", Publisher.of(ingest_message)),
         subject="Order change" if channel == "email" else "",
         announce=False,
     )
@@ -176,7 +187,7 @@ def _desk(bakery, hub, model=None):
         bakery["order_changes"],
         bakery["drafts"],
         model or FakeModel(available=False),
-        hub.bound_to("agent.order-desk"),
+        hub.bound_to("agent.order-desk", Publisher.of(OrderDesk)),
     )
 
 
@@ -195,7 +206,7 @@ def _confirm(bakery, hub, draft_id, messenger=None, mail=None, rebaked=None):
         bakery["sheets"],
         messenger or FakeSender(),
         mail or FakeSender(),
-        hub.bound_to("function.confirm-draft"),
+        hub.bound_to("function.confirm-draft", Publisher.of(confirm_draft)),
         lambda date: rebaked.append(("bake", date)),
         lambda date: rebaked.append(("plan", date)),
     )
@@ -571,7 +582,7 @@ def test_reject_keeps_the_reason_and_puts_the_message_back(bakery, hub):
         draft_id,
         bakery["drafts"],
         bakery["messages"],
-        hub.bound_to("function.reject-draft"),
+        hub.bound_to("function.reject-draft", Publisher.of(reject_draft)),
         reason="Called them",
     )
 
@@ -591,7 +602,7 @@ def _specials(bakery, hub, model=None):
         bakery["leftovers"],
         bakery["drafts"],
         model or FakeModel(available=False),
-        hub.bound_to("agent.specials"),
+        hub.bound_to("agent.specials", Publisher.of(Specials)),
     )
 
 
