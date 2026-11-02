@@ -27,6 +27,10 @@ whoever caused them.
   `subject`.
 - **Show logs** opens `take_order`'s logs and highlights the call that
   published it, because the notification records that call as its `parent`.
+- **Show run** opens the order's whole run: `take_order`, the notifications
+  it published, and under `kitchen.ticket` the `Kitchen`'s
+  `on_notification()`. It starts at `take_order`, not at `Counter`'s
+  `run()`, which lasts as long as the service does.
 
 ## Events and notifications
 
