@@ -291,6 +291,7 @@ class SharedDrive:
         "contracts.csv": "contracts",
         "ingredients.csv": "ingredients",
         "recipes.csv": "recipes",
+        "allergens.csv": "allergens",
     }
 
     def __init__(

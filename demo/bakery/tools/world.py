@@ -330,14 +330,19 @@ def price(code: str) -> float:
     return float(saved) if saved is not None else BY_INGREDIENT[code].price
 
 
-def supplier_invoice(supplier: Supplier, sent: datetime | None = None) -> None:
-    """``supplier`` emails its invoice for this week's delivery, a PDF, at ``sent`` (now)."""
+def supplier_invoice(
+    supplier: Supplier, sent: datetime | None = None, notes: dict[str, str] | None = None
+) -> None:
+    """``supplier`` emails its invoice for this week's delivery, a PDF, at ``sent`` (now).
+
+    ``notes`` puts a note under an ingredient's line, by its code.
+    """
     at = sent or clock.now()
     number = int(_get(f"invoice:{supplier.name}") or 0) + 1
     _set(**{f"invoice:{supplier.name}": number})
     reference = f"{supplier.name.split()[0][:3].upper()}-{at:%Y}-{number:04d}"
     prices = {i: price(i) for i in BY_INGREDIENT}
-    lines = delivery(supplier, prices, random.Random(f"{SEED}-{supplier.name}-{number}"))
+    lines = delivery(supplier, prices, random.Random(f"{SEED}-{supplier.name}-{number}"), notes)
     content = invoice_pdf(supplier, reference, at.date(), lines)
     note = supplier.layout == "note"
     email(
@@ -550,7 +555,11 @@ SCENARIOS = {
     "rainy-week": "It pours from now on for a week, which nobody forecast for today",
     "butter-spike": "Vale Dairy's invoice comes early, with butter up sharply",
     "farm-invoice": "Hill Farm's handwritten-looking note for this week's eggs",
+    "sesame-substitution": "Millers Ltd swaps in another mill's flour, which may contain sesame",
 }
+
+# What Millers Ltd prints under the flour on the sesame-substitution invoice.
+SESAME_NOTE = "Substituted: Hillside Mill strong white flour. May contain sesame."
 
 
 def run_scenario(name: str) -> None:
@@ -576,6 +585,9 @@ def run_scenario(name: str) -> None:
         _log(f"Vale Dairy: butter from £{was:.2f} to £{now:.2f} a kg, invoice sent")
     elif name == "farm-invoice":
         supplier_invoice(BY_SUPPLIER["Hill Farm"])
+    elif name == "sesame-substitution":
+        supplier_invoice(BY_SUPPLIER["Millers Ltd"], notes={"FLOUR": SESAME_NOTE})
+        _log("Millers Ltd: flour from Hillside Mill this week, which may contain sesame")
     elif name == "missed-webhook":
         http_json(
             "POST",

@@ -14,6 +14,7 @@ from datetime import datetime
 
 from opendataframework import Agent, Notifications, Publisher
 
+from app.allergens import declared
 from app.clients import Clock
 from app.entities import Draft, Ingredient, IngredientPrice, Invoice
 from app.model import Model
@@ -43,12 +44,13 @@ def read_invoice(rows: list[list[str]]) -> dict | None:
 
     Expects what most suppliers send: ``Invoice no.`` and ``Date`` beside
     their values, a table headed ``Description``, ``Qty``, ``Unit``, ``Unit
-    price``, ``Amount``, and a ``Total`` row.
+    price``, ``Amount``, and a ``Total`` row. A row of one cell in the table
+    is a note about the line above it, such as a substitution.
 
     Returns:
         ``{"number", "date", "lines": [{"description", "quantity", "unit",
-        "unit_price", "amount"}], "total"}``, or ``None`` if it isn't laid
-        out that way.
+        "unit_price", "amount", "note"}], "total"}``, or ``None`` if it isn't
+        laid out that way.
     """
     found: dict = {"number": None, "date": None, "lines": [], "total": None}
     in_table = False
@@ -63,6 +65,9 @@ def read_invoice(rows: list[list[str]]) -> dict | None:
         elif len(row) >= 2 and labels[-2] == "total":
             found["total"] = money(row[-1])
             in_table = False
+        elif in_table and len(row) == 1 and found["lines"]:
+            note = found["lines"][-1]["note"]
+            found["lines"][-1]["note"] = f"{note} {row[0]}".strip()
         elif in_table and len(row) == 5:
             quantity, unit_price, amount = money(row[1]), money(row[3]), money(row[4])
             if None in (quantity, unit_price, amount):
@@ -74,6 +79,7 @@ def read_invoice(rows: list[list[str]]) -> dict | None:
                     "unit": row[2],
                     "unit_price": unit_price,
                     "amount": amount,
+                    "note": "",
                 }
             )
     if not found["lines"] or found["total"] is None:
@@ -87,8 +93,8 @@ def match_lines(
     """Match an invoice's lines to the supplier's ingredients, and check its sums.
 
     Returns:
-        The lines as ``{"ingredient", "quantity", "unit_price", "amount"}``,
-        and the problems found: a line that isn't an ingredient on the
+        The lines as ``{"ingredient", "quantity", "unit_price", "amount",
+        "note"}``, and the problems found: a line that isn't an ingredient on the
         sheet, a unit that differs, or an amount that isn't quantity times
         price. Empty problems mean the reading can be trusted.
     """
@@ -113,6 +119,7 @@ def match_lines(
                 "quantity": line["quantity"],
                 "unit_price": line["unit_price"],
                 "amount": line["amount"],
+                "note": line.get("note", ""),
             }
         )
     return matched, problems
@@ -190,6 +197,46 @@ def announce_prices(notifications: Notifications, invoice: Invoice, changes: lis
     )
 
 
+def announce_substitutions(
+    notifications: Notifications, invoice: Invoice, lines: list[dict], ingredients: Ingredients
+) -> list[dict]:
+    """Publish ``ingredients.changed`` for each line whose note declares an allergen.
+
+    A supplier that substitutes an ingredient says so under its line: "May
+    contain sesame". Recording what that means for the labels is
+    ``Labelling``'s job; this only says what the invoice declared.
+
+    Returns:
+        The changes published: ``{"ingredient", "name", "note", "allergens",
+        "invoice", "supplier"}``.
+    """
+    names = {i.code: i.name for i in ingredients.all()}
+    published = []
+    for line in lines:
+        found = declared(line.get("note", ""))
+        if not found:
+            continue
+        change = {
+            "ingredient": line["ingredient"],
+            "name": names.get(line["ingredient"], line["ingredient"]),
+            "note": line["note"],
+            "allergens": [{"allergen": a, "kind": k} for a, k in found],
+            "invoice": invoice.id,
+            "supplier": invoice.supplier,
+        }
+        what = ", ".join(f"{k} {a}" for a, k in found)
+        notifications.publish(
+            "ingredients.changed",
+            change,
+            summary=f"{invoice.supplier}: {change['name'].lower()} now {what}",
+            level="warning",
+            subject=Invoices,
+            record=invoice.id,
+        )
+        published.append(change)
+    return published
+
+
 _INVOICE_SYSTEM = """You read a bakery supplier's invoice. List each ingredient \
 delivered: its code (one of the codes given), the quantity in that ingredient's \
 unit, and the price per unit in pounds. Convert packs to units: a tray of 30 eggs \
@@ -220,14 +267,16 @@ _INVOICE_SCHEMA = {
 }
 
 
-@Publisher("prices.changed", "drafts.created")
+@Publisher("prices.changed", "ingredients.changed", "drafts.created")
 @Agent
 class InvoiceClerk:
     """Reads a supplier's invoice, and records what it charged for each ingredient.
 
     ``invoke(invoice_id)`` reads one invoice from Invoices. Rules read the
     typed ones; when they read it cleanly, its prices go straight into
-    IngredientPrices and ``prices.changed`` is published. One the rules
+    IngredientPrices and ``prices.changed`` is published, with
+    ``ingredients.changed`` for a line whose note declares an allergen (a
+    substitution). One the rules
     can't read goes to the model, if there is one, and its reading becomes a
     draft to confirm; with no model, a draft for a person to review.
     """
@@ -291,6 +340,7 @@ class InvoiceClerk:
                     invoice, lines, self.ingredients, self.prices, self.invoices
                 )
                 announce_prices(self.notifications, invoice, changes)
+                announce_substitutions(self.notifications, invoice, lines, self.ingredients)
                 return {"invoice": invoice.id, "status": "recorded", "lines": lines, "draft": None}
         lines, author, note = [], "nobody", "; ".join(problems).capitalize() + "."
         if self.model.available():

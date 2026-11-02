@@ -9,6 +9,15 @@ the webhook that brought a message in to the draft it became.
 from opendataframework import Component, Logger, Notification, Notifications, Publisher, Subscriber
 
 from app.agents import OrderDesk
+from app.allergens import (
+    AllergenOfficer,
+    ingredient_allergens,
+    label_text,
+    product_labels,
+    trace,
+)
+from app.clients import Clock
+from app.entities import IngredientAllergen
 from app.margins import (
     AccountManager,
     below_cost,
@@ -19,6 +28,7 @@ from app.margins import (
 )
 from app.purchasing import InvoiceClerk
 from app.repositories import (
+    Allergens,
     Contracts,
     IngredientPrices,
     Ingredients,
@@ -193,3 +203,127 @@ class Renegotiating:
 def _pounds(value: float) -> str:
     """Return an amount as ``"£0.12"``, or ``"-£0.07"`` when it's negative."""
     return f"{'-' if value < 0 else ''}£{abs(value):.2f}"
+
+
+@Publisher("allergens.changed")
+@Subscriber("ingredients.changed", deliver="background")
+@Component
+class Labelling:
+    """Records an allergen a supplier declared, and says which labels it changes.
+
+    Recording it errs on the safe side, so it happens at once, before
+    anyone is told: every label the bakery works out from then on declares
+    it. When it changes a product's label, ``allergens.changed`` names the
+    products and the restaurants taking them.
+    """
+
+    def __init__(
+        self,
+        clock: Clock,
+        ingredients: Ingredients,
+        allergens: Allergens,
+        recipes: Recipes,
+        products: Products,
+        standing_orders: StandingOrders,
+        notifications: Notifications,
+    ) -> None:
+        """Store where allergens are recorded and what labels are worked out from.
+
+        Args:
+            clock: The demo clock, for when an allergen was recorded.
+            ingredients: What an ingredient can be.
+            allergens: Where they're recorded.
+            recipes: What goes into each product.
+            products: The products' names.
+            standing_orders: Which restaurants take each product.
+            notifications: Bound to this component.
+        """
+        self.clock, self.ingredients, self.allergens = clock, ingredients, allergens
+        self.recipes, self.products, self.standing_orders = recipes, products, standing_orders
+        self.notifications = notifications
+
+    def _labels(self) -> dict[str, dict]:
+        """Return each product's label, as the allergens recorded now make it."""
+        names = {p.sku: p.name for p in self.products.all()}
+        return product_labels(self.recipes, ingredient_allergens(self.allergens), names)
+
+    def on_notification(self, notification: Notification) -> None:
+        """Record what the invoice declared, and announce the labels it changed."""
+        code = notification.payload["ingredient"]
+        known = ingredient_allergens(self.allergens).get(code, {})
+        before = self._labels()
+        for a in notification.payload["allergens"]:
+            if known.get(a["allergen"]) in ("contains", a["kind"]):
+                continue  # already declared, as strongly
+            self.allergens.save(
+                IngredientAllergen(
+                    id=None,
+                    ingredient=code,
+                    allergen=a["allergen"],
+                    kind=a["kind"],
+                    source=f"invoice {notification.payload.get('invoice')}",
+                    since=self.clock.now().timestamp(),
+                )
+            )
+        after = self._labels()
+        changed = [sku for sku in after if after[sku] != before.get(sku)]
+        if not changed:
+            return
+        found = trace(
+            code, self.ingredients, self.allergens, self.recipes, self.products,
+            self.standing_orders,
+        )  # fmt: skip
+        restaurants = [
+            r["restaurant"] for r in found["restaurants"] if set(r["weekly"]) & set(changed)
+        ]
+        what = ", ".join(f"{a['kind']} {a['allergen']}" for a in notification.payload["allergens"])
+        names = ", ".join(after[sku]["name"].lower() for sku in changed)
+        self.notifications.publish(
+            "allergens.changed",
+            {
+                "ingredient": code,
+                "allergens": list(notification.payload["allergens"]),
+                "products": [
+                    {"sku": sku, "name": after[sku]["name"], "before": label_text(before[sku]),
+                     "after": label_text(after[sku])}
+                    for sku in changed
+                ],
+                "restaurants": restaurants,
+            },
+            summary=(
+                f"{len(changed)} labels now {what}: {names}. "
+                f"{len(restaurants)} restaurants to tell"
+            ),
+            level="warning",
+            subject=Allergens,
+        )  # fmt: skip
+
+    def details(self) -> dict[str, str]:
+        """Return the allergens invoices declared, beyond the sheet's."""
+        added = [a for a in self.allergens.all() if a.source != "sheet"]
+        names = {i.code: i.name for i in self.ingredients.all()}
+        return {
+            "declared by invoices": ", ".join(
+                f"{names.get(a.ingredient, a.ingredient)}: {a.kind} {a.allergen} ({a.source})"
+                for a in added
+            )
+            or "none",
+        }
+
+
+@Subscriber("allergens.changed", deliver="background")
+@Component
+class AllergenNotices:
+    """Has the allergen-officer draft the notices for each ingredient whose allergens changed."""
+
+    def __init__(self, allergen_officer: AllergenOfficer) -> None:
+        """Store the agent that drafts the notices.
+
+        Args:
+            allergen_officer: Drafts a notice for each restaurant to tell.
+        """
+        self.allergen_officer = allergen_officer
+
+    def on_notification(self, notification: Notification) -> None:
+        """Draft the notices for the ingredient the notification names."""
+        self.allergen_officer.invoke(ingredient=notification.payload["ingredient"])

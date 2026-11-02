@@ -67,6 +67,7 @@ class Line:
     code: str
     quantity: float
     unit_price: float
+    note: str = ""  # printed under the line: a substitution, say
 
     @property
     def amount(self) -> float:
@@ -74,8 +75,16 @@ class Line:
         return round(self.quantity * self.unit_price, 2)
 
 
-def delivery(supplier: Supplier, prices: dict[str, float], r: random.Random) -> list[Line]:
-    """Return a week's delivery from ``supplier``: each of its ingredients, at ``prices``."""
+def delivery(
+    supplier: Supplier,
+    prices: dict[str, float],
+    r: random.Random,
+    notes: dict[str, str] | None = None,
+) -> list[Line]:
+    """Return a week's delivery from ``supplier``: each of its ingredients, at ``prices``.
+
+    ``notes`` puts a note under an ingredient's line, by its code.
+    """
     lines = []
     for ingredient in INGREDIENTS:
         if ingredient.supplier != supplier.name:
@@ -83,7 +92,8 @@ def delivery(supplier: Supplier, prices: dict[str, float], r: random.Random) -> 
         quantity = ingredient.weekly * r.uniform(0.8, 1.2)
         # Eggs come in trays of 30.
         quantity = round(quantity / 30) * 30 if ingredient.unit == "each" else round(quantity, 1)
-        lines.append(Line(ingredient.code, quantity, prices[ingredient.code]))
+        note = (notes or {}).get(ingredient.code, "")
+        lines.append(Line(ingredient.code, quantity, prices[ingredient.code], note))
     return lines
 
 
@@ -130,6 +140,9 @@ def invoice_pdf(supplier: Supplier, number: str, day: date, lines: list[Line]) -
             (490, y, "F1", 10, _money(line.amount)),
         ]
         y -= 18
+        if line.note:
+            items.append((60, y + 4, "F3", 9, line.note))
+            y -= 14
     items += [
         (410, y - 10, "F2", 11, "Total"),
         (490, y - 10, "F2", 11, _money(total(lines))),

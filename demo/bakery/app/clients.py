@@ -194,6 +194,7 @@ class Drive:
         "contracts.csv",
         "ingredients.csv",
         "recipes.csv",
+        "allergens.csv",
     )
 
     def __init__(self, config: Config) -> None:

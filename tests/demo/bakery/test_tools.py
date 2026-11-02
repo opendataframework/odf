@@ -30,6 +30,7 @@ def test_write_sheets_writes_each_sheet_once(tmp_path):
     again = data.write_sheets(tmp_path, 7, "2026-12-31")
 
     assert sorted(written) == [
+        "allergens.csv",
         "contracts.csv",
         "ingredients.csv",
         "products.csv",

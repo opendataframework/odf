@@ -422,3 +422,26 @@ class IngredientPrice:
     unit_price: float
     supplier: str
     invoice: int
+
+
+@Entity
+@dataclass
+class IngredientAllergen:
+    """An allergen an ingredient contains, or may contain.
+
+    Attributes:
+        id: Primary key.
+        ingredient: The ingredient's code.
+        allergen: One of the 14 a label must declare: ``"gluten"``, ``"sesame"``, ...
+        kind: ``"contains"`` or ``"may contain"``.
+        source: ``"sheet"`` (from the allergens sheet), or the invoice that
+            declared it, such as ``"invoice 31"``.
+        since: When it was recorded, as a Unix time.
+    """
+
+    id: int | None
+    ingredient: str
+    allergen: str
+    kind: str
+    source: str
+    since: float

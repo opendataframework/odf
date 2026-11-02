@@ -58,6 +58,7 @@ def confirm_draft(
     - An invoice's reading has its prices recorded, and ``prices.changed``
       published.
     - New prices are emailed to the restaurant.
+    - An allergen notice is emailed to each restaurant it's for.
 
     Args:
         draft_id: The draft's id in Drafts.
@@ -132,6 +133,13 @@ def confirm_draft(
             raise ValueError(f"{draft.restaurant} isn't on the restaurants sheet any more")
         mail.send(found[0].email, f"Our prices from {label(_day(draft.date))}", draft.reply)
         replied = "email"
+    elif draft.kind == "allergen-notice":
+        missing = [n["restaurant"] for n in changes["notices"] if not n["email"]]
+        if missing:
+            raise ValueError(f"no email address for {', '.join(missing)}")
+        for notice in changes["notices"]:
+            mail.send(notice["email"], notice["subject"], notice["text"])
+        replied = "email"
     draft.status = "confirmed"
     drafts.save(draft)
     done = {
@@ -140,6 +148,8 @@ def confirm_draft(
         "invoice": "prices recorded",
         "renegotiation": "emailed",
     }.get(draft.kind, "confirmed")
+    if draft.kind == "allergen-notice":
+        done = f"{len(changes['notices'])} notices emailed"
     sent = f", reply sent by {replied}" if replied and draft.kind == "order-change" else ""
     notifications.publish(
         "drafts.confirmed",

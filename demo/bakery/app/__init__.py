@@ -2,6 +2,7 @@
 
 from app import (
     agents,
+    allergens,
     clients,
     drafts,
     entities,
@@ -20,6 +21,7 @@ from app import (
 
 __all__ = [
     "agents",
+    "allergens",
     "clients",
     "drafts",
     "entities",

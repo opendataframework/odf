@@ -21,6 +21,7 @@ from app.entities import (
     Draft,
     Forecast,
     Ingredient,
+    IngredientAllergen,
     IngredientPrice,
     Invoice,
     Leftover,
@@ -324,6 +325,15 @@ class Drafts(_Table):
         )
         return found[0] if found else None
 
+    def open_titled(self, kind: str, title: str) -> Draft | None:
+        """Return the ``kind`` draft titled ``title`` still waiting on a person, if any."""
+        found = self._select(
+            "WHERE kind = ? AND title = ? AND status IN (?, ?)",
+            (kind, title, *self.OPEN),
+            order="id",
+        )
+        return found[0] if found else None
+
     def open_for(self, kind: str, day: str) -> Draft | None:
         """Return the ``kind`` draft for ``day`` still waiting on a person, if any."""
         found = self._select(
@@ -480,3 +490,15 @@ class IngredientPrices(_Table):
     def data_view(self) -> TimeseriesView:
         """Chart each ingredient's price over time."""
         return TimeseriesView(field="priced_at", fields=("unit_price",), group="name")
+
+
+@Storage
+@Repository(IngredientAllergen)
+class Allergens(_Table):
+    """What each ingredient contains or may contain: the sheet's, and what invoices declared."""
+
+    table, entity = "allergens", IngredientAllergen
+
+    def all(self) -> list[IngredientAllergen]:
+        """Return every allergen, by ingredient."""
+        return self._select(order="ingredient, allergen, id")

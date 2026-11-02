@@ -81,6 +81,10 @@ CREATE TABLE IF NOT EXISTS ingredient_prices (
     invoice INTEGER NOT NULL
 );
 CREATE INDEX IF NOT EXISTS ingredient_prices_latest ON ingredient_prices (ingredient, priced_at);
+CREATE TABLE IF NOT EXISTS allergens (
+    id INTEGER PRIMARY KEY AUTOINCREMENT, ingredient TEXT NOT NULL, allergen TEXT NOT NULL,
+    kind TEXT NOT NULL, source TEXT NOT NULL, since REAL NOT NULL
+);
 CREATE TABLE IF NOT EXISTS delivery_runs (
     id INTEGER PRIMARY KEY AUTOINCREMENT, date TEXT NOT NULL, stop INTEGER NOT NULL,
     restaurant TEXT NOT NULL, address TEXT NOT NULL, lat REAL NOT NULL, lon REAL NOT NULL,

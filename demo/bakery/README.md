@@ -151,6 +151,17 @@ Things to try:
   invoice is a few handwritten-looking lines, which the rules can't read: a
   model reads it into a draft to confirm, and with no model, it waits for a
   person. Open it in `Invoices` to see the PDF.
+- **Swap the flour** with the sesame-substitution scenario. Millers Ltd's
+  invoice says, under the flour, that this week's comes from another mill
+  and may contain sesame. The invoice-clerk records the prices as usual, and
+  a warning says the flour now may contain sesame. `Labelling` records that
+  at once (every label then says so), and a second warning names the seven
+  labels it changed and the restaurants taking those products. The
+  **allergen-officer** drafts one notice per restaurant, naming its own
+  products and their labels, with the label changes for the café. Confirming
+  emails every notice (watch Mailpit). **labels** gives every product's
+  label, and **trace-ingredient** follows an ingredient to the products it
+  goes into and the restaurants taking them.
 - **Make it rain** with the console's rainy-week scenario. Nobody forecast
   today's rain, so the café sells less than it baked and leftovers grow;
   tomorrow's forecast knows, and bakes less for the café.
@@ -187,7 +198,7 @@ Each kind of integration is one `odf` component:
 |---|---|---|
 | Push | `WebhookReceiver` (`@Api @Service`) checks each webhook's signature and hands each order or message on | POS, messenger |
 | Poll | `Mailbox` (`@Messaging @Service`) reads new mail over POP3, leaving it on the server; an email with a PDF attached is a supplier's invoice | Mailpit |
-| Files | `SharedDrive` (`@Service`) re-imports the sheets when one changes: products, restaurants, standing orders, contracts, ingredients and recipes | the shared drive |
+| Files | `SharedDrive` (`@Service`) re-imports the sheets when one changes: products, restaurants, standing orders, contracts, ingredients, recipes and allergens | the shared drive |
 | Schedule | `Scheduler` (`@Service`) onboards once, then each day closes the café at 15:00, runs the night run at 21:00 and reconciles the POS at 23:30, on the demo clock | POS |
 | Pull | `Weather` (`@Api @Component`) reads the weather forecast that the café's forecast uses | the world, in Open-Meteo's shape |
 | Outbound | Confirming a draft sends its reply through `Messenger` or `Mail` (SMTP), and new prices by `Mail` | messenger, Mailpit |
@@ -211,6 +222,8 @@ shows on the topology, and its notice's **Show logs** finds it.
 | `invoices.received` | yes: "Vale Dairy: Invoice VAL-2026-0005" |
 | `prices.changed` | only when a price moved 5% or more, a warning from a 10% rise: "Vale Dairy: butter up 55% (£7.20 to £11.15 a kg)" |
 | `margins.below-cost` | yes, a warning: "2 contracts now below cost: The Fig Tree's brioche, Olive & Ash's croissant" |
+| `ingredients.changed` | yes, a warning: "Millers Ltd: strong white flour now may contain sesame" |
+| `allergens.changed` | yes, a warning: "7 labels now may contain sesame: baguette, brioche, ... 8 restaurants to tell" |
 | `night-run.done` | yes: "Night run for Tue 3 Nov: bake 645 items, 8 deliveries" |
 
 ## Agents draft, people confirm
@@ -221,6 +234,7 @@ shows on the topology, and its notice's **Show logs** finds it.
 | `specials` | `close-cafe` at 15:00, or a person | rules pick the dishes and prices; the model only writes the lines | tomorrow's specials board |
 | `invoice-clerk` | `Purchasing`, when an invoice arrives; or a person, on any invoice | rules for the typed invoices, then the model, else marked for review | nothing when the rules read it cleanly: it records the prices; otherwise its reading, to confirm |
 | `account-manager` | `Renegotiating`, when a contract falls below cost; or a person | rules work out the prices; the model only writes the email | an email to the restaurant asking for new prices |
+| `allergen-officer` | `AllergenNotices`, when a label changes; or a person, on an ingredient | rules only: an allergen notice's wording has to be exact | a notice for each restaurant taking what changed, and the café's label changes |
 
 `Drafting` (`app/reactions.py`) is a `@Subscriber` of `messages.received`,
 delivered in the background: the `odf` runtime subscribes it while it runs,
@@ -241,6 +255,12 @@ is a fact, not a decision, so a clean reading is recorded without a draft:
 nothing goes out, and nobody is committed to anything. A model's reading,
 and everything that leaves the bakery, waits for a person.
 
+An allergen a supplier declares runs a chain of its own: the invoice-clerk
+announces it (`ingredients.changed`), `Labelling` records it and names the
+labels it changes (`allergens.changed`), and `AllergenNotices` has the
+allergen-officer draft the notices. Recording the allergen doesn't wait for
+anyone: it errs on the safe side. Telling the restaurants does.
+
 `Model` (`app/model.py`) is a local Ollama, or nothing. An agent asks it only
 what its rules can't read, checks what it answers (products that exist, dates
 in range, sensible quantities), and marks anything it isn't sure of for review
@@ -253,7 +273,9 @@ weather and bank holidays), `bake_sheet` (the restaurants' standing orders
 with every confirmed change, plus the café's forecast and a tenth more),
 `plan_deliveries` (earliest kitchen first) and `count_leftovers`; and, in
 `app/margins.py`, each product's unit cost (its recipe at the latest invoiced
-prices, bake time included), `margins` and `what_if`.
+prices, bake time included), `margins` and `what_if`; and, in
+`app/allergens.py`, each product's label from its recipe (`labels`), and
+`trace_ingredient`.
 
 ## Structure
 
@@ -270,7 +292,8 @@ bakery/
 │   ├── tasks.py          # history imports, POS reconciliation
 │   ├── pipelines.py      # Onboard, NightRun, CloseCafe
 │   ├── agents.py         # order-desk, specials
-│   ├── reactions.py      # Drafting, Purchasing, Costing, Renegotiating: what happens on its own
+│   ├── reactions.py      # Drafting, Purchasing, Costing, Renegotiating, Labelling, AllergenNotices
+│   ├── allergens.py      # labels, trace_ingredient, allergen-officer
 │   ├── purchasing.py     # invoice-clerk, and the rules for reading an invoice
 │   ├── margins.py        # unit costs, margins, what_if, the margin chart, account-manager
 │   ├── pdf.py            # reading a PDF's text, with no PDF library

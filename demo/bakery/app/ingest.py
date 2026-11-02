@@ -16,6 +16,7 @@ from app.entities import (
     CafeSale,
     Contract,
     Ingredient,
+    IngredientAllergen,
     Invoice,
     Message,
     Product,
@@ -24,6 +25,7 @@ from app.entities import (
     StandingOrder,
 )
 from app.repositories import (
+    Allergens,
     CafeSales,
     Contracts,
     Ingredients,
@@ -177,6 +179,7 @@ def import_sheets(
     contracts: Contracts,
     ingredients: Ingredients,
     recipes: Recipes,
+    allergens: Allergens,
     messages: Messages,
     notifications: Notifications,
     announce: bool = True,
@@ -196,6 +199,8 @@ def import_sheets(
         contracts: Replaced from ``contracts.csv``, injected.
         ingredients: Replaced from ``ingredients.csv``, injected.
         recipes: Replaced from ``recipes.csv``, injected.
+        allergens: The sheet's replaced from ``allergens.csv``; those an
+            invoice declared are kept, injected.
         messages: Matched to the restaurants again, injected.
         notifications: Bound to this function, injected.
         announce: ``False`` while onboarding: imported, not announced.
@@ -206,7 +211,7 @@ def import_sheets(
     with _IMPORTING:
         return _import_sheets(
             drive, products, restaurants, standing_orders, contracts, ingredients, recipes,
-            messages, notifications, announce,
+            allergens, messages, notifications, announce,
         )  # fmt: skip
 
 
@@ -218,6 +223,7 @@ def _import_sheets(
     contracts: Contracts,
     ingredients: Ingredients,
     recipes: Recipes,
+    allergens: Allergens,
     messages: Messages,
     notifications: Notifications,
     announce: bool,
@@ -260,6 +266,14 @@ def _import_sheets(
         "recipe lines": recipes.replace_all(
             RecipeLine(None, r["sku"], r["ingredient"], float(r["quantity"]))
             for r in drive.rows("recipes.csv")
+        ),
+        "allergens": allergens.replace_where(
+            "source",
+            "sheet",
+            (
+                IngredientAllergen(None, r["ingredient"], r["allergen"], r["kind"], "sheet", 0.0)
+                for r in drive.rows("allergens.csv")
+            ),
         ),
     }
     messages.match_restaurants(restaurants.all())

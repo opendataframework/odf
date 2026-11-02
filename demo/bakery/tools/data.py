@@ -234,6 +234,24 @@ INGREDIENTS: tuple[Ingredient, ...] = (
 
 BY_INGREDIENT = {i.code: i for i in INGREDIENTS}
 
+# The 14 allergens UK food law says a label must declare.
+ALLERGENS = (
+    "celery", "gluten", "crustaceans", "eggs", "fish", "lupin", "milk", "molluscs", "mustard",
+    "nuts", "peanuts", "sesame", "soya", "sulphites",
+)  # fmt: skip
+
+# What each ingredient's supplier declares: (ingredient, allergen, "contains" or "may contain").
+INGREDIENT_ALLERGENS: tuple[tuple[str, str, str], ...] = (
+    ("FLOUR", "gluten", "contains"),
+    ("RYE-FLOUR", "gluten", "contains"),
+    ("BUTTER", "milk", "contains"),
+    ("MILK", "milk", "contains"),
+    ("EGGS", "eggs", "contains"),
+    ("CHOCOLATE", "milk", "contains"),
+    ("CHOCOLATE", "soya", "contains"),
+    ("CHOCOLATE", "nuts", "may contain"),
+)
+
 # What one of each wholesale product takes: (sku, ingredient, quantity in its unit).
 RECIPES: tuple[tuple[str, str, float], ...] = (
     ("SD-LOAF", "FLOUR", 0.5), ("SD-LOAF", "SALT", 0.01), ("SD-LOAF", "BAKE-TIME", 4),
@@ -333,6 +351,7 @@ def write_sheets(folder: Path, seed: int, contracts_until: str) -> list[str]:
             ("sku", "ingredient", "quantity"),
             [(sku, ingredient, f"{quantity:g}") for sku, ingredient, quantity in RECIPES],
         ),
+        "allergens.csv": (("ingredient", "allergen", "kind"), list(INGREDIENT_ALLERGENS)),
     }
     written = []
     for name, (header, rows) in sheets.items():

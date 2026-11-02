@@ -7,6 +7,7 @@ from app import services
 from app.clients import Drive, Mail, Messenger, Pos
 from app.ingest import gist, import_sheets, ingest_message, ingest_sale
 from app.repositories import (
+    Allergens,
     CafeSales,
     Contracts,
     Ingredients,
@@ -80,6 +81,7 @@ def _sheets(drive, db, hub, announce=False):
         Contracts(db),
         Ingredients(db),
         Recipes(db),
+        Allergens(db),
         Messages(db),
         hub.bound_to("function.import-sheets", Publisher.of(import_sheets)),
         announce=announce,
@@ -477,5 +479,7 @@ def test_config_hides_only_the_sqlite_connection():
         "purchasing",
         "costing",
         "renegotiating",
+        "labelling",
+        "allergen-notices",
     ]
     assert config["service"]["webhook-receiver"]["port"] == 4750

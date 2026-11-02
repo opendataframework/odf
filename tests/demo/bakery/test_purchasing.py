@@ -21,6 +21,7 @@ from app.pdf import pdf_rows, pdf_text
 from app.purchasing import InvoiceClerk, read_invoice
 from app.reactions import Costing, Purchasing, Renegotiating
 from app.repositories import (
+    Allergens,
     BakeSheets,
     Contracts,
     Drafts,
@@ -56,6 +57,7 @@ KEYS = {
     Drafts: "repository.drafts",
     Contracts: "repository.contracts",
     Products: "repository.products",
+    Allergens: "repository.allergens",
 }
 SHEET_PRICES = {i.code: i.price for i in data.INGREDIENTS}
 TUESDAY = date(2026, 11, 3)
@@ -128,6 +130,7 @@ def bakery(drive_path, db, hub):
         "contracts": Contracts(db),
         "ingredients": Ingredients(db),
         "recipes": Recipes(db),
+        "allergens": Allergens(db),
         "messages": Messages(db),
         "invoices": Invoices(db),
         "prices": IngredientPrices(db),
@@ -140,6 +143,7 @@ def bakery(drive_path, db, hub):
         *(repos[k] for k in ("products", "restaurants", "standing_orders", "contracts")),
         repos["ingredients"],
         repos["recipes"],
+        repos["allergens"],
         repos["messages"],
         hub.bound_to("function.import-sheets", Publisher.of(import_sheets)),
         announce=False,
@@ -634,7 +638,7 @@ def test_the_drive_imports_quietly_at_start_a_sheet_never_imported(bakery, db, d
         LogManager().logger_for("service.shared-drive"),
     )
 
-    assert watcher.never_imported() == ["ingredients.csv", "recipes.csv"]
+    assert watcher.never_imported() == ["ingredients.csv", "recipes.csv"]  # allergens are there
     watcher.catch_up()
     assert calls == [{"announce": False}]
 

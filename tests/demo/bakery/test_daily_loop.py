@@ -24,6 +24,7 @@ from app.planning import (
 )
 from app.reactions import Drafting
 from app.repositories import (
+    Allergens,
     BakeSheets,
     CafeSales,
     Contracts,
@@ -176,6 +177,7 @@ def bakery(tmp_path, db, hub):
         repos["contracts"],
         repos["ingredients"],
         repos["recipes"],
+        Allergens(db),
         repos["messages"],
         hub.bound_to("function.import-sheets", Publisher.of(import_sheets)),
         announce=False,
