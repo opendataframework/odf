@@ -136,6 +136,21 @@ Things to try:
   forecasts tomorrow's café, works out the bake sheet, and plans the
   delivery run, which `DeliveryRuns` shows on a map. Either runs any time
   with **Execute**.
+- **Spike the price of butter** with the console's butter-spike scenario.
+  Vale Dairy's invoice arrives in Mailpit with a PDF attached, and a notice
+  says so. The **invoice-clerk** reads the PDF, records each ingredient's
+  price in `IngredientPrices`, and a warning names the rise. `Costing` works
+  out what each restaurant's contract leaves at the new price, and a second
+  warning names the two that no longer cover their cost. For each of those
+  restaurants, the **account-manager** drafts an email asking for new
+  prices: cost plus 15%, from the Monday after next. Confirming it emails
+  the restaurant (watch Mailpit). `Costing`'s **Chart** shows the weekly
+  margin by restaurant; **what-if** answers "what if butter cost £12?"
+  without an invoice, and **margins** lists every contract's margin.
+- **Get the farm's egg note** with the farm-invoice scenario. Hill Farm's
+  invoice is a few handwritten-looking lines, which the rules can't read: a
+  model reads it into a draft to confirm, and with no model, it waits for a
+  person. Open it in `Invoices` to see the PDF.
 - **Make it rain** with the console's rainy-week scenario. Nobody forecast
   today's rain, so the café sells less than it baked and leftovers grow;
   tomorrow's forecast knows, and bakes less for the café.
@@ -145,7 +160,8 @@ Things to try:
   with no notice (a sale every few minutes isn't news), but the topology shows
   the call.
 - **Run a scenario** from the world console: a party order, an emailed order
-  change, a café rush, or a missed webhook. The nightly reconciliation (at
+  change, a café rush, or a missed webhook. Suppliers also email their weekly
+  invoices on their own, at 09:00 on their day. The nightly reconciliation (at
   23:30 on the demo clock) finds the sale whose webhook never came.
 - **Edit a sheet** on the shared drive. Copy one out with `docker compose cp
   bakery:/shared-drive/restaurants.csv .`, change it, and copy it back with
@@ -170,14 +186,15 @@ Each kind of integration is one `odf` component:
 | How | Component | From |
 |---|---|---|
 | Push | `WebhookReceiver` (`@Api @Service`) checks each webhook's signature and hands each order or message on | POS, messenger |
-| Poll | `Mailbox` (`@Messaging @Service`) reads new mail over POP3, leaving it on the server | Mailpit |
-| Files | `SharedDrive` (`@Service`) re-imports the sheets when one changes | the shared drive |
+| Poll | `Mailbox` (`@Messaging @Service`) reads new mail over POP3, leaving it on the server; an email with a PDF attached is a supplier's invoice | Mailpit |
+| Files | `SharedDrive` (`@Service`) re-imports the sheets when one changes: products, restaurants, standing orders, contracts, ingredients and recipes | the shared drive |
 | Schedule | `Scheduler` (`@Service`) onboards once, then each day closes the café at 15:00, runs the night run at 21:00 and reconciles the POS at 23:30, on the demo clock | POS |
 | Pull | `Weather` (`@Api @Component`) reads the weather forecast that the café's forecast uses | the world, in Open-Meteo's shape |
-| Outbound | Confirming a draft sends its reply through `Messenger` or `Mail` (SMTP) | messenger, Mailpit |
+| Outbound | Confirming a draft sends its reply through `Messenger` or `Mail` (SMTP), and new prices by `Mail` | messenger, Mailpit |
 
 Whatever brings an item in, the item goes through one function in
-`app/ingest.py` (`ingest_message`, `ingest_sale`, `import_sheets`). That
+`app/ingest.py` (`ingest_message`, `ingest_sale`, `ingest_invoice`,
+`import_sheets`). That
 function saves it, takes it only once (a webhook retried does no harm), and
 publishes a notification. Each item is a call of its own, so it's logged, it
 shows on the topology, and its notice's **Show logs** finds it.
@@ -191,6 +208,9 @@ shows on the topology, and its notice's **Show logs** finds it.
 | `bakery.onboarded` | yes, once |
 | `drafts.created` | yes: "Order change for Le Petit awaits confirmation", a warning when it needs review |
 | `drafts.confirmed`, `drafts.rejected` | yes |
+| `invoices.received` | yes: "Vale Dairy: Invoice VAL-2026-0005" |
+| `prices.changed` | only when a price moved 5% or more, a warning from a 10% rise: "Vale Dairy: butter up 55% (£7.20 to £11.15 a kg)" |
+| `margins.below-cost` | yes, a warning: "2 contracts now below cost: The Fig Tree's brioche, Olive & Ash's croissant" |
 | `night-run.done` | yes: "Night run for Tue 3 Nov: bake 645 items, 8 deliveries" |
 
 ## Agents draft, people confirm
@@ -199,6 +219,8 @@ shows on the topology, and its notice's **Show logs** finds it.
 |---|---|---|---|
 | `order-desk` | `Drafting`, when a restaurant's message arrives; or a person, on any message (UI, MCP) | rules for the usual phrasings, then the model, else marked for review | an order change and its reply |
 | `specials` | `close-cafe` at 15:00, or a person | rules pick the dishes and prices; the model only writes the lines | tomorrow's specials board |
+| `invoice-clerk` | `Purchasing`, when an invoice arrives; or a person, on any invoice | rules for the typed invoices, then the model, else marked for review | nothing when the rules read it cleanly: it records the prices; otherwise its reading, to confirm |
+| `account-manager` | `Renegotiating`, when a contract falls below cost; or a person | rules work out the prices; the model only writes the email | an email to the restaurant asking for new prices |
 
 `Drafting` (`app/reactions.py`) is a `@Subscriber` of `messages.received`,
 delivered in the background: the `odf` runtime subscribes it while it runs,
@@ -208,6 +230,16 @@ own whose cause is the message's notification, so the logs and the trace
 lead from the message to its draft. History caught up on (the first
 mailbox check, onboarding) is saved without a notification, so old messages
 don't all become drafts at once.
+
+The same runs for invoices, a chain of three reactions in
+`app/reactions.py`, each a call caused by the notification before it:
+`Purchasing` has the invoice-clerk read each invoice as it arrives; once its
+prices are recorded, `Costing` works out the margins again and names any
+contract that newly falls below cost; and `Renegotiating` has the
+account-manager draft new prices for each restaurant it names. An invoice
+is a fact, not a decision, so a clean reading is recorded without a draft:
+nothing goes out, and nobody is committed to anything. A model's reading,
+and everything that leaves the bakery, waits for a person.
 
 `Model` (`app/model.py`) is a local Ollama, or nothing. An agent asks it only
 what its rules can't read, checks what it answers (products that exist, dates
@@ -219,7 +251,9 @@ The numbers a person checks a draft against are plain arithmetic, in
 `app/planning.py`: `forecast` (the weekday's average over six weeks, times the
 weather and bank holidays), `bake_sheet` (the restaurants' standing orders
 with every confirmed change, plus the café's forecast and a tenth more),
-`plan_deliveries` (earliest kitchen first) and `count_leftovers`.
+`plan_deliveries` (earliest kitchen first) and `count_leftovers`; and, in
+`app/margins.py`, each product's unit cost (its recipe at the latest invoiced
+prices, bake time included), `margins` and `what_if`.
 
 ## Structure
 
@@ -236,12 +270,15 @@ bakery/
 │   ├── tasks.py          # history imports, POS reconciliation
 │   ├── pipelines.py      # Onboard, NightRun, CloseCafe
 │   ├── agents.py         # order-desk, specials
-│   ├── reactions.py      # Drafting: drafts each restaurant's message as it arrives
+│   ├── reactions.py      # Drafting, Purchasing, Costing, Renegotiating: what happens on its own
+│   ├── purchasing.py     # invoice-clerk, and the rules for reading an invoice
+│   ├── margins.py        # unit costs, margins, what_if, the margin chart, account-manager
+│   ├── pdf.py            # reading a PDF's text, with no PDF library
 │   ├── drafts.py         # confirm_draft, reject_draft
 │   ├── rules.py          # what the agents read without a model
 │   ├── model.py          # Model: a local Ollama, or nothing
 │   ├── planning.py       # forecast, bake_sheet, plan_deliveries, count_leftovers
-│   ├── repositories.py   # Products, Restaurants (map), Messages, Drafts, DeliveryRuns (map), ...
+│   ├── repositories.py   # Products, Restaurants (map), Messages, Drafts, Invoices (PDFs), IngredientPrices (chart), ...
 │   ├── entities.py
 │   ├── storages.py       # one SQLite database
 │   └── settings.py       # environment over config.toml
@@ -249,6 +286,7 @@ bakery/
     ├── world.py          # demo clock, actors, weather, history, scenarios, console
     ├── pos.py            # till, REST API, signed webhooks with retries
     ├── messenger.py      # chats, signed webhooks, send and history APIs
+    ├── invoices.py       # the suppliers' invoices, as PDFs, with a tiny PDF writer
     ├── common.py, data.py
     └── Dockerfile
 ```

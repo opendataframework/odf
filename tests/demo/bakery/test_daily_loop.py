@@ -30,10 +30,14 @@ from app.repositories import (
     DeliveryRuns,
     Drafts,
     Forecasts,
+    IngredientPrices,
+    Ingredients,
+    Invoices,
     Leftovers,
     Messages,
     OrderChanges,
     Products,
+    Recipes,
     Restaurants,
     StandingOrders,
 )
@@ -159,6 +163,10 @@ def bakery(tmp_path, db, hub):
         "sheets": BakeSheets(db),
         "leftovers": Leftovers(db),
         "runs": DeliveryRuns(db),
+        "ingredients": Ingredients(db),
+        "recipes": Recipes(db),
+        "invoices": Invoices(db),
+        "prices": IngredientPrices(db),
     }
     import_sheets(
         drive,
@@ -166,6 +174,8 @@ def bakery(tmp_path, db, hub):
         repos["restaurants"],
         repos["standing_orders"],
         repos["contracts"],
+        repos["ingredients"],
+        repos["recipes"],
         repos["messages"],
         hub.bound_to("function.import-sheets", Publisher.of(import_sheets)),
         announce=False,
@@ -214,6 +224,10 @@ def _confirm(bakery, hub, draft_id, messenger=None, mail=None, rebaked=None):
         bakery["messages"],
         bakery["order_changes"],
         bakery["sheets"],
+        bakery["restaurants"],
+        bakery["invoices"],
+        bakery["ingredients"],
+        bakery["prices"],
         messenger or FakeSender(),
         mail or FakeSender(),
         hub.bound_to("function.confirm-draft", Publisher.of(confirm_draft)),
@@ -648,6 +662,7 @@ def test_reject_keeps_the_reason_and_puts_the_message_back(bakery, hub):
         draft_id,
         bakery["drafts"],
         bakery["messages"],
+        bakery["invoices"],
         hub.bound_to("function.reject-draft", Publisher.of(reject_draft)),
         reason="Called them",
     )
@@ -656,7 +671,7 @@ def test_reject_keeps_the_reason_and_puts_the_message_back(bakery, hub):
     assert (draft.status, draft.note) == ("rejected", "Called them")
     assert bakery["messages"].where("id", message_id)[0].status == "new"
     with pytest.raises(ValueError, match="rejected already"):
-        reject_draft(draft_id, bakery["drafts"], bakery["messages"], hub)
+        reject_draft(draft_id, bakery["drafts"], bakery["messages"], bakery["invoices"], hub)
 
 
 # --- specials ---

@@ -6,13 +6,37 @@ each item is a call of its own: it's logged, it shows on the topology, and the
 notification it publishes records that call as its ``parent``.
 """
 
+import threading
 from datetime import datetime
 
 from opendataframework import Function, Notifications, Publisher
 
 from app.clients import Drive
-from app.entities import CafeSale, Contract, Message, Product, Restaurant, StandingOrder
-from app.repositories import CafeSales, Contracts, Messages, Products, Restaurants, StandingOrders
+from app.entities import (
+    CafeSale,
+    Contract,
+    Ingredient,
+    Invoice,
+    Message,
+    Product,
+    RecipeLine,
+    Restaurant,
+    StandingOrder,
+)
+from app.repositories import (
+    CafeSales,
+    Contracts,
+    Ingredients,
+    Invoices,
+    Messages,
+    Products,
+    Recipes,
+    Restaurants,
+    StandingOrders,
+)
+
+# One import of the sheets at a time: two at once would interleave their rows.
+_IMPORTING = threading.Lock()
 
 # Lines that are only a greeting, as an email's first line usually is.
 _GREETINGS = ("hi", "hello", "hey", "morning", "good morning", "good evening")
@@ -151,6 +175,8 @@ def import_sheets(
     restaurants: Restaurants,
     standing_orders: StandingOrders,
     contracts: Contracts,
+    ingredients: Ingredients,
+    recipes: Recipes,
     messages: Messages,
     notifications: Notifications,
     announce: bool = True,
@@ -168,6 +194,8 @@ def import_sheets(
         restaurants: Replaced from ``restaurants.csv``, injected.
         standing_orders: Replaced from ``standing_orders.csv``, injected.
         contracts: Replaced from ``contracts.csv``, injected.
+        ingredients: Replaced from ``ingredients.csv``, injected.
+        recipes: Replaced from ``recipes.csv``, injected.
         messages: Matched to the restaurants again, injected.
         notifications: Bound to this function, injected.
         announce: ``False`` while onboarding: imported, not announced.
@@ -175,6 +203,26 @@ def import_sheets(
     Returns:
         How many rows each sheet had.
     """
+    with _IMPORTING:
+        return _import_sheets(
+            drive, products, restaurants, standing_orders, contracts, ingredients, recipes,
+            messages, notifications, announce,
+        )  # fmt: skip
+
+
+def _import_sheets(
+    drive: Drive,
+    products: Products,
+    restaurants: Restaurants,
+    standing_orders: StandingOrders,
+    contracts: Contracts,
+    ingredients: Ingredients,
+    recipes: Recipes,
+    messages: Messages,
+    notifications: Notifications,
+    announce: bool,
+) -> dict:
+    """Do ``import_sheets``' work, under its lock."""
     counts = {
         "products": products.replace_all(
             Product(
@@ -203,6 +251,16 @@ def import_sheets(
             Contract(None, r["restaurant"], r["sku"], float(r["price"]), r["valid_until"])
             for r in drive.rows("contracts.csv")
         ),
+        "ingredients": ingredients.replace_all(
+            Ingredient(
+                r["code"], r["name"], r["unit"], r["supplier"], r["invoice_name"], float(r["price"])
+            )
+            for r in drive.rows("ingredients.csv")
+        ),
+        "recipe lines": recipes.replace_all(
+            RecipeLine(None, r["sku"], r["ingredient"], float(r["quantity"]))
+            for r in drive.rows("recipes.csv")
+        ),
     }
     messages.match_restaurants(restaurants.all())
     if announce:
@@ -213,3 +271,66 @@ def import_sheets(
             subject=Products,
         )
     return counts
+
+
+@Publisher("invoices.received")
+@Function
+def ingest_invoice(
+    external_id: str,
+    sender: str,
+    supplier: str,
+    subject: str,
+    filename: str,
+    pdf: bytes,
+    received_at: float,
+    invoices: Invoices,
+    notifications: Notifications,
+    announce: bool = True,
+) -> int | None:
+    """Take in a supplier's invoice, the PDF attached to its email, once.
+
+    Publishes ``invoices.received`` with a summary such as ``"Vale Dairy:
+    Invoice VAL-2026-0012"``, about the saved invoice. Reading it is the
+    invoice-clerk's job.
+
+    Args:
+        external_id: The email's ``Message-ID``.
+        sender: The address it came from.
+        supplier: Who sent it, as the email names them.
+        subject: The email's subject.
+        filename: The attachment's name.
+        pdf: The attachment.
+        received_at: When it was sent, as a Unix time.
+        invoices: Where it's saved, injected.
+        notifications: Bound to this function, injected.
+        announce: ``False`` while catching up on history: saved, not announced.
+
+    Returns:
+        The saved invoice's id, or ``None`` if it had been taken in already.
+    """
+    if invoices.by_external_id(external_id) is not None:
+        return None
+    invoice = Invoice(
+        id=None,
+        received_at=received_at,
+        supplier=supplier,
+        sender=sender,
+        subject=subject,
+        number=None,
+        date=None,
+        total=None,
+        status="new",
+        external_id=external_id,
+        filename=filename,
+        pdf=pdf,
+    )
+    invoices.save(invoice)
+    if announce:
+        notifications.publish(
+            "invoices.received",
+            {"invoice": invoice.id, "supplier": supplier},
+            summary=f"{supplier}: {subject}",
+            subject=Invoices,
+            record=invoice.id,
+        )
+    return invoice.id

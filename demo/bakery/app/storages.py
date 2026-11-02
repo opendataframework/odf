@@ -61,6 +61,26 @@ CREATE TABLE IF NOT EXISTS leftovers (
     id INTEGER PRIMARY KEY AUTOINCREMENT, date TEXT NOT NULL, sku TEXT NOT NULL,
     product TEXT NOT NULL, baked INTEGER NOT NULL, sold INTEGER NOT NULL, unsold INTEGER NOT NULL
 );
+CREATE TABLE IF NOT EXISTS ingredients (
+    code TEXT PRIMARY KEY, name TEXT NOT NULL, unit TEXT NOT NULL, supplier TEXT NOT NULL,
+    invoice_name TEXT NOT NULL, price REAL NOT NULL
+);
+CREATE TABLE IF NOT EXISTS recipes (
+    id INTEGER PRIMARY KEY AUTOINCREMENT, sku TEXT NOT NULL, ingredient TEXT NOT NULL,
+    quantity REAL NOT NULL
+);
+CREATE TABLE IF NOT EXISTS invoices (
+    id INTEGER PRIMARY KEY AUTOINCREMENT, received_at REAL NOT NULL, supplier TEXT NOT NULL,
+    sender TEXT NOT NULL, subject TEXT NOT NULL, number TEXT, date TEXT, total REAL,
+    status TEXT NOT NULL, external_id TEXT UNIQUE NOT NULL, filename TEXT NOT NULL,
+    pdf BLOB NOT NULL
+);
+CREATE TABLE IF NOT EXISTS ingredient_prices (
+    id INTEGER PRIMARY KEY AUTOINCREMENT, priced_at REAL NOT NULL, ingredient TEXT NOT NULL,
+    name TEXT NOT NULL, unit TEXT NOT NULL, unit_price REAL NOT NULL, supplier TEXT NOT NULL,
+    invoice INTEGER NOT NULL
+);
+CREATE INDEX IF NOT EXISTS ingredient_prices_latest ON ingredient_prices (ingredient, priced_at);
 CREATE TABLE IF NOT EXISTS delivery_runs (
     id INTEGER PRIMARY KEY AUTOINCREMENT, date TEXT NOT NULL, stop INTEGER NOT NULL,
     restaurant TEXT NOT NULL, address TEXT NOT NULL, lat REAL NOT NULL, lon REAL NOT NULL,

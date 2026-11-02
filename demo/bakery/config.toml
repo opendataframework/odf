@@ -61,4 +61,7 @@ interval = 5
 
 [ui.topology]
 config = false
-components = ["clock", "pos", "messenger", "drive", "weather", "mail", "model", "drafting"]  # all but SQLite
+components = [  # all but SQLite
+    "clock", "pos", "messenger", "drive", "weather", "mail", "model",
+    "drafting", "purchasing", "costing", "renegotiating",
+]

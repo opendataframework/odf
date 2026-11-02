@@ -320,3 +320,105 @@ class DeliveryStop:
     eta: str
     load: str
     items: int
+
+
+@Entity
+@dataclass
+class Ingredient:
+    """Something the bakery buys and bakes with, from the ingredients sheet.
+
+    Attributes:
+        code: Its code, as the recipes sheet refers to it.
+        name: Its name.
+        unit: What it's priced by: ``"kg"``, ``"L"``, ``"each"`` or ``"minute"``.
+        supplier: Who sells it; empty for bake time, which nobody invoices.
+        invoice_name: What its supplier calls it on an invoice.
+        price: What a unit cost when the sheet was written, in pounds: used
+            until an invoice says otherwise.
+    """
+
+    code: str
+    name: str
+    unit: str
+    supplier: str
+    invoice_name: str
+    price: float
+
+
+@Entity
+@dataclass
+class RecipeLine:
+    """How much of one ingredient one of a product takes, from the recipes sheet.
+
+    Attributes:
+        id: Primary key.
+        sku: The product.
+        ingredient: The ingredient's code.
+        quantity: How much, in the ingredient's unit.
+    """
+
+    id: int | None
+    sku: str
+    ingredient: str
+    quantity: float
+
+
+@Entity
+@dataclass
+class Invoice:
+    """A supplier's invoice, as the PDF it emailed.
+
+    Attributes:
+        id: Primary key.
+        received_at: When it was emailed, as a Unix time.
+        supplier: Who sent it, as its email names it.
+        sender: The address it came from.
+        subject: The email's subject.
+        number: The invoice's own number, once read.
+        date: The invoice's date, ``"YYYY-MM-DD"``, once read.
+        total: What it comes to, in pounds, once read.
+        status: ``"new"``, ``"recorded"`` (its prices are in IngredientPrices),
+            ``"drafted"`` (its reading waits for a person) or ``"rejected"``.
+        external_id: The email's ``Message-ID``, so it's never taken twice.
+        filename: The attachment's name.
+        pdf: The PDF itself.
+    """
+
+    id: int | None
+    received_at: float
+    supplier: str
+    sender: str
+    subject: str
+    number: str | None
+    date: str | None
+    total: float | None
+    status: str
+    external_id: str
+    filename: str
+    pdf: bytes
+
+
+@Entity
+@dataclass
+class IngredientPrice:
+    """What a supplier charged for a unit of an ingredient, on one invoice.
+
+    Attributes:
+        id: Primary key.
+        priced_at: When the invoice was emailed, as a Unix time.
+        ingredient: The ingredient's code.
+        name: Its name.
+        unit: What it's priced by.
+        unit_price: The price per unit, in pounds.
+        supplier: Who charged it.
+        invoice: The invoice it was on.
+    """
+
+    id: int | None
+    priced_at: float
+    ingredient: str
+    name: str
+    unit: str
+    unit_price: float
+    supplier: str
+    invoice: int

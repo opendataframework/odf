@@ -31,7 +31,9 @@ def test_write_sheets_writes_each_sheet_once(tmp_path):
 
     assert sorted(written) == [
         "contracts.csv",
+        "ingredients.csv",
         "products.csv",
+        "recipes.csv",
         "restaurants.csv",
         "standing_orders.csv",
     ]

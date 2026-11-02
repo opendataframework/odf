@@ -187,7 +187,14 @@ class Messenger:
 class Drive:
     """The shared drive's folder, where the bakery keeps its spreadsheets as CSV."""
 
-    SHEETS = ("products.csv", "restaurants.csv", "standing_orders.csv", "contracts.csv")
+    SHEETS = (
+        "products.csv",
+        "restaurants.csv",
+        "standing_orders.csv",
+        "contracts.csv",
+        "ingredients.csv",
+        "recipes.csv",
+    )
 
     def __init__(self, config: Config) -> None:
         """Read ``[component.drive] path`` (``SHARED_DRIVE`` overrides).

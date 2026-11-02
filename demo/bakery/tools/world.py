@@ -8,16 +8,19 @@ bakery's tools. It's the simulation's stage manager:
   "now", and the console can pause it, change its speed or move it on.
 - **The actors.** Café customers ring up orders at the POS through the
   morning; in the evening, restaurants message (or email) order changes for
-  tomorrow.
-- **The history.** On first start it writes the shared drive's sheets and
-  seeds the tools with what a bakery that's been trading a while has: 12
-  weeks of café orders, two weeks of chats, a month of email.
+  tomorrow. Each supplier emails its weekly invoice, a PDF, at 09:00 on its
+  day.
+- **The history.** On first start it seeds the tools with what a bakery
+  that's been trading a while has: 12 weeks of café orders, two weeks of
+  chats, a month of email and invoices. Every start writes any of the shared
+  drive's sheets that aren't there yet.
 - **The weather.** A forecast in Open-Meteo's JSON shape, made up from the
   seed and the date, offline. Rain keeps café customers away.
 - **Scenarios.** Buttons on the console: a party order, a café rush, a
-  missed webhook, a rainy week, and so on.
+  missed webhook, a rainy week, a butter price spike, and so on.
 """
 
+import csv
 import random
 import smtplib
 import threading
@@ -35,16 +38,21 @@ from fastapi.responses import HTMLResponse
 from tools.common import connect, env, http_json, page, wait_for
 from tools.data import (
     BAKERY_EMAIL,
+    BY_INGREDIENT,
     BY_SKU,
+    BY_SUPPLIER,
     FREEFORM_MESSAGES,
     MESSAGE_TEMPLATES,
     PLURALS,
     RESTAURANTS,
+    SUPPLIERS,
     WEEKDAYS,
     WHOLESALE,
     Restaurant,
+    Supplier,
     write_sheets,
 )
+from tools.invoices import delivery, invoice_pdf, total
 
 SEED = int(env("SEED", "7"))
 SPEED = float(env("SPEED", "60"))
@@ -276,9 +284,17 @@ def message(restaurant: Restaurant, text: str) -> None:
 
 
 def email(
-    sender_name: str, sender: str, subject: str, text: str, sent: datetime | None = None
+    sender_name: str,
+    sender: str,
+    subject: str,
+    text: str,
+    sent: datetime | None = None,
+    pdf: tuple[str, bytes] | None = None,
 ) -> None:
-    """Someone emails the bakery, at ``sent`` (the simulated time now by default)."""
+    """Someone emails the bakery, at ``sent`` (the simulated time now by default).
+
+    ``pdf``, if given, is a ``(filename, content)`` attached to it.
+    """
     msg = EmailMessage()
     msg["From"] = formataddr((sender_name, sender))
     msg["To"] = formataddr(("The Bakery", BAKERY_EMAIL))
@@ -286,6 +302,8 @@ def email(
     msg["Date"] = format_datetime((sent or clock.now()).astimezone())
     msg["Message-ID"] = make_msgid(domain=sender.split("@")[1])
     msg.set_content(text)
+    if pdf is not None:
+        msg.add_attachment(pdf[1], maintype="application", subtype="pdf", filename=pdf[0])
     try:
         with smtplib.SMTP(MAIL_HOST, MAIL_PORT, timeout=5) as smtp:
             smtp.send_message(msg)
@@ -306,6 +324,73 @@ def restaurant_email(restaurant: Restaurant, text: str, sent: datetime | None = 
     )
 
 
+def price(code: str) -> float:
+    """Return what an ingredient costs now: what its supplier last charged, or its sheet price."""
+    saved = _get(f"price:{code}")
+    return float(saved) if saved is not None else BY_INGREDIENT[code].price
+
+
+def supplier_invoice(supplier: Supplier, sent: datetime | None = None) -> None:
+    """``supplier`` emails its invoice for this week's delivery, a PDF, at ``sent`` (now)."""
+    at = sent or clock.now()
+    number = int(_get(f"invoice:{supplier.name}") or 0) + 1
+    _set(**{f"invoice:{supplier.name}": number})
+    reference = f"{supplier.name.split()[0][:3].upper()}-{at:%Y}-{number:04d}"
+    prices = {i: price(i) for i in BY_INGREDIENT}
+    lines = delivery(supplier, prices, random.Random(f"{SEED}-{supplier.name}-{number}"))
+    content = invoice_pdf(supplier, reference, at.date(), lines)
+    note = supplier.layout == "note"
+    email(
+        supplier.name,
+        supplier.email,
+        "Eggs" if note else f"Invoice {reference}",
+        (
+            "Hi, note for this week's eggs attached. Tom"
+            if note
+            else f"Hello,\n\nPlease find attached invoice {reference} for this week's delivery, "
+            f"£{total(lines):,.2f}.\n\nKind regards,\n{supplier.name}"
+        ),
+        sent,
+        pdf=(f"{'eggs' if note else reference}.pdf", content),
+    )
+
+
+def spiked_butter() -> float:
+    """Return a butter price that puts exactly two of the bakery's contracts below cost.
+
+    Works out, for each contract a restaurant actually orders, the butter price
+    at which it stops covering its cost, from the sheets on the shared drive
+    as they are now, and picks one between the second and the third.
+    """
+
+    def rows(name: str) -> list[dict]:
+        with (SHARED_DRIVE / name).open(newline="") as f:
+            return list(csv.DictReader(f))
+
+    recipes: dict[str, dict[str, float]] = {}
+    for row in rows("recipes.csv"):
+        recipes.setdefault(row["sku"], {})[row["ingredient"]] = float(row["quantity"])
+    taken = {(row["restaurant"], row["sku"]) for row in rows("standing_orders.csv")}
+    now = price("BUTTER")
+    limits = []
+    for row in rows("contracts.csv"):
+        recipe = recipes.get(row["sku"], {})
+        if (row["restaurant"], row["sku"]) not in taken or not recipe.get("BUTTER"):
+            continue
+        other = sum(q * price(code) for code, q in recipe.items() if code != "BUTTER")
+        limit = (float(row["price"]) - other) / recipe["BUTTER"]
+        if limit > now:
+            limits.append(limit)
+    limits.sort()
+    if len(limits) >= 3:
+        target = (limits[1] + limits[2]) / 2
+    elif limits:
+        target = limits[-1] + 0.5
+    else:
+        target = now * 1.5
+    return round(-(-target // 0.05) * 0.05, 2)
+
+
 def tick(previous: datetime, now: datetime) -> None:
     """Act out every simulated minute from ``previous`` to ``now`` (at most the last hour)."""
     minute = max(previous, now - timedelta(hours=1)).replace(second=0, microsecond=0)
@@ -321,6 +406,10 @@ def tick(previous: datetime, now: datetime) -> None:
         rate = CAFE_RATE.get(minute.hour, 0.0) * weekend * footfall(minute.date())
         if rng.random() < rate and cafe_order():
             cafe_hour["orders"] += 1
+        if minute.hour == 9 and minute.minute == 0:
+            for supplier in SUPPLIERS:
+                if supplier.weekday == WEEKDAYS[minute.weekday()]:
+                    supplier_invoice(supplier)
         if 17 <= minute.hour < 23:
             for restaurant in RESTAURANTS:
                 if rng.random() < EVENING_RATE:
@@ -332,13 +421,17 @@ def tick(previous: datetime, now: datetime) -> None:
 
 
 def seed_history() -> None:
-    """Write the sheets, and fill the tools with the history of a bakery that's been trading."""
-    if _get("seeded") == "1":
-        return
+    """Write any sheets missing, and fill the tools with the history of a bakery that's trading.
+
+    The sheets are checked on every start, so a sheet added to the demo
+    reaches a drive that was written before it; the history is seeded once.
+    """
     start = clock.now()
-    r = random.Random(SEED)
     written = write_sheets(SHARED_DRIVE, SEED, _quarter_end(start).isoformat())
     _log(f"Shared drive: wrote {', '.join(written) or 'nothing (sheets already there)'}")
+    if _get("seeded") == "1":
+        return
+    r = random.Random(SEED)
 
     wait_for(f"{POS_URL}/admin/state")
     orders, number = [], 0
@@ -403,19 +496,15 @@ def seed_history() -> None:
             break
         except OSError:
             time.sleep(1)
-    for day in sorted(r.sample(range(1, 31), 8), reverse=True):
+    for day in sorted(r.sample(range(1, 31), 5), reverse=True):
         at = (start - timedelta(days=day)).replace(hour=r.randint(8, 20), minute=r.randint(0, 59))
-        if r.random() < 0.6:
-            restaurant_email(r.choice(RESTAURANTS), _order_change(r), sent=at)
-        else:
-            email(
-                "Millers Ltd",
-                "accounts@millers.example",
-                "Delivery confirmed",
-                "Hello,\n\nYour flour delivery is confirmed for tomorrow morning.\n\nMillers Ltd",
-                sent=at,
-            )
-    _log("Mail: sent a month of past emails")
+        restaurant_email(r.choice(RESTAURANTS), _order_change(r), sent=at)
+    for day in range(30, 0, -1):
+        at = (start - timedelta(days=day)).replace(hour=9, minute=0, second=0, microsecond=0)
+        for supplier in SUPPLIERS:
+            if supplier.weekday == WEEKDAYS[at.weekday()]:
+                supplier_invoice(supplier, sent=at)
+    _log("Mail: sent a month of past emails and invoices")
     _set(seeded=1)
 
 
@@ -454,6 +543,8 @@ SCENARIOS = {
     "cafe-rush": "Ten café customers at once",
     "missed-webhook": "The POS drops the next order's webhook",
     "rainy-week": "It pours from now on for a week, which nobody forecast for today",
+    "butter-spike": "Vale Dairy's invoice comes early, with butter up sharply",
+    "farm-invoice": "Hill Farm's handwritten-looking note for this week's eggs",
 }
 
 
@@ -473,6 +564,13 @@ def run_scenario(name: str) -> None:
         today = clock.now().date()
         _set(rain_from=today.isoformat(), rain_until=(today + timedelta(days=6)).isoformat())
         _log(f"Weather: rain from now until {today + timedelta(days=6):%A}, café footfall down")
+    elif name == "butter-spike":
+        was, now = price("BUTTER"), spiked_butter()
+        _set(**{"price:BUTTER": now})
+        supplier_invoice(BY_SUPPLIER["Vale Dairy"])
+        _log(f"Vale Dairy: butter from £{was:.2f} to £{now:.2f} a kg, invoice sent")
+    elif name == "farm-invoice":
+        supplier_invoice(BY_SUPPLIER["Hill Farm"])
     elif name == "missed-webhook":
         http_json(
             "POST",

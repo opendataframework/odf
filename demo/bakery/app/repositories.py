@@ -20,10 +20,14 @@ from app.entities import (
     DeliveryStop,
     Draft,
     Forecast,
+    Ingredient,
+    IngredientPrice,
+    Invoice,
     Leftover,
     Message,
     OrderChange,
     Product,
+    RecipeLine,
     Restaurant,
     StandingOrder,
 )
@@ -311,6 +315,15 @@ class Drafts(_Table):
         )
         return found[0] if found else None
 
+    def open_for_restaurant(self, kind: str, restaurant: str) -> Draft | None:
+        """Return the ``kind`` draft for ``restaurant`` still waiting on a person, if any."""
+        found = self._select(
+            "WHERE kind = ? AND restaurant = ? AND status IN (?, ?)",
+            (kind, restaurant, *self.OPEN),
+            order="id",
+        )
+        return found[0] if found else None
+
     def open_for(self, kind: str, day: str) -> Draft | None:
         """Return the ``kind`` draft for ``day`` still waiting on a person, if any."""
         found = self._select(
@@ -385,3 +398,85 @@ class DeliveryRuns(_Table):
     def data_view(self) -> LocationView:
         """Show the run's stops on a map."""
         return LocationView(fields=("lat", "lon"))
+
+
+@Storage
+@Repository(Ingredient)
+class Ingredients(_Table):
+    """What the bakery bakes with, who sells it, and what it cost on the sheet."""
+
+    table, entity = "ingredients", Ingredient
+
+
+@Storage
+@Repository(RecipeLine)
+class Recipes(_Table):
+    """What one of each wholesale product takes, from the recipes sheet."""
+
+    table, entity = "recipes", RecipeLine
+
+    def all(self) -> list[RecipeLine]:
+        """Return every recipe line, by product."""
+        return self._select(order="sku, id")
+
+
+@Storage
+@Repository(Invoice)
+class Invoices(_Table):
+    """The suppliers' invoices, newest first, each opened as the PDF it came as."""
+
+    table, entity = "invoices", Invoice
+
+    def all(self) -> list[Invoice]:
+        """Return every invoice, newest first."""
+        return self._select(order="received_at DESC, id DESC")
+
+    def get(self, invoice_id: int) -> Invoice:
+        """Return the invoice ``invoice_id``.
+
+        Raises:
+            KeyError: If there's no such invoice.
+        """
+        found = self.where("id", invoice_id)
+        if not found:
+            raise KeyError(f"no invoice {invoice_id}")
+        return found[0]
+
+    def by_external_id(self, external_id: str) -> Invoice | None:
+        """Return the invoice from the email with this ``Message-ID``, if it's been taken in."""
+        found = self._select("WHERE external_id = ?", (external_id,))
+        return found[0] if found else None
+
+    def data_view(self) -> DocumentView:
+        """Open each invoice's PDF."""
+        return DocumentView(field="pdf")
+
+    def content_metadata(self, invoice: Invoice) -> ContentMetadata:
+        """Declare each invoice's content a PDF, under its attachment's name."""
+        return ContentMetadata(filename=invoice.filename, content_type="application/pdf")
+
+
+@Storage
+@Repository(IngredientPrice)
+class IngredientPrices(_Table):
+    """Every price an invoice charged, charted over time by ingredient."""
+
+    table, entity = "ingredient_prices", IngredientPrice
+
+    def all(self) -> list[IngredientPrice]:
+        """Return every price, oldest first."""
+        return self._select(order="priced_at, id")
+
+    def latest(self) -> dict[str, float]:
+        """Return each invoiced ingredient's latest price: ``{code: unit_price}``."""
+        with self.db.lock:
+            rows = self.db.conn.execute(
+                "SELECT ingredient, unit_price FROM ingredient_prices AS p WHERE id = ("
+                " SELECT id FROM ingredient_prices WHERE ingredient = p.ingredient"
+                " ORDER BY priced_at DESC, id DESC LIMIT 1)"
+            ).fetchall()
+        return dict(rows)
+
+    def data_view(self) -> TimeseriesView:
+        """Chart each ingredient's price over time."""
+        return TimeseriesView(field="priced_at", fields=("unit_price",), group="name")

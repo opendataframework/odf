@@ -9,8 +9,10 @@ from app.ingest import gist, import_sheets, ingest_message, ingest_sale
 from app.repositories import (
     CafeSales,
     Contracts,
+    Ingredients,
     Messages,
     Products,
+    Recipes,
     Restaurants,
     StandingOrders,
 )
@@ -76,6 +78,8 @@ def _sheets(drive, db, hub, announce=False):
         Restaurants(db),
         StandingOrders(db),
         Contracts(db),
+        Ingredients(db),
+        Recipes(db),
         Messages(db),
         hub.bound_to("function.import-sheets", Publisher.of(import_sheets)),
         announce=announce,
@@ -367,6 +371,7 @@ def test_mailbox_catches_up_quietly_then_announces_new_mail(db, monkeypatch):
         db,
         Mail(Config({})),
         lambda *args, **kwargs: taken.append((args, kwargs)) or 1,
+        lambda *args, **kwargs: None,
         LogManager().logger_for("service.mailbox"),
     )
 
@@ -393,6 +398,7 @@ def test_mailbox_skips_the_bakerys_own_replies(db, monkeypatch):
         db,
         Mail(Config({})),
         lambda *args, **kwargs: taken.append(args) or 1,
+        lambda *args, **kwargs: None,
         LogManager().logger_for("service.mailbox"),
     )
 
@@ -468,5 +474,8 @@ def test_config_hides_only_the_sqlite_connection():
         "mail",
         "model",
         "drafting",
+        "purchasing",
+        "costing",
+        "renegotiating",
     ]
     assert config["service"]["webhook-receiver"]["port"] == 4750
