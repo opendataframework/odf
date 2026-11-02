@@ -467,5 +467,6 @@ def test_config_hides_only_the_sqlite_connection():
         "weather",
         "mail",
         "model",
+        "drafting",
     ]
     assert config["service"]["webhook-receiver"]["port"] == 4750

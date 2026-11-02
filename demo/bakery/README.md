@@ -117,11 +117,14 @@ Things to try:
   "2 extra baguettes tomorrow please". A notice appears in the `odf` UI within
   a second or two. **Open** goes to the Messages, and **Show logs** shows the
   call that took the message in.
-- **Draft the order change.** In the `odf` UI, find the message's id in
-  Messages, then invoke the **order-desk** agent with it. A draft appears in
-  Drafts: the message, each product before and after, and the reply. Rules
-  read the usual phrasings; a freeform message is marked for review unless
-  there's a model.
+- **Watch it become a draft.** Right after, a second notice says the order
+  change awaits confirmation: `Drafting` reacted to the message and had the
+  **order-desk** agent draft it, on a worker of its own, so the messenger's
+  webhook never waited. The draft is in Drafts: the message, each product
+  before and after, and the reply. Rules read the usual phrasings; a freeform
+  message is marked for review unless there's a model. A message from anyone
+  not on the restaurants sheet gets no draft by itself; invoke **order-desk**
+  with its id in Messages to draft one anyway.
 - **Confirm it** by calling **confirm-draft** with the draft's id. The reply
   goes back to the restaurant (watch the messenger's thread, or Mailpit for
   an emailed change), and the change reaches the bake sheet. If tomorrow's
@@ -194,8 +197,17 @@ shows on the topology, and its notice's **Show logs** finds it.
 
 | Agent | Started by | Reads with | Drafts |
 |---|---|---|---|
-| `order-desk` | a person, on a message (UI, MCP) | rules for the usual phrasings, then the model, else marked for review | an order change and its reply |
+| `order-desk` | `Drafting`, when a restaurant's message arrives; or a person, on any message (UI, MCP) | rules for the usual phrasings, then the model, else marked for review | an order change and its reply |
 | `specials` | `close-cafe` at 15:00, or a person | rules pick the dishes and prices; the model only writes the lines | tomorrow's specials board |
+
+`Drafting` (`app/reactions.py`) is a `@Subscriber` of `messages.received`,
+delivered in the background: the `odf` runtime subscribes it while it runs,
+and hands it each message on a worker thread of its own, so a slow model
+never holds up the webhook or the mailbox. Each reaction is a call of its
+own whose cause is the message's notification, so the logs and the trace
+lead from the message to its draft. History caught up on (the first
+mailbox check, onboarding) is saved without a notification, so old messages
+don't all become drafts at once.
 
 `Model` (`app/model.py`) is a local Ollama, or nothing. An agent asks it only
 what its rules can't read, checks what it answers (products that exist, dates
@@ -224,6 +236,7 @@ bakery/
 │   ├── tasks.py          # history imports, POS reconciliation
 │   ├── pipelines.py      # Onboard, NightRun, CloseCafe
 │   ├── agents.py         # order-desk, specials
+│   ├── reactions.py      # Drafting: drafts each restaurant's message as it arrives
 │   ├── drafts.py         # confirm_draft, reject_draft
 │   ├── rules.py          # what the agents read without a model
 │   ├── model.py          # Model: a local Ollama, or nothing

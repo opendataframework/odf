@@ -6,6 +6,12 @@
 [project]
 name = "bakery"
 
+# The demo runs for days: each component's log rotates at 5 MB, keeping 3
+# older files.
+[project.logging]
+max-bytes = 5_000_000
+backups = 3
+
 [component.sqlite]
 path = "data/bakery.db"
 
@@ -55,4 +61,4 @@ interval = 5
 
 [ui.topology]
 config = false
-components = ["clock", "pos", "messenger", "drive", "weather", "mail", "model"]  # all but SQLite
+components = ["clock", "pos", "messenger", "drive", "weather", "mail", "model", "drafting"]  # all but SQLite

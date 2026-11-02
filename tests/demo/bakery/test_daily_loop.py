@@ -22,6 +22,7 @@ from app.planning import (
     weather_factor,
     wholesale_order,
 )
+from app.reactions import Drafting
 from app.repositories import (
     BakeSheets,
     CafeSales,
@@ -48,7 +49,16 @@ from app.rules import (
 from app.services import Scheduler
 from app.storages import SQLite
 from fastapi.testclient import TestClient
-from opendataframework import Config, Events, Publisher, TaskProtocol
+from opendataframework import (
+    Config,
+    Events,
+    Logger,
+    Publisher,
+    Subscriber,
+    SubscriberProtocol,
+    TaskProtocol,
+)
+from opendataframework.logger import LogManager
 from opendataframework.notifications import Notifications
 from tools import data, world
 
@@ -163,7 +173,7 @@ def bakery(tmp_path, db, hub):
     return repos
 
 
-def _message(bakery, hub, text, sender="+447700900201", channel="messenger", n=1):
+def _message(bakery, hub, text, sender="+447700900201", channel="messenger", n=1, announce=False):
     return ingest_message(
         channel,
         f"m{n}",
@@ -174,7 +184,7 @@ def _message(bakery, hub, text, sender="+447700900201", channel="messenger", n=1
         bakery["restaurants"],
         hub.bound_to("function.ingest-message", Publisher.of(ingest_message)),
         subject="Order change" if channel == "email" else "",
-        announce=False,
+        announce=announce,
     )
 
 
@@ -509,6 +519,62 @@ def test_order_desk_leaves_a_message_from_a_stranger_for_review(bakery, hub):
     drafted = _desk(bakery, hub).invoke(message_id)
 
     assert drafted["status"] == "needs-review"
+
+
+# --- reacting on its own ---
+
+
+def _drafting(bakery, hub):
+    """Subscribe a ``Drafting`` to ``hub`` the way the Context does.
+
+    To its topics, with each delivery an ``on_notification()`` call, so what
+    it publishes has a call to belong to (delivered here in the publisher's
+    thread, not on a worker).
+    """
+    drafting = Drafting(_desk(bakery, hub), Logger(LogManager(), "component.drafting"))
+
+    def deliver(notification):
+        with Events().notify("component.drafting", SubscriberProtocol, "on_notification"):
+            drafting.on_notification(notification)
+
+    for topic in Subscriber.of(Drafting).topics:
+        hub.subscribe(deliver, topic)
+    return drafting
+
+
+def test_drafting_reacts_to_received_messages_in_the_background():
+    subscription = Subscriber.of(Drafting)
+    assert (subscription.topics, subscription.deliver) == (("messages.received",), "background")
+
+
+def test_drafting_drafts_a_restaurants_message_as_it_arrives(bakery, hub):
+    _drafting(bakery, hub)
+
+    message_id = _message(bakery, hub, "4 extra baguettes tomorrow please", announce=True)
+
+    [draft] = bakery["drafts"].all()
+    assert (draft.message, draft.status) == (message_id, "pending")
+    assert [n.topic for n in hub.seen] == ["messages.received", "drafts.created"]
+    assert bakery["messages"].where("id", message_id)[0].status == "drafted"
+
+
+def test_drafting_leaves_a_strangers_message_for_a_person(bakery, hub):
+    _drafting(bakery, hub)
+
+    message_id = _message(
+        bakery, hub, "4 extra baguettes tomorrow please", sender="+447700900999", announce=True
+    )
+
+    assert bakery["drafts"].all() == []
+    assert bakery["messages"].where("id", message_id)[0].status == "new"
+
+
+def test_drafting_ignores_history_caught_up_quietly(bakery, hub):
+    _drafting(bakery, hub)
+
+    _message(bakery, hub, "4 extra baguettes tomorrow please")
+
+    assert bakery["drafts"].all() == []
 
 
 # --- confirming and rejecting ---
