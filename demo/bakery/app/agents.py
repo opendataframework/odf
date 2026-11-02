@@ -62,7 +62,13 @@ Each change has a product's SKU, a date (YYYY-MM-DD) and a mode:
 - "set-from": exactly quantity on every day it's usually ordered, from that date on.
 
 Use only the SKUs listed. Work out dates from the day the message was sent. \
-If the message is unclear, asks for something these changes can't express, \
+A change is for one day unless the message says it lasts ("from now on", "every \
+day", "going forward"), which is "set-from". With no day named, it's for the next \
+day the restaurant has an order, usually tomorrow: "10 more baguettes" is one \
+"add" of 10 for that day, not one for every day. "The weekend" is the coming \
+Saturday and Sunday. Quantities are whole items: round to the nearest, halves \
+up. A number of people or guests is not a quantity of anything. If the message \
+is unclear, asks for something these changes can't express, \
 or you would have to guess a number, set "unclear" to true, leave out what \
 you can't express, and say why in "note". Otherwise "note" is empty.
 

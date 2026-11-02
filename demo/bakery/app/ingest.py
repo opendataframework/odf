@@ -8,6 +8,7 @@ notification it publishes records that call as its ``parent``.
 
 import threading
 from datetime import datetime
+from functools import partial
 
 from opendataframework import Function, Notifications, Publisher
 
@@ -188,8 +189,10 @@ def import_sheets(
 
     The sheets are where the owner keeps this data, so they win. Messages are
     then matched to the restaurants again, so a message that came in before
-    its restaurant was on the sheet is linked to it now. Publishes
-    ``sheets.changed``.
+    its restaurant was on the sheet is linked to it now. A sheet that isn't
+    on the drive leaves its records as they are, so a drive that's away for a
+    moment doesn't empty the bakery; an empty sheet does empty them. Publishes
+    ``sheets.changed``, unless no sheet was there.
 
     Args:
         drive: The shared drive, injected.
@@ -206,7 +209,7 @@ def import_sheets(
         announce: ``False`` while onboarding: imported, not announced.
 
     Returns:
-        How many rows each sheet had.
+        How many rows each sheet on the drive had.
     """
     with _IMPORTING:
         return _import_sheets(
@@ -229,59 +232,47 @@ def _import_sheets(
     announce: bool,
 ) -> dict:
     """Do ``import_sheets``' work, under its lock."""
+    # What each sheet's rows are called, its file, where they go, and how a row reads.
+    sheets = [
+        ("products", "products.csv", products.replace_all, lambda r: Product(
+            r["sku"], r["name"], r["kind"], float(r["cafe_price"]), _price(r["wholesale_price"])
+        )),
+        ("restaurants", "restaurants.csv", restaurants.replace_all, lambda r: Restaurant(
+            None, r["name"], r["phone"], r["email"], r["address"], float(r["lat"]),
+            float(r["lon"]), r["kitchen_opens"],
+        )),
+        ("standing orders", "standing_orders.csv", standing_orders.replace_all,
+         lambda r: StandingOrder(None, r["restaurant"], r["weekday"], r["sku"],
+                                 int(r["quantity"]))),
+        ("contract prices", "contracts.csv", contracts.replace_all, lambda r: Contract(
+            None, r["restaurant"], r["sku"], float(r["price"]), r["valid_until"]
+        )),
+        ("ingredients", "ingredients.csv", ingredients.replace_all, lambda r: Ingredient(
+            r["code"], r["name"], r["unit"], r["supplier"], r["invoice_name"], float(r["price"])
+        )),
+        ("recipe lines", "recipes.csv", recipes.replace_all, lambda r: RecipeLine(
+            None, r["sku"], r["ingredient"], float(r["quantity"])
+        )),
+        # Those an invoice declared are kept: only the sheet's own are replaced.
+        ("allergens", "allergens.csv", partial(allergens.replace_where, "source", "sheet"),
+         lambda r: IngredientAllergen(None, r["ingredient"], r["allergen"], r["kind"], "sheet",
+                                      0.0)),
+    ]  # fmt: skip
+    on_drive = drive.versions()
     counts = {
-        "products": products.replace_all(
-            Product(
-                r["sku"], r["name"], r["kind"], float(r["cafe_price"]), _price(r["wholesale_price"])
-            )
-            for r in drive.rows("products.csv")
-        ),
-        "restaurants": restaurants.replace_all(
-            Restaurant(
-                None,
-                r["name"],
-                r["phone"],
-                r["email"],
-                r["address"],
-                float(r["lat"]),
-                float(r["lon"]),
-                r["kitchen_opens"],
-            )
-            for r in drive.rows("restaurants.csv")
-        ),
-        "standing orders": standing_orders.replace_all(
-            StandingOrder(None, r["restaurant"], r["weekday"], r["sku"], int(r["quantity"]))
-            for r in drive.rows("standing_orders.csv")
-        ),
-        "contract prices": contracts.replace_all(
-            Contract(None, r["restaurant"], r["sku"], float(r["price"]), r["valid_until"])
-            for r in drive.rows("contracts.csv")
-        ),
-        "ingredients": ingredients.replace_all(
-            Ingredient(
-                r["code"], r["name"], r["unit"], r["supplier"], r["invoice_name"], float(r["price"])
-            )
-            for r in drive.rows("ingredients.csv")
-        ),
-        "recipe lines": recipes.replace_all(
-            RecipeLine(None, r["sku"], r["ingredient"], float(r["quantity"]))
-            for r in drive.rows("recipes.csv")
-        ),
-        "allergens": allergens.replace_where(
-            "source",
-            "sheet",
-            (
-                IngredientAllergen(None, r["ingredient"], r["allergen"], r["kind"], "sheet", 0.0)
-                for r in drive.rows("allergens.csv")
-            ),
-        ),
+        what: store(read(r) for r in drive.rows(sheet))
+        for what, sheet, store, read in sheets
+        if sheet in on_drive
     }
-    messages.match_restaurants(restaurants.all())
-    if announce:
+    missing = [sheet for _, sheet, _, _ in sheets if sheet not in on_drive]
+    if counts:
+        messages.match_restaurants(restaurants.all())
+    if announce and counts:
+        summary = "Sheets updated: " + ", ".join(f"{n} {what}" for what, n in counts.items())
         notifications.publish(
             "sheets.changed",
             counts,
-            summary="Sheets updated: " + ", ".join(f"{n} {what}" for what, n in counts.items()),
+            summary=summary + (f"; not on the drive: {', '.join(missing)}" if missing else ""),
             subject=Products,
         )
     return counts

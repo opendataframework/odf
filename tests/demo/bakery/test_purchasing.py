@@ -478,6 +478,13 @@ def test_unit_costs_follow_the_latest_invoiced_price(bakery, hub):
     assert after["BAG"] == before["BAG"]  # no butter in a baguette
 
 
+def test_margins_for_all_restaurants_however_a_model_says_it(bakery):
+    every = _margins(bakery)["contracts"]
+
+    assert _margins(bakery, restaurant="all")["contracts"] == every
+    assert _margins(bakery, restaurant="*")["contracts"] == every
+
+
 def test_margins_count_only_what_a_restaurant_orders(bakery):
     found = _margins(bakery, restaurant="Kiln")
 

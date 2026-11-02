@@ -27,4 +27,4 @@ USER bakery
 # them on the host's loopback only. The webhook receiver (4750) is reachable
 # from the other containers only.
 EXPOSE 4747 4748 4750
-CMD ["odf", "run", "--ui-host", "0.0.0.0", "--mcp", "--mcp-host", "0.0.0.0"]
+CMD ["odf", "run", "--ui-host", "0.0.0.0", "--mcp", "--mcp-host", "0.0.0.0", "--chat"]

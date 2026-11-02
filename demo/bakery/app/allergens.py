@@ -109,12 +109,15 @@ def _find(ingredients: Ingredients, ingredient: str):
     """Return the ingredient a code or name names.
 
     Raises:
-        KeyError: If there's no such ingredient.
+        KeyError: If there's no such ingredient, naming those there are, so
+            whoever asked (a model, often, given an allergen) can ask again.
     """
-    for i in ingredients.all():
+    known = ingredients.all()
+    for i in known:
         if ingredient.lower() in (i.code.lower(), i.name.lower()):
             return i
-    raise KeyError(f"no ingredient {ingredient!r}")
+    there = ", ".join(f"{i.code} ({i.name})" for i in known)
+    raise KeyError(f"no ingredient {ingredient!r}; the ingredients are {there}")
 
 
 def trace(
@@ -144,7 +147,11 @@ def trace(
             for sku, quantity in uses.items()
         ],
         "restaurants": [
-            {"restaurant": restaurant, "weekly": dict(by_sku)}
+            {
+                "restaurant": restaurant,
+                "takes": sorted(names.get(sku, sku) for sku in by_sku),
+                "weekly": dict(by_sku),
+            }
             for restaurant, by_sku in sorted(weekly.items())
         ],
     }
@@ -159,10 +166,10 @@ def trace_ingredient(
     products: Products,
     standing_orders: StandingOrders,
 ) -> dict:
-    """Follow an ingredient to the products it goes into, their labels, and who takes them.
+    """Follow an ingredient to the products it goes into, and the restaurants taking which of them.
 
     Args:
-        ingredient: The ingredient's code (``"FLOUR"``) or name.
+        ingredient: The ingredient's code (``"FLOUR"``) or name, not an allergen.
         ingredients: What it can be, injected.
         allergens: Its allergens and every other's, injected.
         recipes: What goes into each product, injected.
@@ -173,7 +180,7 @@ def trace_ingredient(
         ``{"ingredient", "name", "supplier", "allergens", "products",
         "restaurants"}``: its allergens; each product it goes into, with how
         much and the product's label; each restaurant taking any of them,
-        with how many a week.
+        with the products it ``takes`` by name and how many a week by SKU.
 
     Raises:
         KeyError: If there's no such ingredient.
@@ -248,7 +255,7 @@ class AllergenOfficer:
         again.
 
         Args:
-            ingredient: The ingredient's code or name.
+            ingredient: The ingredient's code (``"FLOUR"``) or name, not an allergen.
 
         Returns:
             ``{"draft", "allergens", "restaurants"}``; ``"draft"`` is ``None``

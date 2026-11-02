@@ -74,8 +74,11 @@ scratch.
 **With a local model.** The agents read the usual phrasings with plain
 rules, and leave the rest (a freeform party order, say) for a person to
 review. To have a model read those, run [Ollama](https://ollama.com) on the
-host with a model pulled (`ollama pull llama3.2`), and set
-`OLLAMA_URL=http://host.docker.internal:11434` in `.env`.
+host with a model pulled (`ollama pull gpt-oss:20b`, which the prompts are
+tuned on), and set `OLLAMA_URL=http://host.docker.internal:11434` in `.env`.
+The UI's chat window uses the same Ollama (`[project.chat]` in
+`config.toml`); without one, it says it can't reach it, and everything else
+works as before.
 
 Settings are in `.env.example`. Copy it to `.env` to change the seed, the
 clock's speed or the credentials. New credentials take effect at the next
@@ -180,6 +183,33 @@ Things to try:
   imports the sheets again and says so.
 - **Speed the clock up** in the console. At the default 60×, a day takes 24
   minutes. Restaurants write in the evening, from 17:00.
+
+## Ask it
+
+The UI's chat window (**Chat** in the header) and an MCP client of
+your own (`localhost:4748/mcp`) see the same tools: every agent, every
+function, and every repository's records. With the chat's model running,
+ask:
+
+- **"What do we bake tomorrow?"** It works out tomorrow's bake sheet
+  (`bake-sheet`): the restaurants' orders with every confirmed change, and
+  the café's forecast.
+- **"Which restaurants are we losing money on?"** It reads the margins
+  (`margins`): every contract's margin at today's prices, those below cost
+  first.
+- **"What if butter went up to £12 a kilo?"** `what-if`, without an invoice.
+- **"Who do we have to tell if the flour has sesame in it?"** It follows the
+  flour (`trace-ingredient`) to the products it goes into and the
+  restaurants taking them.
+- **"What's waiting for me?"** The drafts still pending, from `Drafts`.
+
+Mention a component with `@` to hand it the question: `@agent.order-desk
+draft message 12`, or `@repository.invoices which came from Hill Farm?`.
+The model then sees only that component's tools, so it answers sooner and
+picks the right one: `@repository.drafts what's waiting for me?`. Answers
+vary from run to run with a local model; asking again, or more narrowly,
+usually settles it. Confirming a draft from chat works too, but the drafts are there to be read
+first.
 
 ## How it fits together
 

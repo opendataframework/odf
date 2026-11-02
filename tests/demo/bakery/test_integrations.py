@@ -124,6 +124,27 @@ def test_import_sheets_replaces_what_was_there(drive, db, hub):
     assert [r.name for r in Restaurants(db).all()] == ["Le Petit", "Harbour Kitchen"]
 
 
+def test_import_sheets_leaves_alone_what_a_missing_sheet_holds(drive, db, hub):
+    _sheets(drive, db, hub)
+    (drive.path / "restaurants.csv").unlink()
+
+    counts = _sheets(drive, db, hub, announce=True)
+
+    assert "restaurants" not in counts and counts["products"] == len(data.PRODUCTS)
+    assert len(Restaurants(db).all()) == len(data.RESTAURANTS)
+    assert hub.seen[-1].summary.endswith("; not on the drive: restaurants.csv")
+
+
+def test_import_sheets_without_a_drive_changes_and_announces_nothing(tmp_path, drive, db, hub):
+    _sheets(drive, db, hub)
+    away = Drive(Config({"component": {"drive": {"path": str(tmp_path / "not-mounted")}}}))
+
+    assert _sheets(away, db, hub, announce=True) == {}
+
+    assert len(Products(db).all()) == len(data.PRODUCTS)
+    assert hub.seen == []
+
+
 def test_ingest_message_matches_the_restaurant_and_announces_it_once(drive, db, hub):
     _sheets(drive, db, hub)
     messages, restaurants = Messages(db), Restaurants(db)

@@ -35,7 +35,7 @@ class Model:
             logger: The component's logger.
         """
         self.url = setting(config, "component.model", "url", "OLLAMA_URL", "").rstrip("/")
-        self.name = setting(config, "component.model", "name", "OLLAMA_MODEL", "llama3.2")
+        self.name = setting(config, "component.model", "name", "OLLAMA_MODEL", "gpt-oss:20b")
         self.timeout = float(setting(config, "component.model", "timeout", "OLLAMA_TIMEOUT", 120))
         self.logger = logger
         self._checked: tuple[float, bool] = (0.0, False)

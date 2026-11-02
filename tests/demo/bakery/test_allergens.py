@@ -162,8 +162,11 @@ def test_trace_ingredient_follows_flour_to_every_product_and_restaurant(bakery):
     }  # fmt: skip
     restaurants = {r.restaurant for r in bakery["standing_orders"].all()}
     assert {r["restaurant"] for r in found["restaurants"]} == restaurants
-    with pytest.raises(KeyError):
-        _trace(bakery, "saffron")
+    names = {p.sku: p.name for p in bakery["products"].all()}
+    for r in found["restaurants"]:
+        assert r["takes"] == sorted(names[sku] for sku in r["weekly"])
+    with pytest.raises(KeyError, match=r"'sesame'; the ingredients are .*FLOUR \(Strong white"):
+        _trace(bakery, "sesame")
 
 
 # --- reactions: labelling, then the notices ---

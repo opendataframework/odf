@@ -32,6 +32,8 @@ from app.repositories import (
 
 # The margin a renegotiated price aims for, over cost.
 TARGET_MARGIN = 0.15
+# What a caller (a model, say) may pass as a restaurant to mean all of them.
+EVERY = frozenset({"", "all", "*", "every", "any"})
 
 
 def ingredient_prices(
@@ -75,7 +77,8 @@ def contract_margins(
         key = (contract.restaurant, contract.sku)
         if key not in weekly or contract.sku not in costs:
             continue
-        if restaurant and contract.restaurant.lower() != restaurant.lower():
+        wanted = restaurant.strip().lower()
+        if wanted not in EVERY and contract.restaurant.lower() != wanted:
             continue
         cost = costs[contract.sku]
         margin = round(contract.price - cost, 4)
@@ -114,7 +117,10 @@ def margins(
     prices: IngredientPrices,
     restaurant: str = "",
 ) -> dict:
-    """Return the margin on every contract the restaurants order, at today's prices.
+    """Return every restaurant's contract margins at today's prices, and those losing money.
+
+    Leave ``restaurant`` empty to get every restaurant at once: one call
+    answers "which restaurants are we losing money on?" (``below_cost``).
 
     Args:
         contracts: The agreed prices, injected.
