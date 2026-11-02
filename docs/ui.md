@@ -79,7 +79,21 @@ steps, or a service's `run()` loop.
   the call that's running (`Loader executing`, with `+2` when others run
   alongside it), a failure until the node is selected (click it to open the
   node's logs at the run), and a completed call for a few seconds
-  (`Loader executed in 1.2 s`).
+  (`Loader executed in 1.2 s`; click it to open its run, as **Show run**
+  does).
+- **Show run**, on a notice, opens the whole run the call is part of as a
+  tree. It starts at the call the run started from: up through the calls it
+  was made inside, and across a reaction to the call that published what it
+  reacted to. It never starts at a service's `run()` or a repository's
+  `stream()`, which last as long as the component does, so the tree starts at
+  the call for one inbound item. Under each call are, in the order they
+  happened, the lines it logged, the calls it made, and the notifications it
+  published. Under each notification are the calls its subscribers made, so
+  a reaction reads in the same tree as what it reacted to. The call the
+  notice was about is marked, and clicking a call opens its logs at that
+  call. The view refreshes while it's open, so reactions still running in the
+  background appear as they finish. It needs file logging in the `json`
+  format, as **Show logs** does to read a run back.
 - A service's **Start**/**Stop** button follows the service, so it's correct
   after a start or stop over MCP or chat too.
 - A [notification](https://opendataframework.github.io/opendataframework/notifications/)
@@ -94,6 +108,8 @@ steps, or a service's `run()` loop.
     - **Show logs** opens the publisher's logs. A notification published
       during a call highlights that call's lines (its `parent`), the same
       way a failure's notice does.
+    - **Show run** opens the run it was published in, from the call that
+      run started from, with what its subscribers did under it.
     - A notification that reaches a tab twice is shown once, by its `id`.
     - A notification without a `summary` is for other components only, and
       isn't shown.
@@ -603,6 +619,7 @@ registered name:
 | `PUT /api/repositories/{name}/records/{key}/media` | replacing a document file through `save()` (see [Notebooks](#notebooks)) |
 | `POST /api/notebooks/session` | starting Jupyter for notebook editing; returns the `url` it is served at through the UI (`/proxy/jupyter/`) |
 | `/proxy/jupyter/...` | Jupyter itself, HTTP and WebSockets, while notebook editing is on |
+| `GET /api/trace/{call_id}` | the whole run a call is part of, as a tree (see below) |
 | `GET /api/events` | every protocol call the project makes, as server-sent events (see below) |
 | `GET /api/notifications` | every notification the project's components publish, as server-sent events (see below) |
 
@@ -656,3 +673,28 @@ records instead, from every component's log file however long ago
 notifications it published, and the start and end of the calls it made. It
 answers `409` when those can't be read: with file logging off, or the `text`
 log format.
+
+`GET /api/trace/{call_id}` returns the run a call is part of, from the
+logs, as `opendataframework`'s `context.trace(call_id, root=True)` does. The
+tree starts at the call the run started from: it climbs each `parent`, and
+from a call with a `cause` to the call that published that notification. It
+stops below a service's `run()` or a repository's `stream()`, and at the
+highest call still in the logs. Each node is one call:
+
+```json
+{"call": "…", "parent": null, "cause": null, "key": "function.ingest-message",
+ "protocol": "FunctionProtocol", "method": "__call__", "state": "completed",
+ "started": "2026-11-02T21:04:11.120+00:00", "ended": "2026-11-02T21:04:11.131+00:00",
+ "elapsed_ms": 11.2, "error": null,
+ "logs": [{"ts": "…", "level": "INFO", "message": "…", "fields": {}}],
+ "notifications": [{"id": "…", "key": "function.ingest-message", "topic": "messages.received",
+   "level": "info", "message": "…", "subject": "repository.messages", "record": 42,
+   "ts": "…", "triggered": [{"call": "…", "cause": "…", "key": "component.drafting", "…": "…"}]}],
+ "children": []}
+```
+
+`children` are the calls made inside it, and each notification's
+`triggered` the calls its subscribers made, both ordered by when they
+started. A call still running has `state` `running`. It answers `404` when
+the call isn't in the logs (not written yet, or rotated away), and `409` when
+they can't be read, as `?call=` does.

@@ -533,6 +533,26 @@ class UiServer:
                 headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
             )
 
+        @app.get("/api/trace/{call_id}")
+        def trace(call_id: str) -> dict:
+            """Return the whole story a call is part of, as ``context.trace(root=True)`` does.
+
+            The tree starts at the call the story started from (climbing
+            ``parent`` links, and across a reaction to the call that published
+            what it reacted to), never at a long-running ``run()`` or
+            ``stream()``. Answers ``404`` when the call isn't in the logs, and
+            ``409`` when they can't be read (file logging off, or the ``text``
+            format).
+            """
+            try:
+                return self._context.trace(call_id, root=True)
+            except KeyError as exc:
+                raise HTTPException(
+                    status_code=404, detail=f"no call {call_id!r} in the logs"
+                ) from exc
+            except ValueError as exc:
+                raise HTTPException(status_code=409, detail=str(exc)) from exc
+
         @app.get("/api/{collection}/{name}/logs")
         def component_logs(collection: str, name: str, call: str | None = None) -> list[dict]:
             """Return a component's tailed log records, or one call's records with ``call``.

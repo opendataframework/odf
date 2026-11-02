@@ -331,6 +331,81 @@ def test_logs_endpoint_with_a_call_answers_409_without_file_logging():
     assert r.status_code == 409
 
 
+# --- trace endpoint -----------------------------------------------------------
+
+
+def _reaction_ns():
+    """A message taken in, a subscriber reacting to it, and a draft made inside the reaction."""
+    from collections.abc import Callable
+    from typing import Annotated
+
+    from opendataframework import Notification, Notifications, Publisher, Subscriber
+
+    NS = make_ns()
+
+    @NS
+    @Publisher("message.in")
+    @Function
+    def take(text: str, notifications: Notifications) -> None:
+        notifications.publish("message.in", {"text": text}, summary=f"got {text}")
+
+    @NS
+    @Publisher("draft.made")
+    @Function
+    def draft(text: str, notifications: Notifications) -> None:
+        notifications.publish("draft.made", {"text": text}, summary=f"drafted {text}")
+
+    @NS
+    @Subscriber("message.in")
+    @Component
+    class Desk:
+        def __init__(self, make_draft: Annotated[Callable[..., None], draft]) -> None:
+            self.make_draft = make_draft
+
+        def on_notification(self, notification: Notification) -> None:
+            self.make_draft(text=notification.payload["text"])
+
+    return NS, take
+
+
+def test_trace_endpoint_climbs_from_a_reaction_to_the_call_it_started_from(tmp_path):
+    NS, take = _reaction_ns()
+    seen = []
+    with Context(namespaces={NS}, log_dir=tmp_path) as ctx:
+        ctx.events.subscribe(seen.append)
+        ctx.call(ctx.key(take), text="2 baguettes")
+        draft_call = next(e.call_id for e in seen if e.key.endswith(".draft"))
+        client = TestClient(UiServer(ctx, "proj")._app)
+        r = client.get(f"/api/trace/{draft_call}")
+
+    assert r.status_code == 200
+    root = r.json()
+    assert root["key"] == ctx.key(take)
+    (received,) = root["notifications"]
+    assert received["topic"] == "message.in"
+    (reaction,) = received["triggered"]
+    assert reaction["key"].endswith(".desk")
+    (made,) = reaction["children"]
+    assert made["call"] == draft_call
+    assert [n["topic"] for n in made["notifications"]] == ["draft.made"]
+
+
+def test_trace_endpoint_answers_404_for_a_call_not_in_the_logs(tmp_path):
+    with Context(namespaces=set(), log_dir=tmp_path) as ctx:
+        client = TestClient(UiServer(ctx, "proj")._app)
+        r = client.get("/api/trace/nope")
+
+    assert r.status_code == 404
+
+
+def test_trace_endpoint_answers_409_without_file_logging():
+    with Context(namespaces=set()) as ctx:
+        client = TestClient(UiServer(ctx, "proj")._app)
+        r = client.get("/api/trace/abc")
+
+    assert r.status_code == 409
+
+
 def test_function_has_no_details_or_chart():
     NS = make_ns()
 

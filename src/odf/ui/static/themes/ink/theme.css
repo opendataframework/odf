@@ -676,5 +676,23 @@ button.media-tile:hover,button.media-tile:focus-visible{border-color:var(--title
 .toast-logs{background:transparent;border:1px solid var(--border);border-radius:8px;color:var(--text-muted);font-family:'SF Mono',Consolas,monospace;font-size:9.5px;letter-spacing:.06em;text-transform:uppercase;padding:3px 8px;cursor:pointer}
 .toast-logs:hover{color:var(--title-accent);border-color:var(--border-strong);background:var(--hover-bg)}
 .log-line.run-match{background:color-mix(in srgb, var(--title-accent) 10%, transparent)}
+/* Trace view (Show run): a run's calls as a tree, with each call's log lines and notifications */
+.map-trace{display:flex;flex-direction:column;gap:6px;font-family:'SF Mono',Consolas,monospace;font-size:11.5px}
+.trace-call,.trace-note{display:flex;flex-direction:column;gap:4px}
+.trace-head{display:flex;align-items:center;gap:7px;padding:1px 4px;margin-left:-4px;color:var(--text)}
+.trace-head.linked{cursor:pointer}
+.trace-head.linked:hover{background:var(--hover-bg)}
+.trace-head .dot{width:6px;height:6px;flex-shrink:0}
+.trace-method,.trace-took,.trace-head .ts{color:var(--text-dim)}
+.trace-call.failed>.trace-head .trace-took{color:var(--accent-alert)}
+.trace-call.running>.trace-head .trace-took{color:var(--title-accent)}
+.trace-call.asked>.trace-head{background:color-mix(in srgb, var(--title-accent) 10%, transparent)}
+.trace-error{color:var(--accent-alert);white-space:pre-wrap;word-break:break-word}
+.trace-body{display:flex;flex-direction:column;gap:4px;margin-left:2px;padding-left:12px;border-left:1px solid var(--border)}
+.trace-body .log-line{font-size:11.5px}
+.trace-body .log-line span:last-child,.trace-note-head span:last-child{white-space:pre-wrap;word-break:break-word}
+.trace-note-head{display:flex;align-items:baseline;gap:7px;color:var(--text-muted)}
+.trace-topic{flex-shrink:0}
+.hdr-status.done{cursor:pointer}
 @keyframes toast-in{from{opacity:0;transform:translateY(-4px)}to{opacity:1;transform:none}}
 @media (prefers-reduced-motion: reduce){.toast,.hdr-status .dot{animation:none}}

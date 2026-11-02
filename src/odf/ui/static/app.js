@@ -1920,7 +1920,7 @@ const nodeRun = {};            // node id -> {state: running|done|failed, at, co
 const pendingClicks = {};      // node id -> true while this tab's action awaits its call
 const chatCalls = new Set();   // call_ids started during this tab's chat turn
 let flowingEdges = new Set();  // `${from}|${to}` of edges a call goes through
-let lastDone = null;           // {nodeId, text} of the top-level call that just completed
+let lastDone = null;           // {nodeId, text, call} of the top-level call that just completed
 
 const reduceMotion = !!(window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches);
 
@@ -2023,7 +2023,7 @@ function finishRun(node, e, started, fromChat) {
   } else if (topLevel) {
     addLog(`${escapeHtml(node.label)} ${verb}${took}`, nodeAccent(node));
     if (pendingClicks[node.id] || fromChat) showToast(node, { failed: false, text: `${verb}${took}`, since, call: e.call_id });
-    const done = { nodeId: node.id, text: `${verb}${took}` };
+    const done = { nodeId: node.id, text: `${verb}${took}`, call: e.call_id };
     lastDone = done;
     setTimeout(() => {
       if (lastDone === done) { lastDone = null; updateHeaderStatus(); }
@@ -2050,7 +2050,8 @@ function markRunSeen(id) {
 // The header's "System Nominal" tells what the project is doing, since
 // toasts can be hidden (under the chat drawer, say). First a call that's
 // running, then a failure not yet looked at (clicking it opens the logs, as
-// its toast's Show logs does), then a call that just completed.
+// its toast's Show logs does), then a call that just completed (clicking it
+// opens its run, as a toast's Show run does).
 
 function updateHeaderStatus() {
   const el = document.getElementById('hdr-status');
@@ -2085,7 +2086,8 @@ function updateHeaderStatus() {
   if (node) el.style.setProperty('--status-accent', nodeAccentCss(node));
   else el.style.removeProperty('--status-accent');
   el.querySelector('.hdr-status-text').textContent = text;
-  el.title = state === 'failed' ? `${text} — show logs` : text;
+  el.dataset.call = state === 'done' ? lastDone.call || '' : '';
+  el.title = state === 'failed' ? `${text} — show logs` : state === 'done' && lastDone.call ? `${text} — show run` : text;
 }
 
 function initHeaderStatus() {
@@ -2093,6 +2095,11 @@ function initHeaderStatus() {
   if (!el) return;
   el.addEventListener('click', () => {
     const id = el.dataset.node;
+    if (el.classList.contains('done') && el.dataset.call) {
+      selectNode(id);
+      showTraceView(el.dataset.call);
+      return;
+    }
     if (!el.classList.contains('failed') || !nodeRun[id]) return;
     const { since, call } = nodeRun[id];
     markRunSeen(id);
@@ -2134,7 +2141,8 @@ const failureToasts = {}; // node id -> {el, count}
 
 // `node` is the node the toast is about: its label and accent head the
 // toast, and Show logs opens its logs (left out when it isn't on the
-// topology). `level` is a notification's; `open`, if given, backs an Open
+// topology). With a `call`, Show run opens the whole run it is part of (see
+// "Trace view"). `level` is a notification's; `open`, if given, backs an Open
 // button.
 function showToast(node, { failed, text, since, call, level, open }) {
   const box = document.getElementById('toasts');
@@ -2153,6 +2161,7 @@ function showToast(node, { failed, text, since, call, level, open }) {
   const alarming = failed || level === 'error';
   const stays = alarming || level === 'warning';
   const logs = !!nodeMap[node.id];
+  const run = !!call;
   const el = document.createElement('div');
   el.className = `toast${alarming ? ' failed' : level === 'warning' ? ' warning' : ''}`;
   el.setAttribute('role', stays ? 'alert' : 'status');
@@ -2163,8 +2172,9 @@ function showToast(node, { failed, text, since, call, level, open }) {
     `<span class="toast-count"></span>` +
     `<button class="toast-close" title="Dismiss" aria-label="Dismiss">&times;</button></div>` +
     `<div class="toast-text"></div>` +
-    (open || logs ? '<div class="toast-actions">' +
+    (open || run || logs ? '<div class="toast-actions">' +
       (open ? '<button class="toast-logs toast-open">Open <span>&rarr;</span></button>' : '') +
+      (run ? '<button class="toast-logs toast-show-run">Show run <span>&rarr;</span></button>' : '') +
       (logs ? '<button class="toast-logs toast-show-logs">Show logs <span>&rarr;</span></button>' : '') +
       '</div>' : '');
   el.querySelector('.toast-text').textContent = text;
@@ -2176,6 +2186,14 @@ function showToast(node, { failed, text, since, call, level, open }) {
   if (open) {
     el.querySelector('.toast-open').addEventListener('click', () => {
       open();
+      close();
+    });
+  }
+  if (run) {
+    el.querySelector('.toast-show-run').addEventListener('click', () => {
+      markRunSeen(node.id);
+      if (logs) selectNode(node.id);
+      showTraceView(el.dataset.call);
       close();
     });
   }
@@ -2890,7 +2908,7 @@ function renderStats(data) {
 // selection follows the active mode (see selectFromSidebar above), so this
 // is the single place that knows how to enter/leave each mode.
 
-let mapMode = 'topology'; // 'topology' | 'data' | 'stream' | 'media' | 'image' | 'document' | 'timeseries' | 'logs' | 'geo' | 'details' | 'chart'
+let mapMode = 'topology'; // 'topology' | 'data' | 'stream' | 'media' | 'image' | 'document' | 'timeseries' | 'logs' | 'geo' | 'details' | 'chart' | 'trace'
 let audioStreamActive = false; // guards the streaming-audio poll-and-chain loop, see playAudioStream()
 
 function setMapMode(mode) {
@@ -2898,6 +2916,11 @@ function setMapMode(mode) {
     clearInterval(logsPollTimer);
     logsPollTimer = null;
     activeLogComponentId = null;
+  }
+  if (mapMode === 'trace' && mode !== 'trace') {
+    clearInterval(tracePollTimer);
+    tracePollTimer = null;
+    traceCall = null;
   }
   if (mapMode === 'stream' && mode !== 'stream') {
     audioStreamActive = false;
@@ -6388,6 +6411,114 @@ function logTimestamp(epochSeconds) {
   return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())} ` +
     `${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`;
 }
+
+// ── Trace view ───────────────────────────────────────────────────────────
+// Backs "Show run", on a toast and on the header status once a call is done.
+// Reads GET /api/trace/{call_id}, the whole story the call is part of
+// (context.trace(root=True)): from the call it started from, every call made
+// inside it, the log lines each wrote and the notifications each published,
+// and under each notification the calls its subscribers made. So a reaction
+// reads in the same tree as what it reacted to. The call the user came from is
+// marked. Polls while open, as reactions in the background may still be coming.
+
+let traceCall = null;
+let tracePollTimer = null;
+let traceShown = null; // the JSON last drawn, so an unchanged poll doesn't redraw
+
+async function showTraceView(call) {
+  traceCall = call;
+  traceShown = null;
+  setMapMode('trace');
+  document.getElementById('map-panel-title').textContent = 'run';
+  await refreshTrace();
+  clearInterval(tracePollTimer);
+  tracePollTimer = setInterval(refreshTrace, 2000);
+}
+
+async function refreshTrace() {
+  const call = traceCall;
+  const body = document.getElementById('map-panel-body');
+  let res;
+  try {
+    res = await fetch(`/api/trace/${encodeURIComponent(call)}`);
+  } catch (err) {
+    if (traceCall === call) body.innerHTML = '<span class="detail-empty">// failed to load the run</span>';
+    return;
+  }
+  if (traceCall !== call) return;
+  if (!res.ok) {
+    // 404: not written yet, or rotated away; 409: logs that can't be read back.
+    const why = res.status === 404 ? 'this run isn\'t in the logs (yet)'
+      : res.status === 409 ? 'runs need file logging in the json format' : 'failed to load the run';
+    body.innerHTML = `<span class="detail-empty">// ${why}</span>`;
+    traceShown = null;
+    return;
+  }
+  const text = await res.text();
+  if (traceCall !== call || text === traceShown) return;
+  const firstDraw = traceShown === null;
+  traceShown = text;
+  const root = JSON.parse(text);
+  const node = nodeMap[root.key];
+  document.getElementById('map-panel-title').textContent = `${node ? node.label : root.key} · run`;
+  body.innerHTML = `<div class="map-trace">${traceCallHtml(root)}</div>`;
+  const asked = firstDraw && body.querySelector('.trace-call.asked');
+  if (asked) asked.scrollIntoView({ block: 'center' });
+}
+
+// One call: its head, then what happened inside it, in the order it happened.
+function traceCallHtml(c) {
+  const node = nodeMap[c.key];
+  const label = node ? node.label : c.key;
+  const accent = node ? nodeAccentCss(node) : 'var(--text-dim)';
+  const took = c.state === 'running' ? 'running'
+    : c.state === 'failed' ? 'failed' : c.elapsed_ms == null ? c.state : formatElapsed(c.elapsed_ms);
+  const at = c.started ? logTimestamp(Date.parse(c.started) / 1000) : '';
+  const items = [
+    ...c.logs.map(l => ({ ts: l.ts, html: traceLogHtml(l) })),
+    ...c.notifications.map(n => ({ ts: n.ts, html: traceNotificationHtml(n) })),
+    ...c.children.map(k => ({ ts: k.started || k.ended, html: traceCallHtml(k) })),
+  ].sort((a, b) => (Date.parse(a.ts) || 0) - (Date.parse(b.ts) || 0));
+  return `<div class="trace-call ${escapeHtml(c.state)}${c.call === traceCall ? ' asked' : ''}">` +
+    `<div class="trace-head${node ? ' linked' : ''}" data-key="${escapeHtml(c.key)}" data-call="${escapeHtml(c.call)}"` +
+    ` data-since="${c.started ? Date.parse(c.started) / 1000 : ''}"${node ? ' title="Show this call\'s logs"' : ''}>` +
+    `<span class="dot" style="background:${accent}"></span>` +
+    `<span class="trace-key">${escapeHtml(label)}</span>` +
+    `<span class="trace-method">${escapeHtml(methodLabel(c.method))}</span>` +
+    `<span class="trace-took">${escapeHtml(took)}</span>` +
+    (at ? `<span class="ts">${escapeHtml(at)}</span>` : '') + '</div>' +
+    (c.error ? `<div class="trace-error">${escapeHtml(c.error)}</div>` : '') +
+    (items.length ? `<div class="trace-body">${items.map(i => i.html).join('')}</div>` : '') +
+    '</div>';
+}
+
+function traceLogHtml(l) {
+  const color = LOG_LEVEL_COLOR[l.level] || 'var(--text-muted)';
+  const at = l.ts ? logTimestamp(Date.parse(l.ts) / 1000) : '';
+  return `<div class="log-line"><span class="dot" style="background:${color}"></span>` +
+    (at ? `<span class="ts">${escapeHtml(at)}</span>` : '') +
+    `<span>${escapeHtml(l.message || '')}</span></div>`;
+}
+
+// A notification, and under it the calls its subscribers made.
+function traceNotificationHtml(n) {
+  const color = n.level === 'error' ? 'var(--accent-alert)'
+    : n.level === 'warning' ? 'var(--accent-task)' : 'var(--title-accent)';
+  const text = n.message && n.message !== n.topic ? n.message : '';
+  const triggered = n.triggered || [];
+  return '<div class="trace-note">' +
+    `<div class="trace-note-head"><span class="trace-topic" style="color:${color}">&#9670; ${escapeHtml(n.topic || '')}</span>` +
+    (text ? `<span>${escapeHtml(text)}</span>` : '') + '</div>' +
+    (triggered.length ? `<div class="trace-body">${triggered.map(traceCallHtml).join('')}</div>` : '') +
+    '</div>';
+}
+
+document.getElementById('map-panel-body').addEventListener('click', e => {
+  const head = mapMode === 'trace' && e.target.closest('.trace-head.linked');
+  if (!head) return;
+  selectNode(head.dataset.key);
+  showLogsView(head.dataset.key, Number(head.dataset.since) || null, head.dataset.call);
+});
 
 // ── Details view ─────────────────────────────────────────────────────────
 // Backs the "Details" action, present on nodes whose node.details flag came

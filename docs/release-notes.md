@@ -11,6 +11,13 @@
 - **UI**: `GET /api/events` sends each call's `cause`, the id of the notification a
   reaction was made for, and `GET /api/notifications` each notification's `id`. A
   notification that reaches a tab twice is shown once.
+- **UI**: **Show run**, on a notice or the header status of a call that just completed,
+  opens the whole run the call is part of as a tree, read from the logs by
+  `GET /api/trace/{call_id}` (`opendataframework` 0.6.0's `context.trace(root=True)`). It
+  starts at the call the run started from, across reactions too: the trace of a draft a
+  subscriber made starts at the call that took in the message it reacted to. Each call
+  shows its log lines, the calls it made and the notifications it published, and each
+  notification the calls its subscribers made. See [UI](ui.md#run-activity).
 - **Chat**: `[project.chat] context-length` sets the model's context window (Ollama's
   `num_ctx`). A project with many tools needs more than Ollama's default, or the question
   falls out of the window and the model answers something else. See
