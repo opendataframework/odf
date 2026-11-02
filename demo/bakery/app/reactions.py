@@ -80,14 +80,16 @@ class Purchasing:
 
 
 @Publisher("margins.below-cost")
-@Subscriber("prices.changed")
+@Subscriber("prices.changed", deliver="background")
 @Component
 class Costing:
     """Watches what the contracts leave as prices change, and charts it.
 
     When an invoice's prices put a contract below cost that wasn't before,
     it publishes ``margins.below-cost``, naming each one. Its chart is the
-    weekly margin by restaurant at today's prices.
+    weekly margin by restaurant at today's prices. Delivered in the
+    background, so its warning comes after the price notice that caused it,
+    not inside it.
     """
 
     def __init__(
@@ -159,7 +161,8 @@ class Costing:
         return {
             "below cost": ", ".join(f"{r['restaurant']}: {r['product']}" for r in losing) or "none",
             "thinnest": (
-                f"{thinnest['restaurant']}: {thinnest['product']}, £{thinnest['margin']:.2f} each"
+                f"{thinnest['restaurant']}: {thinnest['product']}, "
+                f"{_pounds(thinnest['margin'])} each"
                 if thinnest
                 else "no contracts yet"
             ),
@@ -185,3 +188,8 @@ class Renegotiating:
         restaurants = dict.fromkeys(c["restaurant"] for c in notification.payload["contracts"])
         for restaurant in restaurants:
             self.account_manager.invoke(restaurant=restaurant)
+
+
+def _pounds(value: float) -> str:
+    """Return an amount as ``"£0.12"``, or ``"-£0.07"`` when it's negative."""
+    return f"{'-' if value < 0 else ''}£{abs(value):.2f}"

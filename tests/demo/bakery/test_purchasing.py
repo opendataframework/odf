@@ -517,6 +517,8 @@ def test_costing_names_the_contracts_an_invoice_puts_below_cost(
     assert below.level == "warning" and below.summary.startswith("2 contracts now below cost: ")
     assert len(below.payload["contracts"]) == 2
     assert below.subject == "repository.contracts"
+    thinnest = _costing(bakery, hub).details()["thinnest"]
+    assert thinnest.endswith(" each") and ", -£0." in thinnest
 
 
 def test_costing_says_nothing_when_no_contract_newly_falls_below_cost(bakery, hub):
@@ -601,7 +603,9 @@ def test_the_reactions_subscribe_as_the_chain_needs():
     assert (Subscriber.of(Purchasing).topics, Subscriber.of(Purchasing).deliver) == (
         ("invoices.received",), "background",
     )  # fmt: skip
-    assert Subscriber.of(Costing).topics == ("prices.changed",)
+    assert (Subscriber.of(Costing).topics, Subscriber.of(Costing).deliver) == (
+        ("prices.changed",), "background",
+    )  # fmt: skip
     assert Publisher.of(Costing) == ("margins.below-cost",)
     assert (Subscriber.of(Renegotiating).topics, Subscriber.of(Renegotiating).deliver) == (
         ("margins.below-cost",), "background",

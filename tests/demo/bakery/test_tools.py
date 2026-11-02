@@ -158,3 +158,22 @@ def test_world_clock_carries_on_from_where_it_was_held(monkeypatch):
 def test_quarter_end_is_the_last_day_of_the_quarter():
     assert world._quarter_end(world.datetime(2026, 11, 3)).date().isoformat() == "2026-12-31"
     assert world._quarter_end(world.datetime(2026, 2, 3)).date().isoformat() == "2026-03-31"
+
+
+def test_tick_acts_out_each_minute_once_and_only_once_it_has_begun(monkeypatch):
+    from datetime import datetime, timedelta
+
+    from tools import world
+
+    acted = []
+    monkeypatch.setattr(world, "SUPPLIERS", (data.BY_SUPPLIER["Millers Ltd"],))
+    monkeypatch.setattr(world, "supplier_invoice", lambda supplier: acted.append(supplier.name))
+    monkeypatch.setattr(world, "CAFE_RATE", {})
+    monkeypatch.setattr(world, "_log", lambda text: None)
+    start = datetime(2026, 11, 2, 8, 58, 30)  # a Monday, Millers' day
+    ticks = [start + timedelta(seconds=60 * n) for n in range(4)]  # 08:58:30 to 09:01:30
+
+    for previous, now in zip(ticks, ticks[1:], strict=False):
+        world.tick(previous, now)
+
+    assert acted == ["Millers Ltd"]  # 09:00, once, and not at 08:59:30

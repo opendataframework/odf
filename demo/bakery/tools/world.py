@@ -392,9 +392,14 @@ def spiked_butter() -> float:
 
 
 def tick(previous: datetime, now: datetime) -> None:
-    """Act out every simulated minute from ``previous`` to ``now`` (at most the last hour)."""
+    """Act out each simulated minute that began after ``previous``, up to ``now``, once.
+
+    A minute is acted out once it has begun, never before, so the next tick
+    (which starts from this one's ``now``) doesn't act it out again. At most
+    the last hour is acted out.
+    """
     minute = max(previous, now - timedelta(hours=1)).replace(second=0, microsecond=0)
-    while minute < now:
+    while minute + timedelta(minutes=1) <= now:
         minute += timedelta(minutes=1)
         hour = minute.replace(minute=0)
         if cafe_hour["hour"] != hour:
