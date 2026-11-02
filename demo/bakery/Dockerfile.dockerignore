@@ -5,6 +5,7 @@
 !README.md
 !src
 !demo/bakery/config.toml
+!demo/bakery/layout.json
 !demo/bakery/app
 **/__pycache__
 **/*.pyc

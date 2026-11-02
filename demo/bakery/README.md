@@ -341,6 +341,14 @@ labels it changes (`allergens.changed`), and `AllergenNotices` has the
 allergen-officer draft the notices. Recording the allergen doesn't wait for
 anyone: it errs on the safe side. Telling the restaurants does.
 
+The topology is laid out by area (`layout.json`): the integrations on the
+left, from each tool's client through its service to the function that
+takes its items in; then one band each for wholesale, the café, production,
+purchasing and margins, and allergens, read left to right from the data to
+the agent and the reaction; and the drafts on the right, where every agent's
+work ends up. Moving a node in the UI saves it in the container, so it
+holds until the container is recreated (`docker compose down`).
+
 The topology draws each of these chains before anything happens: a dotted
 link runs from each publisher to each reaction its topics reach, from
 `ingest-message` to `Drafting`, from `ingest-invoice` to `Purchasing`, from
@@ -372,6 +380,7 @@ bakery/
 ├── .env.example          # seed, clock speed, credentials
 ├── Dockerfile            # the bakery: odf from this repository's source, plus app/
 ├── config.toml           # the bakery's odf config: the tools' addresses, ports, intervals
+├── layout.json           # the topology's layout: the integrations, then one band per area
 ├── app/                  # the bakery's odf project
 │   ├── clients.py        # Clock, Pos, Messenger, Drive, Weather, Mail: one per tool
 │   ├── ingest.py         # ingest_message, ingest_sale, ingest_invoice, import_sheets

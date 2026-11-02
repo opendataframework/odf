@@ -1,0 +1,242 @@
+{
+  "agent.account-manager": {
+    "col": 9,
+    "row": 10
+  },
+  "agent.allergen-officer": {
+    "col": 8,
+    "row": 13
+  },
+  "agent.invoice-clerk": {
+    "col": 6,
+    "row": 10
+  },
+  "agent.order-desk": {
+    "col": 7,
+    "row": 1
+  },
+  "agent.specials": {
+    "col": 7,
+    "row": 4
+  },
+  "component.allergen-notices": {
+    "col": 7,
+    "row": 13
+  },
+  "component.clock": {
+    "col": 0,
+    "row": 0
+  },
+  "component.costing": {
+    "col": 7,
+    "row": 10
+  },
+  "component.drafting": {
+    "col": 8,
+    "row": 1
+  },
+  "component.drive": {
+    "col": 0,
+    "row": 4
+  },
+  "component.labelling": {
+    "col": 6,
+    "row": 13
+  },
+  "component.mail": {
+    "col": 0,
+    "row": 3
+  },
+  "component.messenger": {
+    "col": 0,
+    "row": 2
+  },
+  "component.model": {
+    "col": 0,
+    "row": 6
+  },
+  "component.pos": {
+    "col": 0,
+    "row": 1
+  },
+  "component.purchasing": {
+    "col": 5,
+    "row": 10
+  },
+  "component.renegotiating": {
+    "col": 8,
+    "row": 10
+  },
+  "component.weather": {
+    "col": 0,
+    "row": 5
+  },
+  "function.bake-sheet": {
+    "col": 6,
+    "row": 7
+  },
+  "function.confirm-draft": {
+    "col": 12,
+    "row": 6
+  },
+  "function.count-leftovers": {
+    "col": 6,
+    "row": 4
+  },
+  "function.forecast": {
+    "col": 5,
+    "row": 4
+  },
+  "function.import-sheets": {
+    "col": 2,
+    "row": 4
+  },
+  "function.ingest-invoice": {
+    "col": 2,
+    "row": 3
+  },
+  "function.ingest-message": {
+    "col": 2,
+    "row": 2
+  },
+  "function.ingest-sale": {
+    "col": 2,
+    "row": 1
+  },
+  "function.labels": {
+    "col": 6,
+    "row": 12
+  },
+  "function.margins": {
+    "col": 8,
+    "row": 9
+  },
+  "function.plan-deliveries": {
+    "col": 7,
+    "row": 7
+  },
+  "function.reject-draft": {
+    "col": 12,
+    "row": 7
+  },
+  "function.trace-ingredient": {
+    "col": 7,
+    "row": 12
+  },
+  "function.what-if": {
+    "col": 9,
+    "row": 9
+  },
+  "pipeline.close-cafe": {
+    "col": 8,
+    "row": 4
+  },
+  "pipeline.night-run": {
+    "col": 8,
+    "row": 7
+  },
+  "pipeline.onboard": {
+    "col": 3,
+    "row": 0
+  },
+  "repository.allergens": {
+    "col": 5,
+    "row": 12
+  },
+  "repository.bake-sheets": {
+    "col": 7,
+    "row": 6
+  },
+  "repository.cafe-sales": {
+    "col": 5,
+    "row": 3
+  },
+  "repository.contracts": {
+    "col": 7,
+    "row": 0
+  },
+  "repository.delivery-runs": {
+    "col": 8,
+    "row": 6
+  },
+  "repository.drafts": {
+    "col": 11,
+    "row": 6
+  },
+  "repository.forecasts": {
+    "col": 6,
+    "row": 3
+  },
+  "repository.ingredient-prices": {
+    "col": 7,
+    "row": 9
+  },
+  "repository.ingredients": {
+    "col": 6,
+    "row": 9
+  },
+  "repository.invoices": {
+    "col": 5,
+    "row": 9
+  },
+  "repository.leftovers": {
+    "col": 7,
+    "row": 3
+  },
+  "repository.messages": {
+    "col": 5,
+    "row": 1
+  },
+  "repository.order-changes": {
+    "col": 6,
+    "row": 1
+  },
+  "repository.products": {
+    "col": 5,
+    "row": 6
+  },
+  "repository.recipes": {
+    "col": 6,
+    "row": 6
+  },
+  "repository.restaurants": {
+    "col": 5,
+    "row": 0
+  },
+  "repository.standing-orders": {
+    "col": 6,
+    "row": 0
+  },
+  "service.mailbox": {
+    "col": 1,
+    "row": 3
+  },
+  "service.scheduler": {
+    "col": 1,
+    "row": 0
+  },
+  "service.shared-drive": {
+    "col": 1,
+    "row": 4
+  },
+  "service.webhook-receiver": {
+    "col": 1,
+    "row": 1
+  },
+  "task.import-messenger-history": {
+    "col": 3,
+    "row": 2
+  },
+  "task.import-pos-history": {
+    "col": 3,
+    "row": 1
+  },
+  "task.import-sheets": {
+    "col": 3,
+    "row": 4
+  },
+  "task.reconcile-pos": {
+    "col": 2,
+    "row": 0
+  }
+}

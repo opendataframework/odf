@@ -19,7 +19,7 @@ RUN if [ -n "$ODF_INDEX_URL" ]; then \
 
 RUN useradd --create-home bakery && install -d -o bakery /srv/bakery /srv/bakery/data /shared-drive
 WORKDIR /srv/bakery
-COPY --chown=bakery demo/bakery/config.toml ./
+COPY --chown=bakery demo/bakery/config.toml demo/bakery/layout.json ./
 COPY --chown=bakery demo/bakery/app app
 USER bakery
 
