@@ -197,6 +197,10 @@ webhooks, a polled mailbox, a watched drive and a scheduler, with agents
 that draft and people who confirm. Its Dockerfile installs `odf` from this
 repository's own source, so it always runs the `odf` next to it. Its tests
 live under `tests/demo/bakery/`, and bandit skips `demo/` as it does
-`examples/`. The demo is still in progress: parts of it wait on upcoming
+`examples/`. Its simulated tools (`tools/world.py`, `pos.py`, `messenger.py`)
+open `<DATA_DIR>/<tool>.db` as soon as they're imported, and `DATA_DIR`
+defaults to `./data` in the current directory: the tests' `conftest.py` sets
+it to a temp directory, and any other script importing them must set it too,
+or it leaves databases inside the repo. The demo is still in progress: parts of it wait on upcoming
 `opendataframework` features (e.g. declared listeners in 0.6.0), so it isn't
 yet mentioned in `docs/` or the release notes.
