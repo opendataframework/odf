@@ -372,6 +372,47 @@ prices, bake time included), `margins` and `what_if`; and, in
 `app/allergens.py`, each product's label from its recipe (`labels`), and
 `trace_ingredient`.
 
+## Design notes
+
+Choices that aren't obvious from the code:
+
+- **No file-format libraries.** The sheets are CSV, not `.xlsx`, and the
+  suppliers' invoices are real PDFs that `tools/invoices.py` writes and
+  `app/pdf.py` reads by hand. Each image stays small, and an invoice still
+  arrives the way a real one does: as an attachment to read.
+- **One call per inbound item.** Every webhook, email and sheet goes through
+  a function in `app/ingest.py`, so each item gets its own call: logged,
+  traced, and found by its notice's **Show logs** and **Show run**. A run
+  starts at that function, not at the webhook: an HTTP handler isn't a call
+  the framework makes, and the climb never goes into a service's `run()`,
+  which lasts as long as the service does.
+- **Catching up is quiet.** History imported at onboarding, and mail found on
+  the mailbox's first check, is saved without a notification, so old
+  messages don't all become drafts at once.
+- **Reactions run in the background.** Every subscriber in
+  `app/reactions.py` is delivered on a worker of its own, so a slow model
+  never holds up a webhook or the mailbox. It also keeps a chain in order:
+  `Costing`'s below-cost warning follows the price notice that caused it,
+  instead of arriving inside it.
+- **Rules first, then the model, then a person.** An agent reads what its
+  rules can, asks the model only for the rest, and checks the answer
+  (products that exist, dates in range, sensible quantities). Anything it
+  isn't sure of is marked for review. The allergen-officer uses no model at
+  all, since a notice's wording has to be exact.
+- **A fact isn't a decision.** An invoice the rules read cleanly is recorded
+  at once, and so is an allergen a supplier declares, which errs on the safe
+  side. What goes out of the bakery (a reply, new prices, a notice) waits for
+  a person. `confirm-draft` sends first and saves after, so a reply that
+  fails leaves the draft pending.
+- **Safe to call by mistake.** A model in chat may call a tool nobody asked
+  for. `import-sheets` leaves alone the records of a sheet that isn't on the
+  drive, so it can't empty a table.
+- **The bakery's own mail is skipped.** Mailpit's mailbox also holds what
+  the bakery sends, so the mailbox ignores the bakery's address.
+- **What outlasts a restart.** The demo clock is saved every second, so a
+  stopped stack carries on where it was. The bakery's logs, and with them
+  its notification history, live on its data volume.
+
 ## Structure
 
 ```
