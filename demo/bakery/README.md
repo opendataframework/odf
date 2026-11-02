@@ -14,14 +14,46 @@ already runs on good tools, and none of them talk to each other:
 This demo doesn't replace any of them. It connects them with an `odf`
 project, the way a developer would for a real bakery: through the tools' own
 APIs and webhooks, a mailbox, and the shared drive. The result is one place
-where the bakery's people, and later its agents, can see and work with
-everything at once.
+where the bakery's people and its agents see and work with everything at
+once.
 
-> **Work in progress.** So far: the tools, the integrations, the UI showing
-> what arrives, and the daily loop: agents drafting order changes and
-> specials for a person to confirm, the café's forecast, the bake sheet and
-> the delivery run. Agents starting on their own when a message arrives,
-> purchasing, margins and allergens come next.
+## Why
+
+A small business doesn't lack software. The bakery's POS knows every sale,
+the messenger every order change, the inbox every invoice, and the sheets
+every recipe and contract. Each tool is good at its job, and each is an
+island: nobody joined them up, because nobody at a bakery has the time.
+
+More and more of these tools come with an assistant of their own. The POS's
+can say what sold best last Tuesday, and the inbox's can summarise an
+invoice. Each sees only its own tool's data, so each answers only its own
+tool's questions.
+
+The questions that matter to the bakery cross the tools. What to bake
+tomorrow takes the standing orders from a sheet, last night's changes from
+the messenger and email, and the café's sales from the POS. Which
+restaurants it's losing money on takes the suppliers' invoices from the
+inbox, and the recipes and contract prices from the sheets. Who to tell when
+the mill sends a flour that may contain sesame takes the invoice, the
+recipes, and who orders what. No one tool's assistant can answer any of
+them.
+
+`odf` doesn't replace any of the tools. It connects them the ways real
+integrations do: webhooks the POS and the messenger push, a mailbox it
+polls, a schedule on the bakery's day, a shared drive it watches, and
+replies it sends back out by messenger and email. Everything lands in one
+model of the business, which people see in the UI and agents work from. The
+agents draft, and people decide: an order change, a price renegotiation and
+an allergen notice each wait for someone to confirm them, and nothing
+leaves the bakery until someone does.
+
+It runs on the bakery's own machine, with a local model through Ollama, or
+with no model at all: plain rules read the usual phrasings, and whatever
+they can't read waits for a person.
+
+And it grows as the business does. Webhooks can go through a durable broker,
+so nothing is lost across a restart; an accounting tool can join the
+others; and each new source is one more integration feeding the same model.
 
 The bakery, the restaurants, the people and the data are all fictional. Phone
 numbers are in the 07700 900xxx range set aside for drama, and email domains
@@ -128,6 +160,11 @@ Things to try:
   message is marked for review unless there's a model. A message from anyone
   not on the restaurants sheet gets no draft by itself; invoke **order-desk**
   with its id in Messages to draft one anyway.
+- **Follow it through.** **Show run** on either notice opens the whole run as
+  one tree: the message taken in, its notification, `Drafting`'s reaction
+  under it, the order-desk's draft, and the notification that the draft
+  awaits confirmation. On the topology, the dotted link from
+  `ingest-message` to `Drafting` lights up while it reacts.
 - **Confirm it** by calling **confirm-draft** with the draft's id. The reply
   goes back to the restaurant (watch the messenger's thread, or Mailpit for
   an emailed change), and the change reaches the bake sheet. If tomorrow's
@@ -168,6 +205,9 @@ Things to try:
 - **Make it rain** with the console's rainy-week scenario. Nobody forecast
   today's rain, so the café sells less than it baked and leftovers grow;
   tomorrow's forecast knows, and bakes less for the café.
+- **Look back** with the bell in the header: every notice so far, newest
+  first, filtered by topic, publisher or level, with the same **Open**,
+  **Show logs** and **Show run**.
 - **Ask from anywhere.** Every agent and function is an MCP tool too, at
   `localhost:4748`, for an assistant of your own to draft and confirm with.
 - **Ring up a sale** at the POS's till. It arrives in `CafeSales` by webhook,
@@ -301,6 +341,13 @@ labels it changes (`allergens.changed`), and `AllergenNotices` has the
 allergen-officer draft the notices. Recording the allergen doesn't wait for
 anyone: it errs on the safe side. Telling the restaurants does.
 
+The topology draws each of these chains before anything happens: a dotted
+link runs from each publisher to each reaction its topics reach, from
+`ingest-message` to `Drafting`, from `ingest-invoice` to `Purchasing`, from
+the invoice-clerk to `Costing` and `Labelling`, and on down each chain. A
+link lights up while its reaction runs, and **Show run** on any notice in a
+chain opens the whole of it, from the email that started it.
+
 `Model` (`app/model.py`) is a local Ollama, or nothing. An agent asks it only
 what its rules can't read, checks what it answers (products that exist, dates
 in range, sensible quantities), and marks anything it isn't sure of for review
@@ -327,7 +374,7 @@ bakery/
 ├── config.toml           # the bakery's odf config: the tools' addresses, ports, intervals
 ├── app/                  # the bakery's odf project
 │   ├── clients.py        # Clock, Pos, Messenger, Drive, Weather, Mail: one per tool
-│   ├── ingest.py         # ingest_message, ingest_sale, import_sheets
+│   ├── ingest.py         # ingest_message, ingest_sale, ingest_invoice, import_sheets
 │   ├── services.py       # WebhookReceiver, Mailbox, SharedDrive, Scheduler
 │   ├── tasks.py          # history imports, POS reconciliation
 │   ├── pipelines.py      # Onboard, NightRun, CloseCafe

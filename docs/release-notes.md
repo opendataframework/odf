@@ -26,6 +26,11 @@
   same filters. Its rows, and the notifications on `GET /api/notifications`, carry a
   `publisher`: the key normalised, as key lookups compare it. The trace view shows each
   notification's summary under its topic. See [UI](ui.md#run-activity).
+- **Demo**: `demo/bakery`, a whole application built with `odf`, running with
+  `docker compose up`. A bakery's café POS, messenger, email and spreadsheets run as
+  simulated tools, and an `odf` project joins them through webhooks, a polled mailbox, a
+  watched drive and a scheduler. Agents react to what arrives and draft order changes,
+  price renegotiations and allergen notices for a person to confirm. See [Demo](demo.md).
 - **UI**: the topology draws a dotted link from each `@Publisher` to each `@Subscriber` its
   declared topics could reach (`opendataframework` 0.6.0's `context.publishers()` and
   `context.subscribers()`), so who reacts to whom shows before anything is published. A

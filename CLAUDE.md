@@ -142,7 +142,8 @@ external links to commit messages.
 (`server.py`), `docs/ui.md` (`ui/`, including the `config.toml` reference
 for every `[ui]`/`[project]` key `Server.start()` reads), `docs/mcp.md`
 (`mcp/server.py`), `docs/chat.md` (`chat/engine.py`), plus `docs/index.md`
-(an overview linking to each) and `docs/examples.md`. Built with
+(an overview linking to each), `docs/examples.md` and `docs/demo.md`
+(`demo/`). Built with
 `mkdocs.yml` at the repo root and deployed to GitHub Pages by
 `.github/workflows/docs.yml` when a version tag is pushed — only for the
 highest tag, so tagging an older patch doesn't overwrite the site
@@ -201,6 +202,7 @@ live under `tests/demo/bakery/`, and bandit skips `demo/` as it does
 open `<DATA_DIR>/<tool>.db` as soon as they're imported, and `DATA_DIR`
 defaults to `./data` in the current directory: the tests' `conftest.py` sets
 it to a temp directory, and any other script importing them must set it too,
-or it leaves databases inside the repo. The demo is still in progress: parts of it wait on upcoming
-`opendataframework` features (e.g. declared listeners in 0.6.0), so it isn't
-yet mentioned in `docs/` or the release notes.
+or it leaves databases inside the repo. `docs/demo.md` describes it and maps
+each part to the ODF feature it shows; a change to what the demo does goes
+there and in `demo/bakery/README.md`, whose "Why" section is written to stand
+on its own as a blog post.

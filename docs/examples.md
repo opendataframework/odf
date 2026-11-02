@@ -3,6 +3,7 @@
 Small, focused `odf` projects demonstrating the CLI/MCP/UI-server surface
 that sits on top of
 [`opendataframework`](https://opendataframework.github.io/opendataframework/).
+For a whole application using most of it at once, see the [Demo](demo.md).
 These depend on `opendataframework` as a real package dependency, so this
 directory doubles as an integration check that the split works for
 external consumers.
