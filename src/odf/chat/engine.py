@@ -33,6 +33,18 @@ _LIFECYCLE_TOOLS = frozenset(
     {"start_component", "stop_component", "execute_task", "component_logs"}
 )
 
+# Sent first in a turn that has tools, unless the conversation brings its own
+# system message: without it, a small model fills out an answer with records
+# and activity it never looked up, and runs tools that change things to answer
+# a question.
+SYSTEM_PROMPT = (
+    "You answer questions about a running project, using its tools to look things up. "
+    "Say only what the tools returned in this conversation: never add records, numbers "
+    "or activity they didn't show, and if they don't show something, say so. "
+    "Answer in plain words, or a short table, not the tools' raw output. "
+    "Only start, stop, run, invoke or import something when the user asks for that."
+)
+
 
 class ChatEngine:
     """Streams chat replies from a local Ollama model, executing MCP tool calls.
@@ -49,15 +61,36 @@ class ChatEngine:
             the chat window shows them inline. Tool calls are always
             executed and fed back to the model either way; this only
             controls whether that exchange is surfaced to the client.
+        context_length: The model's context window, in tokens (Ollama's
+            ``num_ctx``). ``None`` leaves Ollama's default, which can be too
+            small for a project with many tools: the turn's question falls
+            out of the window and the model answers something else.
+        system_prompt: What the model is told first in a turn that has
+            tools, unless the conversation has its own system message.
+            ``None`` sends ``SYSTEM_PROMPT``; ``""`` sends none.
+
+    A tool name the model gets slightly wrong (``function_margins`` or
+    ``margins_call`` for ``function.margins.call``) is resolved when exactly
+    one tool matches it once dots, dashes and underscores are ignored, as the
+    whole name, its start or a part of it; otherwise the model is told the
+    closest names, so it can correct itself.
     """
 
     def __init__(
-        self, model: str, host: str, mcp: FastMCP | None = None, debug: bool = False
+        self,
+        model: str,
+        host: str,
+        mcp: FastMCP | None = None,
+        debug: bool = False,
+        context_length: int | None = None,
+        system_prompt: str | None = None,
     ) -> None:
         self.model = model
         self._client = AsyncClient(host=host)
         self._mcp = mcp
         self._debug = debug
+        self._options = {"num_ctx": int(context_length)} if context_length else None
+        self._system = SYSTEM_PROMPT if system_prompt is None else system_prompt
 
     async def stream(self, messages: list[dict]) -> AsyncIterator[dict]:
         """Yield ``{"type": ..., ...}`` events for one chat turn.
@@ -82,11 +115,18 @@ class ChatEngine:
             addressed = await self._resolve_addressed(last_content)
             tools = await self._tool_specs(addressed)
             history = list(messages)
+            if (
+                tools is not None
+                and self._system
+                and not any(m.get("role") == "system" for m in history)
+            ):
+                history.insert(0, {"role": "system", "content": self._system})
             for _ in range(_MAX_TOOL_ROUNDTRIPS):
                 content = ""
                 tool_calls: list = []
+                extra = {"options": self._options} if self._options else {}
                 async for chunk in await self._client.chat(
-                    model=self.model, messages=history, tools=tools, stream=True
+                    model=self.model, messages=history, tools=tools, stream=True, **extra
                 ):
                     piece = chunk.message.content
                     if piece:
@@ -180,6 +220,13 @@ class ChatEngine:
     async def _call_tool(self, name: str, arguments: dict, addressed: dict | None) -> str:
         if self._mcp is None:
             return "error: no tools available (mcp=True was not passed to Project.start())"
+        names = [tool.name for tool in await self._mcp.list_tools()]
+        if name not in names:
+            matches = _near(name, names)
+            if len(matches) != 1:
+                hint = f"; did you mean {' or '.join(repr(m) for m in matches)}?" if matches else ""
+                return f"error: there is no tool {name!r}{hint}"
+            name = matches[0]
         if addressed is not None:
             if not self._tool_allowed(name, addressed):
                 return f"error: tool {name!r} is not available while addressing {addressed['id']!r}"
@@ -208,3 +255,28 @@ class ChatEngine:
                 for call in tool_calls
             ],
         }
+
+
+def _squash(name: str) -> str:
+    """Return a tool name with only its letters and digits, lowercased."""
+    return re.sub(r"[^a-z0-9]", "", name.lower())
+
+
+def _near(name: str, names: list[str]) -> list[str]:
+    """Return the tools ``name`` could mean, once squashed: the same, then starting, then within.
+
+    ``function_margins`` squashes to the start of ``function.margins.call``,
+    and ``margins`` or ``margins_call`` to a part of it. The first kind of
+    match that finds any wins, so an exact one beats a longer one.
+    """
+    squashed = _squash(name)
+    if not squashed:
+        return []
+    for found in (
+        [n for n in names if _squash(n) == squashed],
+        [n for n in names if _squash(n).startswith(squashed)],
+        [n for n in names if squashed in _squash(n)],
+    ):
+        if found:
+            return found[:5]
+    return []

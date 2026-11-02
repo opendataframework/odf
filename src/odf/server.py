@@ -252,6 +252,8 @@ class Server:
                     host=chat_cfg.get("ollama-host", "http://localhost:11434"),
                     mcp=self._mcp_server.mcp if self._mcp_server is not None else None,
                     debug=chat_cfg.get("debug", False),
+                    context_length=chat_cfg.get("context-length"),
+                    system_prompt=chat_cfg.get("system-prompt"),
                 )
             ui_cfg = self.config.get("ui", {})
             icon_scripts = extensions.icon_scripts() + [

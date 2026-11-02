@@ -39,6 +39,7 @@ per-environment values that belong in `config.toml`:
 model = "gpt-oss:20b"
 ollama-host = "http://localhost:11434"
 debug = false
+context-length = 32768
 ```
 
 | Key | Default | Description |
@@ -46,6 +47,29 @@ debug = false
 | `model` | `"gpt-oss:20b"` | Ollama model name. Must already be pulled (`ollama pull gpt-oss:20b`). |
 | `ollama-host` | `"http://localhost:11434"` | URL of the running Ollama daemon (`ollama serve`). |
 | `debug` | `false` | Show tool-call/tool-result debug info inline in the chat window. |
+| `context-length` | Ollama's default | The model's context window in tokens, sent as Ollama's `num_ctx`. Raise it once a project has many tools (see below). |
+| `system-prompt` | built in | What the model is told first in a turn that has tools (see below). `""` sends none. |
+
+### Context length
+
+Every turn offers the model every tool's name, description and argument
+schema, and `list_components` returns every node of the project. In a project
+with a couple of dozen components that's over ten thousand tokens, and
+when it no longer fits Ollama's default window, the oldest part of the turn
+(the question itself) falls out of it, and the model answers something else.
+Set `context-length` to a window that holds it; 32768 is plenty for a few
+dozen tools, at the cost of more memory on the Ollama host.
+
+### System prompt
+
+Unless the conversation brings its own system message, a turn with tools
+starts with a short one: answer from what the tools returned in this
+conversation, and say so when they don't show something, rather than adding
+records or activity they didn't show; answer in plain words or a short
+table, not the tools' raw output; and start, stop, run, invoke or import
+something only when asked. Small local models need saying it. Set
+`system-prompt` to replace it with your own, such as one naming the
+project's domain.
 
 ## How tool-calling works
 
@@ -64,6 +88,12 @@ the model requests a tool call, it's always executed and its result fed
 back to the model for a follow-up reply; the chat window additionally
 shows what was called and its result inline only when `[project.chat]`'s
 `debug` is `true`.
+
+A model sometimes gets a tool's name slightly wrong: `function_margins` or
+`margins_call` for `function.margins.call`. Ignoring case, dots, dashes and
+underscores, a name that matches exactly one tool, as the whole name, its
+start or a part of it, calls that tool. Otherwise the model is told there's
+no such tool, along with the closest names, and can try again.
 
 ## Addressing a component with `@`
 

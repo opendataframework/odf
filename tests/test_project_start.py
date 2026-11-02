@@ -152,6 +152,26 @@ def test_start_ui_passes_the_grid_from_config():
         server.stop()
 
 
+def test_start_chat_passes_project_chat_config_to_the_engine(monkeypatch):
+    from odf.chat import engine
+
+    built = {}
+
+    class Engine:
+        def __init__(self, **kwargs):
+            built.update(kwargs)
+
+    monkeypatch.setattr(engine, "ChatEngine", Engine)
+    chat = {"model": "m:1b", "ollama-host": "http://ollama:11434", "context-length": 32768}
+    server = Server.from_dict({"project": {"chat": chat}})
+    server.start(ui=True, ui_port=18790, mcp=True, mcp_port=18791, chat=True, app_module=None)
+    try:
+        assert (built["model"], built["host"]) == ("m:1b", "http://ollama:11434")
+        assert built["context_length"] == 32768 and built["mcp"] is not None
+    finally:
+        server.stop()
+
+
 def test_start_ui_rejects_an_unknown_grid():
     server = Server.from_dict({"ui": {"grid": "hex"}})
     try:

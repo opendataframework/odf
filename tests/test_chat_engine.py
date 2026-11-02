@@ -1,6 +1,8 @@
 import asyncio
 from types import SimpleNamespace
 
+import pytest
+
 from odf.chat import engine as engine_module
 from odf.chat.engine import ChatEngine
 
@@ -447,3 +449,95 @@ def test_addressing_multiple_distinct_components_rejects_turn(monkeypatch):
         }
     ]
     assert client.calls == []
+
+
+_PROJECT_TOOLS = [
+    SimpleNamespace(name=n, description="", inputSchema={"type": "object"})
+    for n in ("function.margins.call", "function.what-if.call", "agent.order-desk.invoke")
+]
+
+
+@pytest.mark.parametrize(
+    "mangled", ["function_margins", "function.margins", "margins", "margins_call", "Margins"]
+)
+def test_a_tool_name_the_model_mangles_is_resolved_when_one_tool_matches(monkeypatch, mangled):
+    calls = [make_tool_call(mangled, {"restaurant": "Kiln"})]
+    client = FakeAsyncClient([[make_chunk("", tool_calls=calls)], [make_chunk("Done.")]])
+    fake_mcp = FakeMcp(tools=_PROJECT_TOOLS)
+    chat_engine = build_engine(monkeypatch, client, mcp=fake_mcp)
+
+    collect(chat_engine, [{"role": "user", "content": "margins for Kiln?"}])
+
+    assert fake_mcp.calls == [("function.margins.call", {"restaurant": "Kiln"})]
+
+
+def test_an_unknown_tool_name_tells_the_model_the_closest_ones(monkeypatch):
+    calls = [make_tool_call("function", {})]
+    client = FakeAsyncClient([[make_chunk("", tool_calls=calls)], [make_chunk("Sorry.")]])
+    fake_mcp = FakeMcp(tools=_PROJECT_TOOLS)
+    chat_engine = build_engine(monkeypatch, client, mcp=fake_mcp, debug=True)
+
+    events = collect(chat_engine, [{"role": "user", "content": "?"}])
+
+    [result] = [e["result"] for e in events if e["type"] == "tool_result"]
+    assert result == (
+        "error: there is no tool 'function'; did you mean "
+        "'function.margins.call' or 'function.what-if.call'?"
+    )
+    assert fake_mcp.calls == []
+    nothing = collect(build_engine(monkeypatch, FakeAsyncClient(
+        [[make_chunk("", tool_calls=[make_tool_call("bake", {})])], [make_chunk(".")]]
+    ), mcp=fake_mcp, debug=True), [{"role": "user", "content": "?"}])  # fmt: skip
+    assert [e["result"] for e in nothing if e["type"] == "tool_result"] == [
+        "error: there is no tool 'bake'"
+    ]
+
+
+def test_context_length_is_passed_to_ollama_as_num_ctx(monkeypatch):
+    seen = {}
+
+    class Client(FakeAsyncClient):
+        async def chat(self, model, messages, tools, stream, **kwargs):
+            seen.update(kwargs)
+            return await super().chat(model, messages, tools, stream)
+
+    client = Client([[make_chunk("Hi")]])
+    monkeypatch.setattr(engine_module, "AsyncClient", lambda host: client)
+
+    collect(
+        ChatEngine(model="m", host="h", context_length=32768), [{"role": "user", "content": "x"}]
+    )
+
+    assert seen == {"options": {"num_ctx": 32768}}
+    seen.clear()
+    collect(ChatEngine(model="m", host="h"), [{"role": "user", "content": "x"}])
+    assert seen == {}  # Ollama's own default
+
+
+def roles_sent(monkeypatch, messages, mcp=None, **engine_args) -> list[tuple[str, str]]:
+    client = FakeAsyncClient([[make_chunk("Hi")]])
+    monkeypatch.setattr(engine_module, "AsyncClient", lambda host: client)
+    collect(ChatEngine(model="m", host="h", mcp=mcp, **engine_args), messages)
+    return [(m["role"], m["content"]) for m in client.calls[0]["messages"]]
+
+
+def test_a_turn_with_tools_starts_with_the_system_prompt(monkeypatch):
+    question = [{"role": "user", "content": "what's waiting?"}]
+
+    assert roles_sent(monkeypatch, question, mcp=FakeMcp()) == [
+        ("system", engine_module.SYSTEM_PROMPT),
+        ("user", "what's waiting?"),
+    ]
+    assert roles_sent(monkeypatch, question, mcp=FakeMcp(), system_prompt="Be brief.")[0] == (
+        "system",
+        "Be brief.",
+    )
+    assert roles_sent(monkeypatch, question, mcp=FakeMcp(), system_prompt="")[0][0] == "user"
+
+
+def test_the_system_prompt_is_left_out_without_tools_or_with_the_conversations_own(monkeypatch):
+    question = [{"role": "user", "content": "hi"}]
+    own = [{"role": "system", "content": "Mine."}, *question]
+
+    assert roles_sent(monkeypatch, question) == [("user", "hi")]
+    assert roles_sent(monkeypatch, own, mcp=FakeMcp()) == [("system", "Mine."), ("user", "hi")]

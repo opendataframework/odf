@@ -11,8 +11,21 @@
 - **UI**: `GET /api/events` sends each call's `cause`, the id of the notification a
   reaction was made for, and `GET /api/notifications` each notification's `id`. A
   notification that reaches a tab twice is shown once.
+- **Chat**: `[project.chat] context-length` sets the model's context window (Ollama's
+  `num_ctx`). A project with many tools needs more than Ollama's default, or the question
+  falls out of the window and the model answers something else. See
+  [Chat](chat.md#context-length).
+- **Chat**: a tool name the model gets slightly wrong, such as `function_margins` for
+  `function.margins.call`, calls the tool it matches when only one does. Otherwise the model
+  is told the closest names, so it can try again.
 
 ### Changed
+
+- **Chat**: a turn with tools starts with a short system prompt: answer only from what the
+  tools returned, in plain words or a short table, and start, stop, run, invoke or import
+  something only when asked. Without it, small local models filled answers with records
+  they never looked up. `[project.chat] system-prompt` replaces it, and `""` sends none. See
+  [Chat](chat.md#system-prompt).
 
 - **UI**: **Show logs** on a run's notice or the header status marks the run by its call
   id: the call's own records and every line written while it ran (each line's `parent`), so
