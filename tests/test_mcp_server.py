@@ -177,6 +177,32 @@ def test_component_logs_reads_a_function_s_calls(tmp_path):
     assert any("completed" in entry["message"] for entry in structured(result))
 
 
+def test_recent_notifications_reads_the_history_newest_first(tmp_path):
+    with Context(log_dir=tmp_path) as ctx:
+        ctx.notifications.publish("orders.received", {}, summary="Le Petit: 2", key="hooks")
+        ctx.notifications.publish("orders.quiet", {}, key="hooks")
+        ctx.notifications.publish(
+            "stock.low", {}, summary="Butter low", level="warning", key="store"
+        )
+        mcp = McpServer(ctx, "proj")._mcp
+        rows = structured(call(mcp, "recent_notifications"))
+        warnings = structured(call(mcp, "recent_notifications", {"level": "warning"}))
+        everything = structured(call(mcp, "recent_notifications", {"include_unsummarized": True}))
+        older = structured(call(mcp, "recent_notifications", {"before": rows[0]["cursor"]}))
+
+    assert [r["summary"] for r in rows] == ["Butter low", "Le Petit: 2"]
+    assert [r["topic"] for r in warnings] == ["stock.low"]
+    assert len(everything) == 3
+    assert [r["summary"] for r in older] == ["Le Petit: 2"]
+
+
+def test_recent_notifications_rejects_a_bad_filter(tmp_path):
+    with Context(log_dir=tmp_path) as ctx:
+        mcp = McpServer(ctx, "proj")._mcp
+        with pytest.raises(ToolError, match="invalid topic filter"):
+            call(mcp, "recent_notifications", {"topic": "a*b"})
+
+
 def test_start_component_unknown_key_raises():
     with Context(namespaces=set()) as ctx:
         mcp = McpServer(ctx, "proj")._mcp

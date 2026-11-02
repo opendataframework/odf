@@ -15,8 +15,9 @@ the two hubs upstream do.
 
 Listeners run in the thread that made the call or published, so a hub only
 hands each item to the clients' event loops and never blocks it. Only what
-happens while a client is connected reaches it: there is no backlog. No HTTP
-concerns live here beyond formatting server-sent events.
+happens while a client is connected reaches it: there is no backlog. What was
+published before is read back with ``notification_history()``, from upstream's
+history file. No HTTP concerns live here beyond formatting server-sent events.
 """
 
 import asyncio
@@ -25,12 +26,16 @@ import json
 import threading
 from collections.abc import AsyncIterator, Callable, Mapping
 
+from opendataframework import normalize_key
 from opendataframework.context import Context
 from opendataframework.events import Event
 from opendataframework.notifications import Notification
 
 # Items a client may fall behind by before its queue is reset.
 QUEUE_SIZE = 1000
+
+# The most rows one page of notification history returns (upstream's limit).
+HISTORY_LIMIT = 1000
 
 # Seconds without an item before a comment line keeps the connection open
 # (and finds out a client has gone).
@@ -68,6 +73,7 @@ def serialize_notification(notification: Notification) -> dict:
         "type": "notification",
         "id": notification.id,
         "key": notification.key,
+        "publisher": normalize_key(notification.key),
         "topic": notification.topic,
         "summary": notification.summary,
         "level": notification.level,
@@ -77,6 +83,37 @@ def serialize_notification(notification: Notification) -> dict:
         "ts": notification.ts,
         "payload": _json_ready(notification.payload),
     }
+
+
+def notification_history(
+    context: Context,
+    *,
+    topic: str | tuple[str, ...] | None = None,
+    key: str | None = None,
+    level: str | tuple[str, ...] | None = None,
+    summary_only: bool = True,
+    before: str | None = None,
+    limit: int = 100,
+) -> list[dict]:
+    """Return ``context.notification_history()``'s rows, each with its ``publisher``.
+
+    ``publisher`` is the row's ``key`` through ``normalize_key()``, as the
+    stream's notifications carry it, so a fetched row and a live one from the
+    same publisher always agree on it. ``limit`` is clamped to 1–1000.
+
+    Raises:
+        LogsUnavailable: If file logging is off.
+        ValueError: For a bad filter or cursor.
+    """
+    rows = context.notification_history(
+        topic=topic,
+        key=key,
+        level=level,
+        summary_only=summary_only,
+        before=before,
+        limit=max(1, min(limit, HISTORY_LIMIT)),
+    )
+    return [{**row, "publisher": normalize_key(row["key"])} for row in rows]
 
 
 def _json_ready(value: object) -> object:

@@ -5,12 +5,19 @@
 
 [project]
 name = "bakery"
+# On the bakery-data volume, so the logs and the notification history outlast
+# the container (docker compose down, then up).
+log-dir = "data/logs"
 
 # The demo runs for days: each component's log rotates at 5 MB, keeping 3
-# older files.
+# older files. The notification history (every notification, in one file)
+# rotates at 20 MB, keeping 5: a café sale is one, so this keeps the notices
+# for days despite them.
 [project.logging]
 max-bytes = 5_000_000
 backups = 3
+history-max-bytes = 20_000_000
+history-backups = 5
 
 [component.sqlite]
 path = "data/bakery.db"

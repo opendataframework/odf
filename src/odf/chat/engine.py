@@ -30,7 +30,13 @@ _MENTION_RE = re.compile(r"(?:^|\s)@([A-Za-z][A-Za-z0-9-]*(?:\.[A-Za-z0-9][A-Za-
 # Fixed lifecycle tools that stay available, scoped to just the addressed
 # component, when a message addresses one (see `_tool_allowed`).
 _LIFECYCLE_TOOLS = frozenset(
-    {"start_component", "stop_component", "execute_task", "component_logs"}
+    {
+        "start_component",
+        "stop_component",
+        "execute_task",
+        "component_logs",
+        "recent_notifications",
+    }
 )
 
 # Sent first in a turn that has tools, unless the conversation brings its own

@@ -10,11 +10,11 @@ import json
 import threading
 from collections.abc import AsyncIterator, Callable, Iterator
 from pathlib import Path
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Annotated
 
 try:
     import uvicorn
-    from fastapi import FastAPI, HTTPException, Request
+    from fastapi import FastAPI, HTTPException, Query, Request
     from fastapi.encoders import jsonable_encoder
     from fastapi.responses import FileResponse, HTMLResponse, Response, StreamingResponse
     from pydantic import ValidationError
@@ -24,6 +24,7 @@ except ImportError as exc:
         "server.start(ui=True) requires the 'ui' extra. Install with: pip install odf[ui]"
     ) from exc
 
+from opendataframework import LogsUnavailable
 from opendataframework.component import ChartProtocol, DetailsProtocol
 from opendataframework.context import Context
 from opendataframework.repository import ReadableProtocol, StreamableProtocol, WritableProtocol
@@ -532,6 +533,40 @@ class UiServer:
                 media_type="text/event-stream",
                 headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
             )
+
+        @app.get("/api/notifications/history")
+        def notification_history(
+            topic: Annotated[list[str] | None, Query()] = None,
+            key: str | None = None,
+            level: Annotated[list[str] | None, Query()] = None,
+            include_all: Annotated[bool, Query(alias="all")] = False,
+            before: str | None = None,
+            limit: int = 100,
+        ) -> list[dict]:
+            """Return the notifications published so far, newest first.
+
+            Reads ``context.notification_history()``: only those with a summary
+            unless ``all``, filtered by ``topic`` patterns, publisher ``key``
+            and ``level`` (each of ``topic`` and ``level`` repeatable), and
+            paged back with ``before``, a row's ``cursor``. ``limit`` is
+            clamped to 1–1000. Each row also carries ``publisher``, its key
+            normalised as the stream's notifications carry it. Answers ``409``
+            when file logging is off, and ``400`` for a bad filter or cursor.
+            """
+            try:
+                return events.notification_history(
+                    self._context,
+                    topic=tuple(topic) if topic else None,
+                    key=key or None,
+                    level=tuple(level) if level else None,
+                    summary_only=not include_all,
+                    before=before or None,
+                    limit=limit,
+                )
+            except LogsUnavailable as exc:
+                raise HTTPException(status_code=409, detail=str(exc)) from exc
+            except ValueError as exc:
+                raise HTTPException(status_code=400, detail=str(exc)) from exc
 
         @app.get("/api/trace/{call_id}")
         def trace(call_id: str) -> dict:

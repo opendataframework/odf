@@ -268,6 +268,32 @@ def test_addressing_forces_lifecycle_tool_key_to_addressed_key(monkeypatch):
     assert forced_call == ("start_component", {"key": "component.widget"})
 
 
+def test_addressing_forces_recent_notifications_key_to_addressed_key(monkeypatch):
+    tools = [
+        *_SCOPED_TOOLS,
+        SimpleNamespace(
+            name="recent_notifications",
+            description="What components announced",
+            inputSchema={"type": "object", "properties": {"key": {"type": "string"}}},
+        ),
+    ]
+    tool_call = make_tool_call("recent_notifications", {"level": "warning"})
+    client = FakeAsyncClient(
+        [
+            [make_chunk("", tool_calls=[tool_call])],
+            [make_chunk("done")],
+        ]
+    )
+    fake_mcp = FakeMcp(tools=tools, tool_result={"result": []})
+    chat_engine = build_engine(monkeypatch, client, mcp=fake_mcp)
+
+    collect(chat_engine, [{"role": "user", "content": "@component.widget any warnings?"}])
+
+    assert "recent_notifications" in {t["function"]["name"] for t in client.calls[0]["tools"]}
+    forced_call = next(c for c in fake_mcp.calls if c[0] == "recent_notifications")
+    assert forced_call == ("recent_notifications", {"level": "warning", "key": "component.widget"})
+
+
 def test_addressing_agent_keeps_its_invoke_tool_and_passes_arguments_through(monkeypatch):
     tools = [
         *_SCOPED_TOOLS,

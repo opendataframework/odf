@@ -113,11 +113,28 @@ steps, or a service's `run()` loop.
     - A notification that reaches a tab twice is shown once, by its `id`.
     - A notification without a `summary` is for other components only, and
       isn't shown.
-    - Only what is published while a tab is open reaches it. Nothing
-      published before, or while the page reloads, is replayed.
+    - Only what is published while a tab is open pops a notice. Nothing
+      published before, or while the page reloads, is replayed as one: that
+      is what the Notifications view is for.
     - A summary reaches everyone who has the UI open, and so does a payload
       over `GET /api/notifications`. Leave out of both whatever they
       shouldn't see.
+
+- The bell in the header opens **Notifications**: every notification from
+  every component, newest first, read back from the project's notification
+  history, so it outlasts reloads and restarts. Each row shows when, the
+  publisher, the level, the topic and the summary, with the notice's
+  **Open**, **Show logs** and **Show run** where they lead somewhere (Show
+  logs only for a publisher on the topology, Open only for a subject that
+  is). Filter it by publisher, level, or topic (exact, or `orders.*` for
+  every topic under `orders`). **All topics** adds the notifications without
+  a summary, meant for components. Notifications published while it's open
+  join it at the top, and **Older** pages back. It needs file logging, in
+  either format. The history keeps each notification's summary, topic,
+  level and subject, not its payload, and is as long as
+  `[project.logging] history-max-bytes` and `history-backups` let it be
+  (rotation is off unless one of the `max-bytes` keys is set; see the
+  [Logger](https://opendataframework.github.io/opendataframework/logger/)).
 
 With the system's reduced-motion setting on, nothing moves: edges in use are
 drawn brighter instead of carrying a pulse, and a running node's ring holds
@@ -622,6 +639,7 @@ registered name:
 | `GET /api/trace/{call_id}` | the whole run a call is part of, as a tree (see below) |
 | `GET /api/events` | every protocol call the project makes, as server-sent events (see below) |
 | `GET /api/notifications` | every notification the project's components publish, as server-sent events (see below) |
+| `GET /api/notifications/history` | the notifications published so far, newest first, a page at a time (see below) |
 
 The collection comes from the execution type, not the key's namespace: a `@Task`
 registered as `loader` is `/api/tasks/loader`, whatever its key. An action that
@@ -651,19 +669,51 @@ the same way, one `data:` line of JSON per notification published, with or
 without a `summary`, from the moment the client connects:
 
 ```json
-{"type": "notification", "id": "…", "key": "service.messenger-inbox", "topic": "messages.received",
+{"type": "notification", "id": "…", "key": "service.messenger-inbox",
+ "publisher": "service.messenger-inbox", "topic": "messages.received",
  "summary": "Le Petit: 2 extra baguettes tomorrow", "level": "info",
  "subject": "repository.messages", "record": 42, "parent": "…", "ts": 1792776224.61,
  "payload": {"restaurant": "Le Petit", "text": "2 extra baguettes tomorrow"}}
 ```
 
 `id` is unique per publish, and is the `cause` of the calls it triggers on
-`GET /api/events`. `parent` is the `call_id` of the call it was published
+`GET /api/events`. `key` is the publisher's key as it was published, and
+`publisher` the same key normalised as key lookups compare keys
+(`opendataframework`'s `normalize_key()`): what a component publishes is
+its `<namespace>.<name>` either way, but the unbound
+`context.notifications.publish(key=...)` may use any key. `parent` is the `call_id` of the call it was published
 during (`null` outside one), matching the `call_id`s on `GET /api/events`.
 `payload` and `record` are sent as JSON: a mapping as an object, a set or a
 tuple as a list, and anything else JSON can't hold as its text. The two
 streams never carry each other's items, and a client that falls behind gets
 the same `{"type": "reset"}`.
+
+`GET /api/notifications/history` returns the notifications published so far,
+newest first, from `opendataframework`'s `context.notification_history()`:
+from a history file of their own, so it outlasts restarts. Each row is:
+
+```json
+{"id": "…", "key": "service.messenger-inbox", "publisher": "service.messenger-inbox",
+ "topic": "messages.received", "level": "info", "summary": "Le Petit: 2 extra baguettes tomorrow",
+ "message": "notified messages.received: Le Petit: 2 extra baguettes tomorrow",
+ "subject": "repository.messages", "record": 42, "parent": "…",
+ "ts": "2026-11-02T21:04:11.125+00:00", "cursor": "…"}
+```
+
+There's no `payload`: the history doesn't keep it. Its query parameters:
+
+| Parameter | Default | Meaning |
+|---|---|---|
+| `topic` | every topic | a topic, or `prefix.*` for every topic under it; repeat it for several |
+| `key` | every publisher | only this publisher's, compared normalised, as `publisher` is |
+| `level` | every level | `info`, `success`, `warning` or `error`; repeat it for several |
+| `all` | off | `1` adds the notifications without a `summary` |
+| `before` | the newest | a row's `cursor`: the rows strictly older than it, so paging with the last row's has no repeats and no gaps |
+| `limit` | 100 | how many rows, clamped to 1–1000 |
+
+It answers `400` for a bad `topic`, `level` or `before`, and `409` with file
+logging off. History starts with `opendataframework` 0.6.0: notifications
+logged before are in their components' logs only.
 
 `GET /api/{collection}/{name}/logs` returns the component's last 300 log
 records, oldest first. With `?call=<call_id>`, it returns that one call's
@@ -688,7 +738,7 @@ highest call still in the logs. Each node is one call:
  "elapsed_ms": 11.2, "error": null,
  "logs": [{"ts": "…", "level": "INFO", "message": "…", "fields": {}}],
  "notifications": [{"id": "…", "key": "function.ingest-message", "topic": "messages.received",
-   "level": "info", "message": "…", "subject": "repository.messages", "record": 42,
+   "level": "info", "summary": "…", "message": "…", "subject": "repository.messages", "record": 42,
    "ts": "…", "triggered": [{"call": "…", "cause": "…", "key": "component.drafting", "…": "…"}]}],
  "children": []}
 ```

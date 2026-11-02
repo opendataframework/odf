@@ -67,9 +67,9 @@ docker compose down -v
 docker compose up --build
 ```
 
-`-v` also deletes the volumes holding the tools' and the bakery's data, the
-mailbox and the shared drive, so the next start seeds and onboards again from
-scratch.
+`-v` also deletes the volumes holding the tools' and the bakery's data
+(its logs and its notification history among them), the mailbox and the
+shared drive, so the next start seeds and onboards again from scratch.
 
 **With a local model.** The agents read the usual phrasings with plain
 rules, and leave the rest (a freeform party order, say) for a person to
@@ -255,6 +255,16 @@ shows on the topology, and its notice's **Show logs** finds it.
 | `ingredients.changed` | yes, a warning: "Millers Ltd: strong white flour now may contain sesame" |
 | `allergens.changed` | yes, a warning: "7 labels now may contain sesame: baguette, brioche, ... 8 restaurants to tell" |
 | `night-run.done` | yes: "Night run for Tue 3 Nov: bake 645 items, 8 deliveries" |
+
+A notice shows once, as it arrives. The bell in the UI's header opens
+**Notifications**: every notice so far, newest first, from every component,
+with the notice's own **Open**, **Show logs** and **Show run**. Filter it by
+topic (`drafts.*` for every draft), publisher or level; **All topics** adds
+the ones for components only, such as each café sale. The MCP tool
+`recent_notifications` reads the same, so chat can answer "what happened
+overnight?". It keeps each notice's summary, not its payload, and a café
+sale is a notification too, so `config.toml` gives the history room of its
+own (`history-max-bytes`) for days of notices.
 
 ## Agents draft, people confirm
 

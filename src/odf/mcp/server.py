@@ -162,6 +162,33 @@ class McpServer:
             key (e.g. "service.postgres")."""
             return self._context.tail_logs(self._context.key(self._lookup(key)), lines)
 
+        @mcp.tool()
+        def recent_notifications(
+            topic: str | None = None,
+            key: str | None = None,
+            level: str | None = None,
+            include_unsummarized: bool = False,
+            before: str | None = None,
+            limit: int = 20,
+        ) -> list[dict]:
+            """Return what the business's components have announced, newest
+            first: each notification's time (ts), publisher (key), topic,
+            level and summary, kept across restarts. Use it for "what
+            happened overnight?" or "any warnings today?". Filter by topic
+            (exact, or a prefix pattern like "drafts.*"), publisher key, or
+            level (info, success, warning, error). Only notifications with a
+            summary unless include_unsummarized. To read further back, pass
+            the last row's cursor as before. limit is 1 to 1000. Payloads
+            aren't kept, only summaries."""
+            return self._context.notification_history(
+                topic=topic or None,
+                key=key or None,
+                level=level or None,
+                summary_only=not include_unsummarized,
+                before=before or None,
+                limit=max(1, min(limit, 1000)),
+            )
+
         # Component-exposed tools: everything that takes arguments gets a
         # tool named by its verb (an agent's "invoke", a function's "call";
         # see odf.ui.arguments), and every resolved instance implementing

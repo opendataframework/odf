@@ -18,6 +18,17 @@
   subscriber made starts at the call that took in the message it reacted to. Each call
   shows its log lines, the calls it made and the notifications it published, and each
   notification the calls its subscribers made. See [UI](ui.md#run-activity).
+- **UI**: a **Notifications** view, opened by the bell in the header: every notification
+  from every component, newest first, kept across restarts, with each notice's **Open**,
+  **Show logs** and **Show run**, filters by topic, publisher and level, and **Older** to
+  page back. It reads `GET /api/notifications/history` (`opendataframework` 0.6.0's
+  `context.notification_history()`), which returns the history a page at a time with the
+  same filters. Its rows, and the notifications on `GET /api/notifications`, carry a
+  `publisher`: the key normalised, as key lookups compare it. The trace view shows each
+  notification's summary under its topic. See [UI](ui.md#run-activity).
+- **MCP**: `recent_notifications` returns the same history, so chat can answer "what
+  happened overnight?". Addressing a component with `@` in chat scopes it to what that
+  component published. See [MCP](mcp.md#tools).
 - **Chat**: `[project.chat] context-length` sets the model's context window (Ollama's
   `num_ctx`). A project with many tools needs more than Ollama's default, or the question
   falls out of the window and the model answers something else. See

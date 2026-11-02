@@ -46,8 +46,9 @@ as each entry's `id`.
 | `stop_component` | `key` | Stops a `@Service`; a no-op if it is stopped |
 | `execute_task` | `key` | Executes a `@Task` or `@Pipeline` and returns what `execute()` returns |
 | `component_logs` | `key`, `lines=50` | Returns the last log entries of any component |
+| `recent_notifications` | `topic`, `key`, `level`, `include_unsummarized=False`, `before`, `limit=20` | Returns the notifications components published, newest first, as `GET /api/notifications/history` does: by default only those with a summary, filtered by topic (`drafts.*` for a prefix), publisher key or level. To read further back, pass the last row's `cursor` as `before`. Needs file logging |
 
-On top of these six, a project adds its own tools, each prefixed by its key.
+On top of these seven, a project adds its own tools, each prefixed by its key.
 
 ### Agents and functions
 

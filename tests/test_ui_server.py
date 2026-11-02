@@ -331,6 +331,79 @@ def test_logs_endpoint_with_a_call_answers_409_without_file_logging():
     assert r.status_code == 409
 
 
+# --- notification history endpoint ----------------------------------------------
+
+
+def _publish_history(ctx):
+    ctx.notifications.publish("orders.received", {}, summary="Le Petit: 2", key="hooks")
+    ctx.notifications.publish("orders.quiet", {}, key="hooks")
+    ctx.notifications.publish("stock.low", {}, summary="Butter low", level="warning", key="Store")
+
+
+def test_notification_history_endpoint_reads_newest_first_with_a_summary(tmp_path):
+    with Context(log_dir=tmp_path) as ctx:
+        _publish_history(ctx)
+        client = TestClient(UiServer(ctx, "proj")._app)
+        rows = client.get("/api/notifications/history").json()
+        everything = client.get("/api/notifications/history?all=1").json()
+
+    assert [r["summary"] for r in rows] == ["Butter low", "Le Petit: 2"]
+    assert rows[0]["key"] == "Store" and rows[0]["publisher"] == "store"
+    assert rows[0]["level"] == "warning" and rows[0]["cursor"]
+    assert [r["topic"] for r in everything] == ["stock.low", "orders.quiet", "orders.received"]
+
+
+def test_notification_history_endpoint_filters_and_pages(tmp_path):
+    with Context(log_dir=tmp_path) as ctx:
+        _publish_history(ctx)
+        client = TestClient(UiServer(ctx, "proj")._app)
+        get = lambda query: client.get(f"/api/notifications/history?{query}").json()  # noqa: E731
+        by_topic = get("topic=orders.*&all=1")
+        by_topics = get("topic=orders.received&topic=stock.low")
+        by_level = get("level=warning&level=error")
+        by_key = get("key=store")
+        first = get("limit=1")
+        second = get(f"limit=1&before={first[0]['cursor']}")
+
+    assert [r["topic"] for r in by_topic] == ["orders.quiet", "orders.received"]
+    assert [r["topic"] for r in by_topics] == ["stock.low", "orders.received"]
+    assert [r["topic"] for r in by_level] == ["stock.low"]
+    assert [r["key"] for r in by_key] == ["Store"]
+    assert [r["topic"] for r in first + second] == ["stock.low", "orders.received"]
+
+
+def test_notification_history_endpoint_rejects_a_bad_filter(tmp_path):
+    with Context(log_dir=tmp_path) as ctx:
+        _publish_history(ctx)
+        client = TestClient(UiServer(ctx, "proj")._app)
+        bad_topic = client.get("/api/notifications/history?topic=a*b")
+        bad_level = client.get("/api/notifications/history?level=warn")
+        bad_cursor = client.get("/api/notifications/history?before=nope")
+
+    assert (bad_topic.status_code, bad_level.status_code, bad_cursor.status_code) == (400, 400, 400)
+
+
+def test_notification_history_endpoint_clamps_the_limit(tmp_path):
+    with Context(log_dir=tmp_path) as ctx:
+        _publish_history(ctx)
+        client = TestClient(UiServer(ctx, "proj")._app)
+        none = client.get("/api/notifications/history?limit=0")
+        many = client.get("/api/notifications/history?limit=5000")
+
+    assert len(none.json()) == 1
+    assert len(many.json()) == 2
+
+
+def test_notification_history_endpoint_is_409_without_file_logging():
+    with Context() as ctx:
+        client = TestClient(UiServer(ctx, "proj")._app)
+        r = client.get("/api/notifications/history")
+        bad = client.get("/api/notifications/history?level=warn")
+
+    assert r.status_code == 409
+    assert bad.status_code == 400
+
+
 # --- trace endpoint -----------------------------------------------------------
 
 
@@ -2423,6 +2496,19 @@ def test_ui_header_status_shows_run_activity():
         css = (themes.STATIC_DIR / "themes" / name / "theme.css").read_text()
         assert ".hdr-status.failed{" in css, name
         assert ".hdr-status.running .dot" in css, name
+
+
+def test_ui_has_the_notifications_view():
+    html = (themes.STATIC_DIR / "index.html").read_text()
+    script = (themes.STATIC_DIR / "app.js").read_text()
+
+    assert 'id="notifications-toggle"' in html
+    assert "/api/notifications/history?" in script
+    assert "function showNotificationsView()" in script
+    # One stream backs the toasts and the view, and only the view sees rows
+    # without a summary.
+    assert script.count("new EventSource('/api/notifications')") == 1
+    assert "onNotification(n);\n    if (mapMode === 'notifications') onNotesLive(n);" in script
 
 
 def test_ui_has_the_lightbox_tool_rail():

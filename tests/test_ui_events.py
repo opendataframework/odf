@@ -244,6 +244,7 @@ def test_serialize_notification_makes_payload_and_record_json_ready():
         "type": "notification",
         "id": seen[0].id,
         "key": ctx.key(TakeOrder),
+        "publisher": ctx.key(TakeOrder),
         "topic": "orders.received",
         "summary": "Le Petit: 2 baguettes",
         "level": "warning",
@@ -335,3 +336,35 @@ def test_notification_hub_stop_unsubscribes_and_ends_clients():
         items = _collect(hub, run)
 
     assert items == [None]
+
+
+def test_serialize_notification_normalizes_the_publisher_of_an_unbound_key():
+    seen = []
+    with Context() as ctx:
+        ctx.notifications.subscribe(seen.append)
+        ctx.notifications.publish("hooks.in", {}, key="WebHooks")
+
+    item = events.serialize_notification(seen[0])
+    assert item["key"] == "WebHooks"
+    assert item["publisher"] == "web-hooks"
+
+
+# --- notification history -----------------------------------------------------
+
+
+def test_notification_history_adds_the_publisher_and_clamps_the_limit(tmp_path):
+    NS = make_ns()
+    TakeOrder = _publisher(NS)
+
+    with Context(namespaces={NS}, log_dir=tmp_path) as ctx:
+        ctx.execute(ctx.key(TakeOrder))
+        ctx.notifications.publish("hooks.in", {}, summary="hook", key="WebHooks")
+        ctx.notifications.publish("hooks.quiet", {}, key="WebHooks")
+        rows = events.notification_history(ctx, limit=0)
+        everything = events.notification_history(ctx, summary_only=False, limit=5000)
+
+    assert [r["topic"] for r in rows] == ["hooks.in"]
+    assert rows[0]["publisher"] == "web-hooks"
+    assert [r["topic"] for r in everything] == ["hooks.quiet", "hooks.in", "orders.received"]
+    assert everything[2]["publisher"] == ctx.key(TakeOrder)
+    assert everything[2]["summary"] == "Le Petit: 2 baguettes"

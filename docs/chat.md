@@ -77,9 +77,9 @@ When `mcp=True` is also passed, `Server.start()` hands the chat engine a
 reference to the same `FastMCP` instance the MCP server serves over
 streamable HTTP (`McpServer.mcp`) — tool definitions and execution are
 shared in-process, not duplicated. On each turn, the model is offered the
-current tool list — the six [fixed tools](mcp.md#tools) (`list_components`,
+current tool list — the seven [fixed tools](mcp.md#tools) (`list_components`,
 `query_repository`, `start_component`, `stop_component`, `execute_task` for a
-task or pipeline, `component_logs`) plus, for every resolved component that exposes its own
+task or pipeline, `component_logs`, `recent_notifications`) plus, for every resolved component that exposes its own
 MCP tools (prefixed by its key, `<namespace>.<name>.<tool>`), that
 component's own tools, for every resolved `@Agent` its `<key>.invoke` tool, and
 for every resolved `@Function` its `<key>.call` tool;
@@ -101,8 +101,8 @@ Mentioning a component's key, `@<namespace>.<name>`, anywhere in a message
 scopes that turn's tool access to just that component — its own exposed
 tools (for an `@Agent`, its `<key>.invoke`, and for an `@Function`, its
 `<key>.call`), its own repository data (if it's a `Repository`), and
-its own lifecycle actions
-(`start_component`/`stop_component`/`execute_task`/`component_logs`,
+its own lifecycle actions and what it announced
+(`start_component`/`stop_component`/`execute_task`/`component_logs`/`recent_notifications`,
 forced to that component regardless of what the model passes) — instead
 of offering every tool in the project. This is useful once a project has
 several repositories/services: instead of the model guessing which

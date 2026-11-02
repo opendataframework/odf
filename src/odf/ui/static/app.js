@@ -2226,17 +2226,28 @@ function showToast(node, { failed, text, since, call, level, open }) {
 // whoever caused it (see odf.ui.events). A notification with a `summary` is
 // meant for people: every open tab shows it as a toast and a log line, and
 // rings its publisher's tile for a moment. One without is for components
-// only, and isn't shown. Only what is published while the tab is connected
-// arrives; nothing is replayed.
+// only, and isn't shown as a toast. Only what is published while the tab is
+// connected arrives; nothing is replayed. What came before is in the
+// Notifications view (see below).
 
 const nodeNotified = {}; // node id -> performance.now() of its latest notification
 
+// The page's one stream backs both the toasts and, while it's open, the
+// Notifications view. It reconnects on its own and replays nothing, so after
+// a reconnect the open view refetches its first page.
 function initNotifications() {
   if (!window.EventSource) return;
   const source = new EventSource('/api/notifications');
+  let opened = false;
+  source.onopen = () => {
+    if (opened && mapMode === 'notifications') refetchNotesFirstPage();
+    opened = true;
+  };
   source.onmessage = msg => {
     const n = JSON.parse(msg.data);
-    if (n.type === 'notification') onNotification(n);
+    if (n.type !== 'notification') return;
+    onNotification(n);
+    if (mapMode === 'notifications') onNotesLive(n);
   };
 }
 
@@ -2948,6 +2959,9 @@ function setMapMode(mode) {
   if (mode !== 'topology') closeStylePicker(); // its anchor (the inspector popup) is hidden outside topology
   mapMode = mode;
   document.getElementById('map').className = 'panel mode-' + mode;
+  const notesBtn = document.getElementById('notifications-toggle');
+  notesBtn.classList.toggle('active', mode === 'notifications');
+  notesBtn.setAttribute('aria-pressed', String(mode === 'notifications'));
   document.getElementById('map-panel-hdr-extra').innerHTML = '';
 }
 
@@ -6504,7 +6518,9 @@ function traceLogHtml(l) {
 function traceNotificationHtml(n) {
   const color = n.level === 'error' ? 'var(--accent-alert)'
     : n.level === 'warning' ? 'var(--accent-task)' : 'var(--title-accent)';
-  const text = n.message && n.message !== n.topic ? n.message : '';
+  // The summary under the topic; `message` repeats the topic, so it's only
+  // the fallback for a trace without summaries.
+  const text = n.summary || (n.message && n.message !== n.topic ? n.message : '');
   const triggered = n.triggered || [];
   return '<div class="trace-note">' +
     `<div class="trace-note-head"><span class="trace-topic" style="color:${color}">&#9670; ${escapeHtml(n.topic || '')}</span>` +
@@ -6518,6 +6534,262 @@ document.getElementById('map-panel-body').addEventListener('click', e => {
   if (!head) return;
   selectNode(head.dataset.key);
   showLogsView(head.dataset.key, Number(head.dataset.since) || null, head.dataset.call);
+});
+
+// ── Notifications view ───────────────────────────────────────────────────
+// Backs the header's Notifications button: every notification from every
+// component, newest first, kept across restarts. Reads
+// GET /api/notifications/history (context.notification_history()) a page at
+// a time, and adds what the page's notification stream brings while it's
+// open. Each row offers the toast's actions, where they lead somewhere: Open
+// when its subject is a node with a data view, Show logs when its publisher
+// is a node, Show run when it was published inside a call.
+
+const NOTES_PAGE = 100;
+let notesRows = [];            // newest first, each with `at` (epoch ms)
+let notesOldestCursor = null;  // the oldest *fetched* row's; live rows have none
+let notesMore = false;         // whether Older may find more
+let notesFetch = 0;            // bumped per fetch, so a stale answer is dropped
+let notesError = null;
+const notesFilter = { topic: '', publisher: '', level: '', all: false };
+const notesPublishers = new Set();
+const notesTopics = new Set();
+const NOTE_LEVELS = ['info', 'success', 'warning', 'error'];
+
+function noteLevelColor(level) {
+  return level === 'error' ? 'var(--accent-alert)'
+    : level === 'warning' ? 'var(--accent-task)'
+    : level === 'success' ? 'var(--title-accent)' : 'var(--text-muted)';
+}
+
+// A history row's ts is ISO 8601, a streamed one's epoch seconds.
+function noteRow(n) {
+  const at = typeof n.ts === 'number' ? n.ts * 1000 : Date.parse(n.ts);
+  return { ...n, at, cursor: n.cursor || null };
+}
+
+// The JS twin of opendataframework.notifications._matches: a filter is a
+// topic, or `prefix.*` for every topic under it.
+function noteTopicMatches(pattern, topic) {
+  if (!pattern) return true;
+  return pattern.endsWith('.*') ? topic.startsWith(pattern.slice(0, -1)) : pattern === topic;
+}
+
+function notePasses(n) {
+  return (notesFilter.all || !!n.summary) &&
+    noteTopicMatches(notesFilter.topic, n.topic) &&
+    (!notesFilter.publisher || n.publisher === notesFilter.publisher) &&
+    (!notesFilter.level || n.level === notesFilter.level);
+}
+
+function notesQuery(before) {
+  const q = new URLSearchParams({ limit: String(NOTES_PAGE) });
+  if (notesFilter.topic) q.set('topic', notesFilter.topic);
+  if (notesFilter.publisher) q.set('key', notesFilter.publisher);
+  if (notesFilter.level) q.set('level', notesFilter.level);
+  if (notesFilter.all) q.set('all', '1');
+  if (before) q.set('before', before);
+  return `/api/notifications/history?${q}`;
+}
+
+// One page: rows, or throws an Error whose message is shown.
+async function fetchNotesPage(before) {
+  const res = await fetch(notesQuery(before));
+  if (res.status === 409) throw new Error('notification history needs file logging');
+  if (!res.ok) {
+    let detail = `HTTP ${res.status}`;
+    try { detail = (await res.json()).detail || detail; } catch (err) { /* not JSON */ }
+    throw new Error(detail);
+  }
+  return (await res.json()).map(noteRow);
+}
+
+function showNotificationsView() {
+  setMapMode('notifications');
+  document.getElementById('map-panel-title').textContent = 'notifications';
+  const extra = document.getElementById('map-panel-hdr-extra');
+  extra.innerHTML = `<button id="notes-all" class="data-btn${notesFilter.all ? ' primary' : ''}" ` +
+    'title="Also show the notifications without a summary, meant for components">All topics</button>';
+  document.getElementById('notes-all').addEventListener('click', e => {
+    notesFilter.all = !notesFilter.all;
+    e.currentTarget.classList.toggle('primary', notesFilter.all);
+    reloadNotes();
+  });
+  document.getElementById('map-panel-body').innerHTML =
+    '<table class="data-table notes-table"><thead><tr>' +
+    '<th>When</th><th>Publisher</th><th>Level</th><th>Topic</th><th>Summary</th><th></th>' +
+    '</tr><tr class="filter-row"><th></th>' +
+    '<th><select id="notes-publisher" class="view-mode-select" title="Publisher"></select></th>' +
+    '<th><select id="notes-level" class="view-mode-select" title="Level"><option value="">all</option>' +
+    NOTE_LEVELS.map(l => `<option value="${l}"${notesFilter.level === l ? ' selected' : ''}>${l}</option>`).join('') +
+    '</select></th>' +
+    `<th><input id="notes-topic" class="col-filter" list="notes-topics" placeholder="topic or prefix.*" value="${escapeHtml(notesFilter.topic)}">` +
+    '<datalist id="notes-topics"></datalist></th><th></th><th></th></tr></thead>' +
+    '<tbody id="notes-rows"></tbody></table>' +
+    '<button id="notes-older" class="data-btn block" hidden>Older</button>';
+  renderNotesPublishers();
+  document.getElementById('notes-publisher').addEventListener('change', e => {
+    notesFilter.publisher = e.target.value;
+    reloadNotes();
+  });
+  document.getElementById('notes-level').addEventListener('change', e => {
+    notesFilter.level = e.target.value;
+    reloadNotes();
+  });
+  document.getElementById('notes-topic').addEventListener('change', e => {
+    notesFilter.topic = e.target.value.trim();
+    reloadNotes();
+  });
+  document.getElementById('notes-older').addEventListener('click', olderNotes);
+  reloadNotes();
+}
+
+async function reloadNotes() {
+  const fetchId = ++notesFetch;
+  notesRows = [];
+  notesOldestCursor = null;
+  notesMore = false;
+  notesError = null;
+  renderNotes();
+  try {
+    const rows = await fetchNotesPage(null);
+    if (fetchId !== notesFetch || mapMode !== 'notifications') return;
+    mergeNotes(rows);
+    notesMore = rows.length === NOTES_PAGE;
+  } catch (err) {
+    if (fetchId !== notesFetch) return;
+    notesError = err.message;
+  }
+  renderNotes();
+}
+
+async function olderNotes() {
+  // Nothing fetched yet (only live rows): the first page, merged by id.
+  if (!notesOldestCursor) return refetchNotesFirstPage();
+  const fetchId = ++notesFetch;
+  try {
+    const rows = await fetchNotesPage(notesOldestCursor);
+    if (fetchId !== notesFetch || mapMode !== 'notifications') return;
+    mergeNotes(rows);
+    notesMore = rows.length === NOTES_PAGE;
+  } catch (err) {
+    if (fetchId !== notesFetch) return;
+    notesError = err.message;
+  }
+  renderNotes();
+}
+
+// After a reconnect, or Older with nothing fetched: the first page, merged by
+// id. A page that doesn't reach the rows already loaded replaces them, so
+// Older pages on from it with no hole.
+async function refetchNotesFirstPage() {
+  const fetchId = ++notesFetch;
+  let rows;
+  try {
+    rows = await fetchNotesPage(null);
+  } catch (err) {
+    if (fetchId === notesFetch) { notesError = err.message; renderNotes(); }
+    return;
+  }
+  if (fetchId !== notesFetch || mapMode !== 'notifications') return;
+  const known = new Set(notesRows.map(r => r.id));
+  const reaches = rows.length < NOTES_PAGE || rows.some(r => known.has(r.id));
+  if (!reaches) notesRows = [];
+  notesError = null;
+  mergeNotes(rows);
+  if (!reaches || !notesMore) notesMore = rows.length === NOTES_PAGE;
+  renderNotes();
+}
+
+// Adds fetched rows, newest first, by id; the oldest fetched cursor moves back.
+function mergeNotes(rows) {
+  const byId = new Map(notesRows.map(r => [r.id, r]));
+  for (const r of rows) {
+    byId.set(r.id, r);
+    notesPublishers.add(r.publisher);
+    notesTopics.add(r.topic);
+  }
+  notesRows = [...byId.values()].sort((a, b) => b.at - a.at);
+  const fetched = notesRows.filter(r => r.cursor);
+  notesOldestCursor = fetched.length ? fetched[fetched.length - 1].cursor : null;
+}
+
+function onNotesLive(n) {
+  notesPublishers.add(n.publisher);
+  notesTopics.add(n.topic);
+  renderNotesPublishers();
+  if (!notePasses(n) || notesRows.some(r => r.id === n.id)) return;
+  notesRows.unshift(noteRow(n));
+  renderNotes();
+}
+
+// The publisher filter lists the publishers seen, so its value is always one
+// the rows carry.
+function renderNotesPublishers() {
+  const select = document.getElementById('notes-publisher');
+  if (!select) return;
+  const keys = [...notesPublishers].sort();
+  const html = '<option value="">all</option>' + keys.map(k =>
+    `<option value="${escapeHtml(k)}"${notesFilter.publisher === k ? ' selected' : ''}>` +
+    `${escapeHtml((nodeMap[k] || { label: k }).label)}</option>`).join('');
+  if (select.dataset.keys !== keys.join('\n')) {
+    select.innerHTML = html;
+    select.dataset.keys = keys.join('\n');
+  }
+  const topics = document.getElementById('notes-topics');
+  if (topics) topics.innerHTML = [...notesTopics].sort().map(t => `<option value="${escapeHtml(t)}">`).join('');
+}
+
+function renderNotes() {
+  const tbody = document.getElementById('notes-rows');
+  if (!tbody) return;
+  renderNotesPublishers();
+  let html = '';
+  if (notesError) {
+    html = `<tr class="empty-row"><td colspan="6">// ${escapeHtml(notesError)}</td></tr>`;
+  } else if (!notesRows.length) {
+    html = '<tr class="empty-row"><td colspan="6">// no notifications yet</td></tr>';
+  }
+  for (const n of notesError ? [] : notesRows) {
+    const node = nodeMap[n.publisher];
+    const opens = n.subject && repoSchemas[n.subject] && repoSchemas[n.subject].view && nodeMap[n.subject];
+    html += `<tr data-id="${escapeHtml(n.id)}">` +
+      `<td class="ts">${escapeHtml(Number.isNaN(n.at) ? String(n.ts) : logTimestamp(n.at / 1000))}</td>` +
+      `<td style="color:${node ? nodeAccentCss(node) : 'var(--text-muted)'}">${escapeHtml(node ? node.label : n.key)}</td>` +
+      `<td style="color:${noteLevelColor(n.level)}">${escapeHtml(n.level)}</td>` +
+      `<td>${escapeHtml(n.topic)}</td>` +
+      `<td>${n.summary ? escapeHtml(n.summary) : '<span class="detail-empty">—</span>'}</td>` +
+      '<td class="actions">' +
+      (opens ? '<button class="data-btn" data-act="open">Open</button>' : '') +
+      (n.parent ? '<button class="data-btn" data-act="run">Show run</button>' : '') +
+      (node ? '<button class="data-btn" data-act="logs">Show logs</button>' : '') +
+      '</td></tr>';
+  }
+  tbody.innerHTML = html;
+  document.getElementById('notes-older').hidden = !!notesError || !notesMore;
+}
+
+document.getElementById('map-panel-body').addEventListener('click', e => {
+  const btn = mapMode === 'notifications' && e.target.closest('button[data-act]');
+  if (!btn) return;
+  const n = notesRows.find(r => r.id === btn.closest('tr').dataset.id);
+  if (!n) return;
+  if (btn.dataset.act === 'open') {
+    selectNode(n.subject);
+    showDataView(n.subject);
+  } else if (btn.dataset.act === 'run') {
+    if (nodeMap[n.publisher]) selectNode(n.publisher);
+    showTraceView(n.parent);
+  } else {
+    markRunSeen(n.publisher);
+    selectNode(n.publisher);
+    showLogsView(n.publisher, n.at / 1000, n.parent);
+  }
+});
+
+document.getElementById('notifications-toggle').addEventListener('click', () => {
+  if (mapMode === 'notifications') backToTopology();
+  else showNotificationsView();
 });
 
 // ── Details view ─────────────────────────────────────────────────────────
