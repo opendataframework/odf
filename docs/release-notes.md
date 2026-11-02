@@ -2,7 +2,23 @@
 
 ## 0.6.0
 
+### Added
+
+- **UI**: `GET /api/{collection}/{name}/logs?call=<call_id>` returns one call's log records
+  from every component's file, however long ago (`opendataframework` 0.6.0's
+  `context.logs()`), or `409` when they can't be read (file logging off, or the `text`
+  format).
+- **UI**: `GET /api/events` sends each call's `cause`, the id of the notification a
+  reaction was made for, and `GET /api/notifications` each notification's `id`. A
+  notification that reaches a tab twice is shown once.
+
 ### Changed
+
+- **UI**: **Show logs** on a run's notice or the header status marks the run by its call
+  id: the call's own records and every line written while it ran (each line's `parent`), so
+  a run that overlapped another is told apart from it. It used to mark everything from the
+  call's start to its end. Once the run is no longer among the last lines, the view shows
+  that run's records alone, read back with `?call=`.
 
 - **Dependencies**: requires `opendataframework` 0.6.x. A component or function that
   publishes through an injected `notifications: Notifications` must now declare its topics

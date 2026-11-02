@@ -2222,8 +2222,20 @@ function initNotifications() {
   };
 }
 
+// The ids of the notifications shown lately, so one that arrives twice (say,
+// over a stream reconnecting) shows once.
+const seenNotifications = new Set();
+const SEEN_NOTIFICATIONS_MAX = 500;
+
 function onNotification(n) {
   if (!n.summary) return;
+  if (n.id) {
+    if (seenNotifications.has(n.id)) return;
+    seenNotifications.add(n.id);
+    if (seenNotifications.size > SEEN_NOTIFICATIONS_MAX) {
+      seenNotifications.delete(seenNotifications.values().next().value);
+    }
+  }
   // The publisher may be hidden by [ui.topology]: its key stands in.
   const node = nodeMap[n.key] || { id: n.key, label: n.key, type: 'component' };
   const color = n.level === 'error' ? ACCENT.alert
@@ -6257,13 +6269,16 @@ const LOG_LEVEL_COLOR = {
 let activeLogComponentId = null;
 let logsPollTimer = null;
 // The run a toast opened the logs for is marked, and its first line scrolled
-// to once: the lines from its call's `started` record to its `completed` or
-// `failed` one, which takes in what the component logged meanwhile (only the
-// call's own records carry its id). Once those have been tailed away, the
-// lines from its start time (epoch seconds) on.
+// to once: the call's own records (its `call`) and every line written while
+// it ran (its `parent`), so a run overlapping another stays apart from it.
+// Once the run has been tailed away, the view shows that run's records alone,
+// read once from GET .../logs?call= (`context.logs()`). Where that can't be
+// read (the `text` log format), the lines from its start time on are marked.
 let logsSince = null;
 let logsCall = null;
 let logsScrollToSince = false;
+// The run's own records, once fetched: an array, or false if they can't be read.
+let logsRunRecords = null;
 
 // `since`, optional, is a run's start as epoch seconds (an event's `ts`), and
 // `call` its `call_id`.
@@ -6271,13 +6286,19 @@ async function showLogsView(id, since, call) {
   activeLogComponentId = id;
   logsSince = since || null;
   logsCall = call || null;
-  logsScrollToSince = !!logsSince;
-  const node = nodeMap[id];
+  logsRunRecords = null;
+  logsScrollToSince = !!(logsSince || logsCall);
   setMapMode('logs');
-  document.getElementById('map-panel-title').textContent = `${node.label} · logs`;
+  setLogsTitle(false);
   await refreshLogs();
   clearInterval(logsPollTimer);
   logsPollTimer = setInterval(refreshLogs, 2000);
+}
+
+function setLogsTitle(runOnly) {
+  const node = nodeMap[activeLogComponentId];
+  document.getElementById('map-panel-title').textContent =
+    `${node.label} · logs${runOnly ? ' · one run' : ''}`;
 }
 
 async function refreshLogs() {
@@ -6291,28 +6312,63 @@ async function refreshLogs() {
     body.innerHTML = '<span class="detail-empty">// failed to load logs</span>';
     return;
   }
-  renderLogs(entries);
+  if (logsCall && !entries.some(inRun)) {
+    const run = await runRecords();
+    if (run && run.length) {
+      setLogsTitle(true);
+      renderLogs(run, true);
+      return;
+    }
+  }
+  setLogsTitle(false);
+  renderLogs(entries, false);
 }
 
-function renderLogs(entries) {
+// Whether log record `e` belongs to the run `logsCall` names.
+function inRun(e) {
+  return e.call === logsCall || e.parent === logsCall;
+}
+
+// The run's records from every file, oldest first; fetched once per run.
+async function runRecords() {
+  if (logsRunRecords === null) {
+    const call = logsCall;
+    try {
+      const res = await fetch(`${apiPath(activeLogComponentId)}/logs?call=${encodeURIComponent(call)}`);
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      const records = await res.json();
+      records.sort((a, b) => Date.parse(a.ts) - Date.parse(b.ts));
+      if (logsCall === call) logsRunRecords = records;
+    } catch (err) {
+      if (logsCall === call) logsRunRecords = false;
+    }
+  }
+  return logsRunRecords || null;
+}
+
+// `runOnly`: `entries` are one run's records, from any component's file, so
+// each line written by another component names it.
+function renderLogs(entries, runOnly) {
   const body = document.getElementById('map-panel-body');
   if (!entries.length) {
     body.innerHTML = '<span class="detail-empty">// no logs yet</span>';
     return;
   }
   const wasAtBottom = body.scrollTop + body.clientHeight >= body.scrollHeight - 4;
-  const run = runSpan(entries);
+  const byCall = logsCall && !runOnly && entries.some(inRun);
   let html = '<div class="map-logs-lines">';
-  entries.forEach((e, i) => {
+  entries.forEach(e => {
     const color = LOG_LEVEL_COLOR[e.level] || 'var(--text-muted)';
     // A record's ts is ISO 8601 with milliseconds and the UTC offset.
     const at = e.ts ? Date.parse(e.ts) / 1000 : NaN;
-    const match = run ? i >= run.from && i <= run.to : logsSince && at >= logsSince;
+    const match = runOnly || (byCall ? inRun(e) : logsSince && at >= logsSince);
     const ts = Number.isNaN(at) ? e.ts : logTimestamp(at);
+    const other = runOnly && e.key && e.key !== activeLogComponentId;
+    const who = other ? `${(nodeMap[e.key] || { label: e.key }).label} · ` : '';
     html += `<div class="log-line${match ? ' run-match' : ''}">` +
       `<span class="dot" style="background:${color}"></span>` +
       (ts ? `<span class="ts">${escapeHtml(ts)}</span>` : '') +
-      `<span>${escapeHtml(e.message)}</span></div>`;
+      `<span>${escapeHtml(who + e.message)}</span></div>`;
   });
   html += '</div>';
   body.innerHTML = html;
@@ -6323,20 +6379,6 @@ function renderLogs(entries) {
   } else if (wasAtBottom) {
     body.scrollTop = body.scrollHeight;
   }
-}
-
-// Indexes of the first and last of `entries` belonging to the run `logsCall`
-// names: its `started` record, up to its `completed`/`failed` one (or the
-// last line, if that isn't logged yet). Null if its start isn't among them.
-function runSpan(entries) {
-  if (!logsCall) return null;
-  const from = entries.findIndex(e => e.call === logsCall && e.state === 'started');
-  if (from < 0) return null;
-  let to = entries.length - 1;
-  for (let i = from + 1; i < entries.length; i++) {
-    if (entries[i].call === logsCall && entries[i].state !== 'started') { to = i; break; }
-  }
-  return { from, to };
 }
 
 // 'YYYY-MM-DD HH:MM:SS' in local time, as a log line shows it.

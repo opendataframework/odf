@@ -13,6 +13,7 @@ from opendataframework.function import Function
 from opendataframework.namespace import Namespace
 from opendataframework.repository import Repository
 from opendataframework.service import Service
+from opendataframework.task import Task
 from opendataframework.view import (
     AudioView,
     ContentMetadata,
@@ -283,6 +284,51 @@ def test_function_logs_endpoint_returns_its_calls(tmp_path):
 
     assert r.status_code == 200
     assert any("completed" in e["message"] for e in r.json())
+
+
+def test_logs_endpoint_with_a_call_returns_that_calls_records_only(tmp_path):
+    NS = make_ns()
+
+    from opendataframework.logger import Logger
+
+    @NS
+    @Task
+    class Load:
+        def __init__(self, logger: Logger) -> None:
+            self.logger = logger
+
+        def execute(self) -> None:
+            self.logger.info("loading")
+
+    seen = []
+    with Context(namespaces={NS}, log_dir=tmp_path) as ctx:
+        ctx.events.subscribe(seen.append)
+        ctx.execute(ctx.key(Load))
+        ctx.execute(ctx.key(Load))
+        client = TestClient(UiServer(ctx, "proj")._app)
+        first = seen[0].call_id
+        r = client.get("/api/tasks/load/logs", params={"call": first})
+
+    assert r.status_code == 200
+    body = r.json()
+    assert [e["message"] for e in body][1] == "loading"
+    assert {e.get("call") or e.get("parent") for e in body} == {first}
+    assert len(body) == 3
+
+
+def test_logs_endpoint_with_a_call_answers_409_without_file_logging():
+    NS = make_ns()
+
+    @NS
+    @Task
+    class Load:
+        def execute(self) -> None: ...
+
+    with Context(namespaces={NS}) as ctx:
+        client = TestClient(UiServer(ctx, "proj")._app)
+        r = client.get("/api/tasks/load/logs", params={"call": "abc"})
+
+    assert r.status_code == 409
 
 
 def test_function_has_no_details_or_chart():

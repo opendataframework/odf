@@ -50,6 +50,7 @@ def serialize(event: Event) -> dict:
         "state": event.state,
         "call_id": event.call_id,
         "parent": event.parent,
+        "cause": event.cause,
         "ts": event.ts,
         "elapsed_ms": event.elapsed_ms,
         "error": event.error,
@@ -65,6 +66,7 @@ def serialize_notification(notification: Notification) -> dict:
     """
     return {
         "type": "notification",
+        "id": notification.id,
         "key": notification.key,
         "topic": notification.topic,
         "summary": notification.summary,

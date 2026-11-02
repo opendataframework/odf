@@ -534,10 +534,21 @@ class UiServer:
             )
 
         @app.get("/api/{collection}/{name}/logs")
-        def component_logs(collection: str, name: str) -> list[dict]:
-            """Return a component's tailed log records."""
+        def component_logs(collection: str, name: str, call: str | None = None) -> list[dict]:
+            """Return a component's tailed log records, or one call's records with ``call``.
+
+            With ``call`` (a ``call_id``), returns what ``context.logs()`` does:
+            the call's own records and everything written during it, from any
+            file, however long ago. Answers ``409`` when that can't be read
+            (file logging off, or the ``text`` format).
+            """
             cls = self._find_or_404(collection, name)
-            return self._context.tail_logs(self._context.key(cls))
+            if call is None:
+                return self._context.tail_logs(self._context.key(cls))
+            try:
+                return self._context.logs(call)
+            except ValueError as exc:
+                raise HTTPException(status_code=409, detail=str(exc)) from exc
 
         @app.get("/api/{collection}/{name}/details")
         def component_details(collection: str, name: str) -> dict[str, str]:

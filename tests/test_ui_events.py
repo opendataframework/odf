@@ -3,6 +3,7 @@ import json
 import threading
 
 import pytest
+from opendataframework.component import Component
 from opendataframework.context import Context
 from opendataframework.function import Function
 from opendataframework.namespace import Namespace
@@ -79,6 +80,7 @@ def test_serialize_names_the_protocol_and_keeps_the_call_fields():
         "state": "started",
         "call_id": started["call_id"],
         "parent": None,
+        "cause": None,
         "ts": started["ts"],
         "elapsed_ms": None,
         "error": None,
@@ -240,6 +242,7 @@ def test_serialize_notification_makes_payload_and_record_json_ready():
     item = events.serialize_notification(seen[0])
     assert item == {
         "type": "notification",
+        "id": seen[0].id,
         "key": ctx.key(TakeOrder),
         "topic": "orders.received",
         "summary": "Le Petit: 2 baguettes",
@@ -252,6 +255,32 @@ def test_serialize_notification_makes_payload_and_record_json_ready():
     }
     assert item["parent"] is not None  # published inside execute()
     json.dumps(item)
+
+
+def test_serialize_names_the_notification_a_reaction_was_caused_by():
+    NS = make_ns()
+    TakeOrder = _publisher(NS)
+
+    from opendataframework.notifications import Notification, Subscriber
+
+    @Subscriber("orders.received")
+    @NS
+    @Component
+    class Kitchen:
+        def on_notification(self, notification: Notification) -> None: ...
+
+    seen, published = [], []
+    with Context(namespaces={NS}) as ctx:
+        ctx.notifications.subscribe(published.append)
+        ctx.events.subscribe(seen.append)
+        ctx.execute(ctx.key(TakeOrder))
+
+    reaction = next(events.serialize(e) for e in seen if e.key == ctx.key(Kitchen))
+    assert reaction["method"] == "on_notification"
+    assert reaction["cause"] == published[0].id
+    assert reaction["parent"] is None
+    top = next(events.serialize(e) for e in seen if e.key == ctx.key(TakeOrder))
+    assert top["cause"] is None
 
 
 def test_notification_hub_delivers_only_what_is_published_while_connected():

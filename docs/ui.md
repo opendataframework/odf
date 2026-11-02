@@ -66,10 +66,12 @@ steps, or a service's `run()` loop.
   keeps failing), which stays until you select the node.
 - A failure also pops a notice in the top-right corner, with the error and a
   **Show logs** button that opens the node's logs at the run, highlighting its
-  lines: from the call's `started` record to its `completed` or `failed` one,
-  found by its call id, with whatever the component logged in between (or,
-  once those records are no longer among the last lines, everything from the
-  run's start on). It stays until closed. A step's failure is reported by its pipeline
+  lines: the call's `started` and `completed` or `failed` records, found by
+  its call id, and every line written while it ran (whose `parent` is that
+  id), so a run that overlapped another is told apart from it. Once those
+  lines are no longer among the last ones, the view shows that run's records
+  alone, read back from every log file (or, with the `text` log format, marks
+  everything from the run's start on). It stays until closed. A step's failure is reported by its pipeline
   when the pipeline fails too. A success pops a notice only for an action you
   started in that tab, from its buttons or its chat, and closes by itself.
 - The header status, **System Nominal** when idle, tells the same story where
@@ -90,7 +92,9 @@ steps, or a service's `run()` loop.
     - **Open** goes to the data view of its `subject`, when that's a
       repository on the topology.
     - **Show logs** opens the publisher's logs. A notification published
-      during a call highlights that call's lines (its `parent`).
+      during a call highlights that call's lines (its `parent`), the same
+      way a failure's notice does.
+    - A notification that reaches a tab twice is shown once, by its `id`.
     - A notification without a `summary` is for other components only, and
       isn't shown.
     - Only what is published while a tab is open reaches it. Nothing
@@ -589,7 +593,7 @@ registered name:
 
 | Route | For |
 |---|---|
-| `GET /api/{collection}/{name}/logs` | any component (`components`, `repositories`, `services`, `tasks`, `pipelines`, `agents`, `functions`) |
+| `GET /api/{collection}/{name}/logs` | any component (`components`, `repositories`, `services`, `tasks`, `pipelines`, `agents`, `functions`): its last log records, or with `?call=<call_id>` one call's records (see below) |
 | `GET /api/{collection}/{name}/details`, `.../chart` | a component implementing `details()` / `chart()` |
 | `POST /api/services/{name}/start`, `.../stop` | a `@Service` |
 | `POST /api/tasks/{name}/execute`, `/api/pipelines/{name}/execute` | a `@Task` / `@Pipeline` |
@@ -613,13 +617,15 @@ moment the client connects:
 
 ```json
 {"type": "call", "key": "task.load-job", "protocol": "TaskProtocol", "method": "execute",
- "state": "completed", "call_id": "…", "parent": "…", "ts": 1792776224.61,
+ "state": "completed", "call_id": "…", "parent": "…", "cause": null, "ts": 1792776224.61,
  "elapsed_ms": 203.7, "error": null}
 ```
 
 `state` is `started`, `completed` or `failed`. A call's `started` and its
 `completed`/`failed` share a `call_id`, and `parent` is the `call_id` of the
-call it was made from (`null` for a top-level call). A client that falls more
+call it was made from (`null` for a top-level call). A top-level call made in
+reaction to a notification (a `@Subscriber`'s `on_notification()`, say) has
+that notification's `id` as its `cause`; every other call has `null`. A client that falls more
 than 1000 events behind gets `{"type": "reset"}` in place of what it missed.
 
 `GET /api/notifications` streams `opendataframework`'s
@@ -628,14 +634,25 @@ the same way, one `data:` line of JSON per notification published, with or
 without a `summary`, from the moment the client connects:
 
 ```json
-{"type": "notification", "key": "service.messenger-inbox", "topic": "messages.received",
+{"type": "notification", "id": "…", "key": "service.messenger-inbox", "topic": "messages.received",
  "summary": "Le Petit: 2 extra baguettes tomorrow", "level": "info",
  "subject": "repository.messages", "record": 42, "parent": "…", "ts": 1792776224.61,
  "payload": {"restaurant": "Le Petit", "text": "2 extra baguettes tomorrow"}}
 ```
 
-`parent` is the `call_id` of the call it was published during (`null` outside
-one), matching the `call_id`s on `GET /api/events`. `payload` and `record` are
-sent as JSON: a mapping as an object, a set as a list, and anything else JSON
-can't hold as its text. The two streams never carry each other's items, and
-a client that falls behind gets the same `{"type": "reset"}`.
+`id` is unique per publish, and is the `cause` of the calls it triggers on
+`GET /api/events`. `parent` is the `call_id` of the call it was published
+during (`null` outside one), matching the `call_id`s on `GET /api/events`.
+`payload` and `record` are sent as JSON: a mapping as an object, a set or a
+tuple as a list, and anything else JSON can't hold as its text. The two
+streams never carry each other's items, and a client that falls behind gets
+the same `{"type": "reset"}`.
+
+`GET /api/{collection}/{name}/logs` returns the component's last 300 log
+records, oldest first. With `?call=<call_id>`, it returns that one call's
+records instead, from every component's log file however long ago
+(`opendataframework`'s `context.logs()`): the call's own `started` and
+`completed`/`failed` records, what was logged while it ran, the
+notifications it published, and the start and end of the calls it made. It
+answers `409` when those can't be read: with file logging off, or the `text`
+log format.
