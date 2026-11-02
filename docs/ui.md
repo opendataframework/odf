@@ -30,6 +30,23 @@ the grid are saved to `layout.json` in the working directory, or the file named
 by `[project] layout-file`. Commit it to share a layout. Icons are stored by key,
 so a node whose icon key no longer exists falls back to its type's default.
 
+### Notification links
+
+A dotted link in the title accent runs from each
+[`@Publisher`](https://opendataframework.github.io/opendataframework/notifications/)
+to each `@Subscriber` its declared topics could reach (`orders.*` reaches a
+subscriber of `orders.received`, and the other way round). It comes from
+what they declare, not from what's been published, so it shows from the
+start. It bends at the other corner from a dependency's wire, so the two stay
+apart where both link the same nodes. While a subscriber reacts to one of the
+publisher's notifications, its link is lit and carries a pulse, for a moment
+after the reaction ends too.
+
+The inspector lists a publisher's topics under **Publishes**, and a
+subscriber's under **Reacts to**, marked when it reacts in the background.
+`[ui.topology] connections = false` hides these links with the rest, and a
+link to a hidden component isn't drawn.
+
 ### Flat grid
 
 `[ui] grid = "flat"` draws the topology as a flat, top-down schematic instead of
@@ -126,7 +143,8 @@ steps, or a service's `run()` loop.
   publisher, the level, the topic and the summary, with the notice's
   **Open**, **Show logs** and **Show run** where they lead somewhere (Show
   logs only for a publisher on the topology, Open only for a subject that
-  is). Filter it by publisher, level, or topic (exact, or `orders.*` for
+  is). Filter it by publisher (every declared `@Publisher`, and any other
+  key a notification came from), level, or topic (exact, or `orders.*` for
   every topic under `orders`). **All topics** adds the notifications without
   a summary, meant for components. Notifications published while it's open
   join it at the top, and **Older** pages back. It needs file logging, in
@@ -148,7 +166,7 @@ them. The `[ui.topology]` table in config narrows that:
 
 ```toml
 [ui.topology]
-connections = false                  # default true: draw links between components
+connections = false                  # default true: draw links between components, notification links too
 config = false                       # default true: show the Config node
 repositories = ["readings"]          # only these repositories
 tasks = ["seed-readings"]            # only these tasks

@@ -26,6 +26,13 @@
   same filters. Its rows, and the notifications on `GET /api/notifications`, carry a
   `publisher`: the key normalised, as key lookups compare it. The trace view shows each
   notification's summary under its topic. See [UI](ui.md#run-activity).
+- **UI**: the topology draws a dotted link from each `@Publisher` to each `@Subscriber` its
+  declared topics could reach (`opendataframework` 0.6.0's `context.publishers()` and
+  `context.subscribers()`), so who reacts to whom shows before anything is published. A
+  link lights up while a reaction to the publisher's notification runs, and the inspector
+  lists what a node publishes and reacts to. `GET /api/topology` carries the links as
+  `notifies`, every declared publisher as `publishers`, and each node's `publishes` and
+  `subscribes`. See [UI](ui.md#notification-links).
 - **MCP**: `recent_notifications` returns the same history, so chat can answer "what
   happened overnight?". Addressing a component with `@` in chat scopes it to what that
   component published. See [MCP](mcp.md#tools).

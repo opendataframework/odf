@@ -12,6 +12,11 @@ A node is a resolved class or function. Its id is its key (``task.loader``)
 and its type its execution type (``task``; see ``odf.ui.keys``). ``Config`` is
 pre-seeded rather than registered, so it has no key and keeps the id
 ``config``.
+
+An edge is a dependency (``from`` is injected into ``to``). A notification
+link (``notifies``) runs from a ``@Publisher`` to a ``@Subscriber`` whose
+topics could meet its own, from what they declare (``Context.publishers()``
+and ``Context.subscribers()``), so it shows before anything is published.
 """
 
 import inspect
@@ -140,8 +145,14 @@ def build_topology(
             (such as ``_grid``) are ignored.
 
     Returns:
-        A dict with ``project``, ``nodes``, ``edges``, and ``stats`` keys,
-        suitable for ``json`` serialization.
+        A dict with ``project``, ``nodes``, ``edges``, ``notifies``,
+        ``publishers`` and ``stats`` keys, suitable for ``json`` serialization.
+        ``notifies`` links a visible publisher to each visible subscriber its
+        declared topics could reach, with those ``topics``; like ``edges``,
+        it's empty when the view hides connections. ``publishers`` lists
+        every resolved publisher, shown or not, with its declared topics. A
+        publisher's node also has ``publishes`` (its topics), and a
+        subscriber's ``subscribes`` (its topics and ``deliver``).
     """
     view = view or TopologyView()
     # A function's "instance" is its bound callable, the one ``Context.get`` returns.
@@ -162,12 +173,21 @@ def build_topology(
             auto[cls] = (depth, row)
     cells = _resolve_cells(auto, _pinned_cells(layout), ids)
 
+    publishers = context.publishers()
+    subscribers = context.subscribers()
+    publishes = {p["key"]: p["topics"] for p in publishers}
+    subscribes = {s["key"]: {"topics": s["topics"], "deliver": s["deliver"]} for s in subscribers}
+
     nodes = []
     for cls in sorted(node_set, key=lambda c: (cells[c], c.__name__, ids[c])):
         col, row = cells[cls]
         node = _describe_node(context, cls, instances[cls], ids[cls], col=col, row=row)
         if node["type"] == "service":
             node["running"] = context.is_running(ids[cls])
+        if ids[cls] in publishes:
+            node["publishes"] = publishes[ids[cls]]
+        if ids[cls] in subscribes:
+            node["subscribes"] = subscribes[ids[cls]]
         nodes.append(node)
 
     edges = (
@@ -179,13 +199,50 @@ def build_topology(
         if view.connections
         else []
     )
+    shown = {ids[cls] for cls in node_set}
+    notifies = (
+        [
+            {"from": p["key"], "to": s["key"], "topics": topics}
+            for p in publishers
+            for s in subscribers
+            if p["key"] in shown and s["key"] in shown and p["key"] != s["key"]
+            if (topics := _reaching(p["topics"], s["topics"]))
+        ]
+        if view.connections
+        else []
+    )
 
     return {
         "project": project,
         "nodes": nodes,
         "edges": edges,
+        "notifies": notifies,
+        "publishers": publishers,
         "stats": _stats(nodes, edges),
     }
+
+
+def _reaching(published: list[str], subscribed: list[str]) -> list[str]:
+    """Return the ``published`` topic filters that could meet any of ``subscribed``.
+
+    Each is a topic or ``prefix.*``, as ``@Publisher`` and ``@Subscriber``
+    take them: two meet when some topic matches both.
+    """
+    return [p for p in published if any(_overlap(p, s) for s in subscribed)]
+
+
+def _overlap(a: str, b: str) -> bool:
+    """Return whether some topic matches both topic filters ``a`` and ``b``."""
+    # "orders.*" matches every topic starting "orders.", so its stem keeps the dot.
+    stem_a = a[:-1] if a.endswith(".*") else None
+    stem_b = b[:-1] if b.endswith(".*") else None
+    if stem_a is not None and stem_b is not None:
+        return stem_a.startswith(stem_b) or stem_b.startswith(stem_a)
+    if stem_a is not None:
+        return b.startswith(stem_a)
+    if stem_b is not None:
+        return a.startswith(stem_b)
+    return a == b
 
 
 def _visible_dependencies(

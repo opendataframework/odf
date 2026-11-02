@@ -40,6 +40,7 @@ const VIEW_MODE = {
 
 let nodes = [];
 let edges = [];
+let notifies = []; // notification links: {from, to, topics} (see "Notification links")
 let nodeMap = {};
 let repoSchemas = {};
 let layoutOverrides = {}; // node id -> {col, row}, persisted via /api/layout
@@ -215,6 +216,10 @@ const THEME_STYLE = {
     ctx.shadowColor = accent;
     ctx.shadowBlur = 7;
   },
+  // A notification link (publisher to subscriber, see "Notification
+  // links"): its dash pattern, and its alpha while no reaction runs on it.
+  notifyDash: [2, 3],
+  notifyAlpha: 0.5,
 };
 
 // Strokes the outline of a tile or box face with the caller's strokeStyle and
@@ -1078,7 +1083,38 @@ function drawEdge(fromNode, toNode, dashed, flowing) {
 
   // traveling pulse, colored by destination node; still under reduced motion,
   // where the brighter wire alone shows the flow
-  if (!flowing || reduceMotion) return;
+  if (flowing) drawPulse(pts, fromNode, toNode);
+}
+
+// ── Notification links — from a @Publisher to each @Subscriber its declared
+// topics could reach (GET /api/topology's `notifies`), so who reacts to whom
+// shows before anything is published. Dotted, in the title accent, and bent
+// at the other corner from a dependency's wire, so the two don't overlap.
+// While a reaction to one of the publisher's notifications runs, the link is
+// lit and carries a pulse, as a wire does for a call. ──────────────────────
+
+function drawNotifyLink(fromNode, toNode, reacting) {
+  const f = gridPos(fromNode.col, fromNode.row);
+  const bend = gridPos(fromNode.col, toNode.row);
+  const t = gridPos(toNode.col, toNode.row);
+  const pts = [[f.x, f.y], [bend.x, bend.y], [t.x, t.y]];
+  ctx.save();
+  if (reacting) THEME_STYLE.flowLine(TITLE_ACCENT);
+  ctx.globalAlpha = reacting ? 1 : THEME_STYLE.notifyAlpha;
+  ctx.beginPath();
+  ctx.moveTo(pts[0][0], pts[0][1]);
+  for (let i = 1; i < pts.length; i++) ctx.lineTo(pts[i][0], pts[i][1]);
+  ctx.strokeStyle = TITLE_ACCENT;
+  ctx.lineWidth = 1.1;
+  ctx.setLineDash(THEME_STYLE.notifyDash);
+  ctx.stroke();
+  ctx.restore();
+  ctx.setLineDash([]);
+  if (reacting) drawPulse(pts, fromNode, toNode);
+}
+
+function drawPulse(pts, fromNode, toNode) {
+  if (reduceMotion) return;
   const accent = nodeAccent(toNode);
   const segLens = [];
   let total = 0;
@@ -1359,6 +1395,11 @@ function render() {
   for (const e of edges) {
     drawEdge(nodeMap[e.from], nodeMap[e.to], e.dashed || false, flowingEdges.has(`${e.from}|${e.to}`));
   }
+  for (const l of notifies) {
+    if (nodeMap[l.from] && nodeMap[l.to]) {
+      drawNotifyLink(nodeMap[l.from], nodeMap[l.to], reactingLinks.has(`${l.from}|${l.to}`));
+    }
+  }
 
   // 3 — Buildings (back to front, per-type silhouette)
   for (const node of byDepth) {
@@ -1563,6 +1604,9 @@ function selectNode(id) {
     ['Type', `<dd>${node.decorator || node.type}</dd>`],
     ['Layer', node.layer && `<dd>${layerBadgeHtml(node.layer)}</dd>`],
     ['File', node.file && `<dd class="file" title="${node.file}">${node.file}</dd>`],
+    ['Publishes', node.publishes && `<dd>${escapeHtml(node.publishes.join(', '))}</dd>`],
+    ['Reacts to', node.subscribes && `<dd>${escapeHtml(node.subscribes.topics.join(', '))}` +
+      `${node.subscribes.deliver === 'background' ? ' (in the background)' : ''}</dd>`],
   ].filter(([, dd]) => dd);
 
   // One full-width row per action, so the rows line up whatever set of
@@ -1920,6 +1964,9 @@ const nodeRun = {};            // node id -> {state: running|done|failed, at, co
 const pendingClicks = {};      // node id -> true while this tab's action awaits its call
 const chatCalls = new Set();   // call_ids started during this tab's chat turn
 let flowingEdges = new Set();  // `${from}|${to}` of edges a call goes through
+let reactingLinks = new Set(); // `${from}|${to}` of notification links a reaction runs on
+const reactions = new Map();   // call_id of a reaction (an event with a cause) -> its link
+const notifiers = new Map();   // notification id -> its publisher, lately seen
 let lastDone = null;           // {nodeId, text, call} of the top-level call that just completed
 
 const reduceMotion = !!(window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches);
@@ -1953,6 +2000,8 @@ function initRunEvents() {
 function resetRunState() {
   activeCalls.clear();
   chatCalls.clear();
+  reactions.clear();
+  reactingLinks = new Set();
   for (const id of Object.keys(nodeRun)) {
     if (nodeRun[id].state === 'running') delete nodeRun[id];
   }
@@ -1962,6 +2011,7 @@ function resetRunState() {
 }
 
 function onRunEvent(e) {
+  if (e.cause) onReactionEvent(e);
   const node = nodeMap[e.key];
   if (!node) return; // hidden by [ui.topology], or not a component
   if (e.protocol === 'ServiceProtocol') syncServiceState(node, e);
@@ -2108,6 +2158,43 @@ function initHeaderStatus() {
   });
 }
 
+// A reaction is a call made for a notification: its `cause` is the
+// notification's id, whose publisher the notification stream told us. The
+// two streams aren't ordered with each other, so a reaction whose
+// notification hasn't arrived yet falls back to the subscriber's one link,
+// if it has only one. The link stays lit a moment after the reaction ends.
+const NOTIFIERS_MAX = 500;
+const REACTION_HOLD_MS = 1500;
+
+function rememberNotifier(n) {
+  notifiers.set(n.id, n.publisher || n.key);
+  if (notifiers.size > NOTIFIERS_MAX) notifiers.delete(notifiers.keys().next().value);
+}
+
+function onReactionEvent(e) {
+  if (e.state === 'started') {
+    const from = notifiers.get(e.cause);
+    const into = notifies.filter(l => l.to === e.key);
+    const link = into.find(l => l.from === from) || (into.length === 1 ? into[0] : null);
+    if (!link) return;
+    reactions.set(e.call_id, `${link.from}|${link.to}`);
+  } else {
+    if (!reactions.has(e.call_id)) return;
+    setTimeout(() => {
+      reactions.delete(e.call_id);
+      updateReactingLinks();
+      render();
+    }, REACTION_HOLD_MS);
+    return;
+  }
+  updateReactingLinks();
+  render();
+}
+
+function updateReactingLinks() {
+  reactingLinks = new Set(reactions.values());
+}
+
 // An edge carries a call while a call on one end is running and the other
 // end takes part: it has a call made from inside that one (a pipeline's
 // step, a function a task calls), or it is something called into rather
@@ -2246,6 +2333,7 @@ function initNotifications() {
   source.onmessage = msg => {
     const n = JSON.parse(msg.data);
     if (n.type !== 'notification') return;
+    rememberNotifier(n);
     onNotification(n);
     if (mapMode === 'notifications') onNotesLive(n);
   };
@@ -6956,6 +7044,10 @@ async function init() {
 
   nodes = data.nodes;
   edges = data.edges;
+  notifies = data.notifies || [];
+  // Publishers declared, so the Notifications view's filter lists them
+  // before they have published.
+  for (const p of data.publishers || []) notesPublishers.add(p.key);
   nodeMap = Object.fromEntries(nodes.map(n => [n.id, n]));
   for (const [id, schema] of Object.entries(repoSchemas)) {
     if (nodeMap[id]) nodeMap[id].streaming = schema.streaming;

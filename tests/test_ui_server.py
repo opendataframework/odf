@@ -2511,6 +2511,15 @@ def test_ui_has_the_notifications_view():
     assert "onNotification(n);\n    if (mapMode === 'notifications') onNotesLive(n);" in script
 
 
+def test_ui_draws_notification_links_and_lights_them_for_reactions():
+    script = (themes.STATIC_DIR / "app.js").read_text()
+
+    assert "notifies = data.notifies || [];" in script
+    assert "function drawNotifyLink(fromNode, toNode, reacting)" in script
+    assert "if (e.cause) onReactionEvent(e);" in script
+    assert "rememberNotifier(n);\n    onNotification(n);" in script
+
+
 def test_ui_has_the_lightbox_tool_rail():
     html = (themes.STATIC_DIR / "index.html").read_text()
     script = (themes.STATIC_DIR / "app.js").read_text()

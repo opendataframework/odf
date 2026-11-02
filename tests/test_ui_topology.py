@@ -753,3 +753,115 @@ def test_resolved_cells_are_unique():
         data = build_topology(ctx, "p", layout=layout)
 
     assert len(set(cells_of(data).values())) == 5
+
+
+# --- notification links --------------------------------------------------------
+
+
+def _notifying(NS):
+    from opendataframework.notifications import Notification, Publisher, Subscriber
+
+    @Publisher("orders.received", "orders.cancelled")
+    @NS
+    @Function
+    def take_order() -> None: ...
+
+    @Publisher("stock.*")
+    @NS
+    @Task
+    class CountStock:
+        def execute(self) -> None: ...
+
+    @Subscriber("orders.received", deliver="background")
+    @NS
+    @Component
+    class Kitchen:
+        def on_notification(self, notification: Notification) -> None: ...
+
+    @Subscriber("orders.*", "stock.low")
+    @NS
+    @Component
+    class Ledger:
+        def on_notification(self, notification: Notification) -> None: ...
+
+    @Subscriber("staff.*")
+    @NS
+    @Component
+    class Rota:
+        def on_notification(self, notification: Notification) -> None: ...
+
+
+def test_notifies_links_each_publisher_to_the_subscribers_its_topics_reach():
+    NS = make_ns()
+    _notifying(NS)
+
+    with Context(namespaces={NS}) as ctx:
+        data = build_topology(ctx, "proj")
+
+    assert data["notifies"] == [
+        {"from": "n-s.count-stock", "to": "n-s.ledger", "topics": ["stock.*"]},
+        {"from": "n-s.take-order", "to": "n-s.kitchen", "topics": ["orders.received"]},
+        {
+            "from": "n-s.take-order",
+            "to": "n-s.ledger",
+            "topics": ["orders.received", "orders.cancelled"],
+        },
+    ]
+    assert data["publishers"] == [
+        {"key": "n-s.count-stock", "topics": ["stock.*"]},
+        {"key": "n-s.take-order", "topics": ["orders.received", "orders.cancelled"]},
+    ]
+    by_id = {n["id"]: n for n in data["nodes"]}
+    assert by_id["n-s.take-order"]["publishes"] == ["orders.received", "orders.cancelled"]
+    assert by_id["n-s.kitchen"]["subscribes"] == {
+        "topics": ["orders.received"],
+        "deliver": "background",
+    }
+    assert "publishes" not in by_id["n-s.kitchen"]
+    assert "subscribes" not in by_id["n-s.take-order"]
+
+
+def test_notifies_leaves_out_hidden_nodes_but_publishers_keep_them():
+    NS = make_ns()
+    _notifying(NS)
+    view = TopologyView.from_config({"components": ["kitchen"]})
+
+    with Context(namespaces={NS}) as ctx:
+        data = build_topology(ctx, "proj", view=view)
+
+    assert data["notifies"] == [
+        {"from": "n-s.take-order", "to": "n-s.kitchen", "topics": ["orders.received"]}
+    ]
+    assert [p["key"] for p in data["publishers"]] == ["n-s.count-stock", "n-s.take-order"]
+
+
+def test_notifies_is_empty_without_connections():
+    NS = make_ns()
+    _notifying(NS)
+    view = TopologyView.from_config({"connections": False})
+
+    with Context(namespaces={NS}) as ctx:
+        data = build_topology(ctx, "proj", view=view)
+
+    assert data["notifies"] == []
+    assert len(data["publishers"]) == 2
+
+
+@pytest.mark.parametrize(
+    ("a", "b", "meet"),
+    [
+        ("orders.received", "orders.received", True),
+        ("orders.received", "orders.cancelled", False),
+        ("orders.*", "orders.received", True),
+        ("orders.received", "orders.*", True),
+        ("orders.*", "orders.web.*", True),
+        ("orders.web.*", "orders.*", True),
+        ("orders.*", "order.*", False),
+        ("orders.*", "orders", False),
+        ("ordersx.new", "orders.*", False),
+    ],
+)
+def test_topic_filters_overlap_when_some_topic_matches_both(a, b, meet):
+    from odf.ui.topology import _overlap
+
+    assert _overlap(a, b) is meet
