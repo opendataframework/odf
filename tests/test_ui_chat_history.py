@@ -275,3 +275,45 @@ def test_the_drawer_lists_kept_conversations_and_asks_in_threads():
         css = (theme / "theme.css").read_text()
         assert ".chat-msg.note.user{" in css, theme.name
         assert "#chat-delete[hidden]" in css, theme.name
+
+
+def test_a_question_whose_turn_failed_is_kept_but_not_sent_again(tmp_path):
+    engine = RecordingEngine()
+    with Context(namespaces=set()) as ctx:
+        client = client_for(ctx, tmp_path, engine)
+        ChatHistory(tmp_path / "chat.json", limit=50).append(
+            assistant_key("c1"),
+            [
+                {"role": "user", "content": "first, answered", "ts": 1.0},
+                {"role": "assistant", "content": "an answer", "ts": 2.0},
+                {"role": "user", "content": "failed", "ts": 3.0},
+                {"role": "user", "content": "failed too", "ts": 4.0},
+            ],
+        )
+        client.post("/api/chat", json={"text": "the new one", "conversation": "c1"})
+        kept = client.get("/api/chat/conversations/c1").json()
+
+    sent, _ = engine.turns[0]
+    assert [m["content"] for m in sent] == ["first, answered", "an answer", "the new one"]
+    assert [t["content"] for t in kept["turns"]][2:4] == ["failed", "failed too"]
+
+
+def test_answered_keeps_each_question_with_its_answer_and_the_last_question():
+    turns = [
+        {"role": "user", "content": "a"},
+        {"role": "assistant", "content": "A"},
+        {"role": "user", "content": "lost"},
+        {"role": "user", "content": "b"},
+        {"role": "assistant", "content": "B"},
+        {"role": "user", "content": "pending"},
+    ]
+
+    assert [t["content"] for t in chat_history.answered(turns)] == ["a", "A", "b", "B"]
+
+
+def test_the_tab_held_conversation_leaves_out_failed_questions_too():
+    from odf.ui import themes
+
+    script = (themes.STATIC_DIR / "app.js").read_text()
+
+    assert "const body = { messages: answeredTurns(held) };" in script

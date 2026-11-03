@@ -818,8 +818,7 @@ class UiServer:
                 ):
                     raise HTTPException(status_code=400, detail="Not a conversation id")
                 key = chat_history_module.assistant_key(conversation_id)
-            turns = self._history.turns(key)
-            messages = [{"role": t["role"], "content": t["content"]} for t in turns]
+            messages = chat_history_module.answered(self._history.turns(key))
             messages.append({"role": "user", "content": text})
             return StreamingResponse(
                 self._chat_events(messages, context, keep=key, conversation_id=conversation_id),

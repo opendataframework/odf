@@ -240,7 +240,10 @@ another browser:
   the thread's messages and cards.
 
 Only what was said is kept: a turn's tool calls and their results aren't,
-since they're in the logs and **Show run**. Each conversation keeps its latest
+since they're in the logs and **Show run**. A question whose turn failed (the
+model ran out of tool calls, or Ollama wasn't there) stays in the
+conversation, but isn't sent to the model with the next one, which it would
+otherwise answer instead. Each conversation keeps its latest
 `[ui] chat-history` turns (default 200). `chat-history = 0` keeps nothing on
 the server: each conversation lives in its browser tab, as before, and is
 sent whole with each turn.

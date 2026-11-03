@@ -43,6 +43,7 @@
   in their browser tab as before), and listed under **Assistant** to reopen or delete.
   A thread holds one of its own. `POST /api/chat` takes `{text, conversation?}` or
   `{text, thread}` to keep a turn, and still `{messages}` for a caller that keeps its own.
+  A question whose turn failed stays in the conversation but isn't sent with the next.
   See [Chat](chat.md#history).
 - **MCP**: `list_channels` and `read_thread`, the chat's channels and their threads as
   tools. A card's actions are listed with the tool each is run by (`<key>.<verb>`) and

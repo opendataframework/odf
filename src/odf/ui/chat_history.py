@@ -12,7 +12,8 @@ Only what was said is kept, a turn being ``{"role", "content", "ts"}`` with
 ``role`` ``"user"`` or ``"assistant"``. A turn's tool calls aren't: they're
 in the logs, and in **Show run**. Each conversation keeps its latest
 ``limit`` turns. A thread's messages and cards aren't copied here; they're
-read from their repositories.
+read from their repositories. A question left unanswered (its turn failed)
+is kept but not sent to the model again (see ``answered``).
 
 Nothing here knows who is asking, so a conversation is shared by everyone
 using the UI. Scoped to whatever ``Path`` a ``UiServer`` is constructed with,
@@ -57,6 +58,22 @@ def thread_key(channel: str, thread: str) -> str:
 def assistant_key(conversation_id: str) -> str:
     """Return the key of the assistant conversation ``conversation_id``."""
     return f"{ASSISTANT}/{conversation_id}"
+
+
+def answered(turns: list[dict]) -> list[dict]:
+    """Return ``turns`` as the model is sent them: each question with its answer.
+
+    A question whose turn failed (the model ran out of tool calls, say) is
+    kept, so the person sees what they asked, but isn't sent again: a model
+    handed it with the next question answers the old one instead, or tries
+    both and runs out of tool calls too.
+    """
+    kept = []
+    for i, turn in enumerate(turns):
+        if turn["role"] == "user" and (i + 1 == len(turns) or turns[i + 1]["role"] != "assistant"):
+            continue
+        kept.append({"role": turn["role"], "content": turn["content"]})
+    return kept
 
 
 class ChatHistory:

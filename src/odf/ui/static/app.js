@@ -3204,6 +3204,16 @@ function appendChatMessage(role, text, list = document.getElementById('chat-mess
   return div;
 }
 
+// A conversation as the model is sent it: each question with its answer, and
+// the new question last. A question whose turn failed stays on screen but
+// isn't sent again, or the model answers it instead of the new one (the
+// server does the same with kept conversations, chat_history.answered).
+function answeredTurns(held) {
+  return held
+    .filter((t, i) => t.role !== 'user' || i === held.length - 1 || held[i + 1].role === 'assistant')
+    .map(({ role, content }) => ({ role, content }));
+}
+
 // What a turn sends: with history on, only its text, and the server keeps
 // the conversation (an assistant one by id, or the one in a thread); with it
 // off, the whole conversation this tab holds. In a thread the turn is a note
@@ -3215,7 +3225,7 @@ function chatTurnBody(view, text) {
   }
   const held = thread ? (threadNotes[`${thread.channel}/${thread.thread}`] ||= []) : chatHistory;
   held.push({ role: 'user', content: text, ts: Date.now() / 1000 });
-  const body = { messages: held.map(({ role, content }) => ({ role, content })) };
+  const body = { messages: answeredTurns(held) };
   if (thread) body.thread = thread;
   return { ...body, held };
 }
