@@ -96,12 +96,16 @@ docker compose logs -f   # follow what the services print
 
 ```bash
 docker compose down -v
+rm -f chat.json annotations.json
 docker compose up --build
 ```
 
 `-v` also deletes the volumes holding the tools' and the bakery's data
 (its logs and its notification history among them), the mailbox and the
-shared drive, so the next start seeds and onboards again from scratch.
+shared drive, so the next start seeds and onboards again from scratch. The
+chat's conversations and the labels are files in this directory instead (see
+"What outlasts a restart" below), so they're removed by hand, or their
+threads' notes would point at drafts the new bakery doesn't have.
 
 **With a local model.** The agents read the usual phrasings with plain
 rules, and leave the rest (a freeform party order, say) for a person to
@@ -450,15 +454,20 @@ Choices that aren't obvious from the code:
   the bakery sends, so the mailbox ignores the bakery's address.
 - **What outlasts a restart.** The demo clock is saved every second, so a
   stopped stack carries on where it was. The bakery's logs, and with them
-  its notification history, and the chat's conversations (`chat.json`) live
-  on its data volume, so a rebuild keeps them; `docker compose down -v`
-  starts them over.
+  its notification history, live on its data volume; `docker compose down -v`
+  starts them over. Compose mounts `demo/bakery/` itself as the project
+  directory, so what the UI saves next to `config.toml` lands there on the
+  host and outlasts a rebuild: a layout you arrange (`layout.json`, which is
+  committed, so moving a node shows up in `git diff`), the chat's
+  conversations (`chat.json`) and labels (`annotations.json`), both ignored
+  by git. The container writes as uid 1000, which a Linux host's own user
+  usually is.
 
 ## Structure
 
 ```
 bakery/
-├── compose.yaml          # the tools, Mailpit, and the bakery, ports on loopback only
+├── compose.yaml          # the tools, Mailpit, and the bakery (this directory mounted), ports on loopback only
 ├── .env.example          # seed, clock speed, credentials
 ├── Dockerfile            # the bakery: odf from this repository's source, plus app/
 ├── config.toml           # the bakery's odf config: the tools' addresses, ports, intervals

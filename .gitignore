@@ -242,3 +242,6 @@ examples/**/exports/*
 demo/**/data/
 demo/**/*.db
 demo/**/.env
+# What a demo's UI saves in its project directory, mounted from the host.
+demo/**/chat.json
+demo/**/annotations.json

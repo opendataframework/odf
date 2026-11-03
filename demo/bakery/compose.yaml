@@ -96,6 +96,11 @@ services:
     extra_hosts:
       - "host.docker.internal:host-gateway"
     volumes:
+      # The project directory from the host, so what the UI saves next to
+      # config.toml (layout.json, chat.json, annotations.json) shows up in
+      # demo/bakery/ and outlasts a rebuild. app/ comes from here too, so a
+      # code change needs a restart, not a rebuild.
+      - .:/srv/bakery
       - bakery-data:/srv/bakery/data
       - shared-drive:/shared-drive
     ports:
