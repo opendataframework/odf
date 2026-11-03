@@ -125,6 +125,64 @@ set. A message can only address one component at a time — mentioning
 more than one distinct component's key in the same message rejects the
 turn with an inline error instead of guessing which one you meant.
 
+## Channels
+
+Besides the assistant, the chat drawer holds the project's outside
+conversations: messages people sent by email or a messenger, say, with the
+project's replies. A repository takes part by declaring a `conversation()`
+([`Conversation`](https://opendataframework.github.io/opendataframework/view/)),
+beside its data view, not instead of it:
+
+```python
+from opendataframework import Conversation, Repository
+
+
+@Repository(Message)
+class Messages:
+    def all(self) -> list[Message]: ...
+
+    def conversation(self) -> Conversation:
+        return Conversation(
+            channel="support",  # repositories naming the same channel merge
+            thread="customer",  # one thread per customer
+            time="sent_at",
+            text="text",
+            direction="direction",  # "in" or "out": which side a message is on
+            sender="sender",
+        )
+```
+
+With any channel, the drawer opens on a list: **Assistant** first, then each
+channel with its threads, the one with the latest message first, each showing
+its last message. A dot marks a thread with something you haven't seen yet;
+which ones you've seen is kept in your browser. A thread shows its messages on
+their sides, oldest first. A notification about a record of a repository in a
+channel (a message taken in, say) refreshes the list and the open thread.
+Channels show even with chat off, read only.
+
+### Cards
+
+A repository in the same channel with no `direction` holds cards instead of
+messages: a ticket or a draft reply answering the messages around it. Its
+text shows as Markdown when the repository's `content_metadata()` says
+`text/markdown`.
+
+```python
+@Repository(Ticket)
+class Tickets:
+    def all(self) -> list[Ticket]: ...
+
+    def conversation(self) -> Conversation:
+        return Conversation(channel="support", thread="customer", time="opened", text="body")
+```
+
+A record whose thread field is `None` isn't in any thread. The `time` fields of
+a channel's repositories have to sort together: a number is read as a Unix
+time, a `datetime` as itself and a string as ISO 8601.
+
+The UI checks every conversation when it starts: one naming a field its
+entity lacks, or on a repository with no `all()`, fails `Server.start()`.
+
 ## Prerequisites
 
 1. Install and run [Ollama](https://ollama.com) locally: `ollama serve`.

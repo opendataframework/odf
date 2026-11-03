@@ -2336,6 +2336,7 @@ function initNotifications() {
     rememberNotifier(n);
     onNotification(n);
     if (mapMode === 'notifications') onNotesLive(n);
+    onChannelNotification(n);
   };
 }
 
@@ -2778,24 +2779,251 @@ function addLog(msg, color) {
 }
 
 // ── Chat ─────────────────────────────────────────────────────────────────
-// Backs the Chat drawer — hidden unless GET /api/chat/config reports
-// enabled (i.e. Project.start(chat=True) was passed). History lives only in
-// this tab (chatHistory), resent in full with each turn — no server-side
-// session storage.
+// Backs the Chat drawer, shown when GET /api/chat/config reports chat
+// enabled (Project.start(chat=True)) or the project has channels. History
+// lives only in this tab (chatHistory), resent in full with each turn — no
+// server-side session storage.
 
 let chatHistory = [];
 let chatBusy = false;
+let chatEnabled = false;
 
 async function initChat() {
   try {
     const res = await fetch('/api/chat/config');
-    if (!res.ok) return;
-    const cfg = await res.json();
-    if (cfg.enabled) document.getElementById('chat-toggle').classList.add('visible');
+    if (res.ok) chatEnabled = Boolean((await res.json()).enabled);
   } catch (err) {
     console.error('Failed to load chat config', err);
   }
+  await loadChannels();
+  if (chatEnabled || chatChannels.length) document.getElementById('chat-toggle').classList.add('visible');
+  showChatView(chatChannels.length ? { kind: 'nav' } : { kind: 'assistant' });
 }
+
+// ── Chat channels ────────────────────────────────────────────────────────
+// Repositories declaring a conversation() (odf.ui.conversations) merge by
+// channel into threads: GET /api/channels, /api/channels/{c}/threads and
+// /api/channels/{c}/threads/{t}. With any, the drawer opens on a list of
+// them, the assistant conversation first; without, it opens on the
+// assistant conversation as before. A thread shows messages on their side
+// and cards (records of a repository with no direction) with their actions.
+// Which threads have something unread is this viewer's own, kept in
+// localStorage.
+
+let chatChannels = [];          // [{name, repositories: [{id, kind}]}]
+const channelRepos = new Set(); // keys of the repositories in a channel
+let chatThreads = {};           // channel -> its threads, as last fetched
+let chatView = { kind: 'assistant' }; // or {kind: 'nav'}, or {kind: 'thread', channel, thread}
+let threadLoads = 0;            // the latest thread fetch wins
+let channelRefresh = null;
+const CHAT_SEEN_KEY = 'odf-ui-chat-seen';
+
+async function loadChannels() {
+  try {
+    const res = await fetch('/api/channels');
+    chatChannels = res.ok ? await res.json() : [];
+  } catch (err) {
+    console.error('Failed to load channels', err);
+    chatChannels = [];
+  }
+  channelRepos.clear();
+  for (const channel of chatChannels) {
+    for (const repo of channel.repositories) channelRepos.add(repo.id);
+  }
+  await refreshThreads();
+}
+
+async function refreshThreads() {
+  const fetched = await Promise.all(chatChannels.map(channel =>
+    fetch(`/api/channels/${encodeURIComponent(channel.name)}/threads`)
+      .then(res => (res.ok ? res.json() : []))
+      .catch(() => [])));
+  chatThreads = {};
+  chatChannels.forEach((channel, i) => { chatThreads[channel.name] = fetched[i]; });
+  seedChatSeen();
+  if (chatView.kind === 'nav') renderChatNav();
+  updateChatUnread();
+}
+
+function chatSeen() {
+  try { return JSON.parse(localStorage.getItem(CHAT_SEEN_KEY) || '{}'); } catch { return {}; }
+}
+
+// On a viewer's first visit, what's already there counts as read, so the
+// whole history doesn't light up at once.
+function seedChatSeen() {
+  try {
+    if (localStorage.getItem(CHAT_SEEN_KEY) !== null) return;
+    const seen = {};
+    for (const [channel, threads] of Object.entries(chatThreads)) {
+      for (const t of threads) seen[`${channel}/${t.thread}`] = t.time;
+    }
+    localStorage.setItem(CHAT_SEEN_KEY, JSON.stringify(seen));
+  } catch {}
+}
+
+function markThreadSeen(channel, thread, time) {
+  const seen = chatSeen();
+  const id = `${channel}/${thread}`;
+  if ((seen[id] || 0) >= time) return;
+  seen[id] = time;
+  try { localStorage.setItem(CHAT_SEEN_KEY, JSON.stringify(seen)); } catch {}
+}
+
+// A thread is unread when its latest item is newer than this viewer last saw
+// and isn't one of the project's own outgoing messages.
+function threadUnread(channel, t, seen) {
+  return Boolean(t.last) && t.last.direction !== 'out' && t.time > (seen[`${channel}/${t.thread}`] || 0);
+}
+
+function updateChatUnread() {
+  const seen = chatSeen();
+  const any = chatChannels.some(c => (chatThreads[c.name] || []).some(t => threadUnread(c.name, t, seen)));
+  document.getElementById('chat-toggle').classList.toggle('unread', any);
+}
+
+function chatTime(seconds) {
+  const d = new Date(seconds * 1000);
+  const hm = d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+  if (d.toDateString() === new Date().toDateString()) return hm;
+  return `${d.toLocaleDateString([], { day: 'numeric', month: 'short' })} ${hm}`;
+}
+
+function chatEl(tag, className, text) {
+  const el = document.createElement(tag);
+  if (className) el.className = className;
+  if (text !== undefined) el.textContent = text;
+  return el;
+}
+
+function showChatView(view) {
+  chatView = view;
+  const nav = view.kind === 'nav';
+  const thread = view.kind === 'thread';
+  const assistant = view.kind === 'assistant';
+  document.getElementById('chat-nav').hidden = !nav;
+  document.getElementById('chat-thread').hidden = !thread;
+  document.getElementById('chat-messages').hidden = !assistant;
+  document.getElementById('chat-footer').hidden = !(assistant && chatEnabled);
+  document.getElementById('chat-back').hidden = nav || !chatChannels.length;
+  document.getElementById('chat-title').textContent =
+    thread ? view.thread : assistant && chatChannels.length ? 'Assistant' : 'Chat';
+  if (nav) renderChatNav();
+  if (thread) {
+    document.getElementById('chat-thread').replaceChildren();
+    loadThread();
+  }
+}
+
+function chatNavItem(name, preview, { unread = false, time = null, onClick }) {
+  const item = chatEl('button', 'chat-nav-item' + (unread ? ' unread' : ''));
+  const top = chatEl('div', 'chat-nav-top');
+  top.appendChild(chatEl('span', 'chat-nav-name', name));
+  if (time !== null) top.appendChild(chatEl('span', 'chat-nav-time', chatTime(time)));
+  item.appendChild(top);
+  if (preview) item.appendChild(chatEl('div', 'chat-nav-preview', preview));
+  item.addEventListener('click', onClick);
+  return item;
+}
+
+function renderChatNav() {
+  const nav = document.getElementById('chat-nav');
+  nav.replaceChildren();
+  if (chatEnabled) {
+    nav.appendChild(chatNavItem('Assistant', 'Ask, or @ a component', {
+      onClick: () => showChatView({ kind: 'assistant' }),
+    }));
+  }
+  const seen = chatSeen();
+  for (const channel of chatChannels) {
+    nav.appendChild(chatEl('div', 'chat-nav-channel', channel.name));
+    const threads = chatThreads[channel.name] || [];
+    if (!threads.length) nav.appendChild(chatEl('div', 'chat-nav-empty', 'Nothing yet'));
+    for (const t of threads) {
+      nav.appendChild(chatNavItem(t.thread, t.last ? t.last.text : '', {
+        unread: threadUnread(channel.name, t, seen),
+        time: t.time,
+        onClick: () => showChatView({ kind: 'thread', channel: channel.name, thread: t.thread }),
+      }));
+    }
+  }
+}
+
+async function loadThread() {
+  const { channel, thread } = chatView;
+  const load = ++threadLoads;
+  const box = document.getElementById('chat-thread');
+  let items;
+  try {
+    const res = await fetch(`/api/channels/${encodeURIComponent(channel)}/threads/${encodeURIComponent(thread)}`);
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    items = await res.json();
+  } catch (err) {
+    if (load === threadLoads) box.replaceChildren(chatEl('div', 'chat-msg error', `Couldn't load the thread: ${err.message}`));
+    return;
+  }
+  const render = items.some(i => i.kind === 'card' && i.markdown)
+    ? await loadMarkdownRenderer().catch(() => null) : null;
+  if (load !== threadLoads || chatView.kind !== 'thread') return;
+  renderThread(box, items, render);
+  if (items.length) markThreadSeen(channel, thread, items[items.length - 1].time);
+  updateChatUnread();
+}
+
+// A card being acted on keeps its element (and the form in it) across a
+// refresh, so a notification arriving mid-edit doesn't wipe the form.
+function renderThread(box, items, render) {
+  const first = !box.children.length;
+  const atBottom = box.scrollHeight - box.scrollTop - box.clientHeight < 40;
+  const editing = new Map([...box.querySelectorAll('.chat-card.editing')].map(el => [el.dataset.id, el]));
+  box.replaceChildren();
+  if (!items.length) box.appendChild(chatEl('div', 'chat-nav-empty', 'Nothing in this thread yet'));
+  for (const item of items) {
+    if (item.kind === 'card') {
+      const id = `${item.repository}:${item.key}`;
+      box.appendChild(editing.get(id) || chatCard(item, render));
+    } else {
+      box.appendChild(chatThreadMessage(item));
+    }
+  }
+  if (first || atBottom) box.scrollTop = box.scrollHeight;
+}
+
+function chatThreadMessage(item) {
+  const msg = chatEl('div', 'chat-msg ' + (item.direction === 'out' ? 'out' : 'in'));
+  const meta = [item.sender, chatTime(item.time)].filter(Boolean).join(' · ');
+  msg.appendChild(chatEl('div', 'chat-msg-meta', meta));
+  msg.appendChild(chatEl('div', 'chat-msg-text', item.text));
+  return msg;
+}
+
+function chatCard(item, render) {
+  const card = chatEl('div', 'chat-card');
+  card.dataset.id = `${item.repository}:${item.key}`;
+  card.appendChild(chatEl('div', 'chat-msg-meta', chatTime(item.time)));
+  const body = chatEl('div', 'chat-card-body');
+  if (item.markdown && render) {
+    body.classList.add('doc-markdown');
+    body.innerHTML = render(item.text);
+  } else {
+    body.textContent = item.text;
+  }
+  card.appendChild(body);
+  return card;
+}
+
+// A notification about a record of a repository in a channel (a message
+// taken in, a draft confirmed) refreshes the threads, and the open one.
+function onChannelNotification(n) {
+  if (!n.subject || !channelRepos.has(n.subject)) return;
+  clearTimeout(channelRefresh);
+  channelRefresh = setTimeout(() => {
+    refreshThreads();
+    if (chatView.kind === 'thread') loadThread();
+  }, 150);
+}
+
+document.getElementById('chat-back').addEventListener('click', () => showChatView({ kind: 'nav' }));
 
 function appendChatMessage(role, text) {
   const list = document.getElementById('chat-messages');

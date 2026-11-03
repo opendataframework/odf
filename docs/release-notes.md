@@ -26,6 +26,13 @@
   same filters. Its rows, and the notifications on `GET /api/notifications`, carry a
   `publisher`: the key normalised, as key lookups compare it. The trace view shows each
   notification's summary under its topic. See [UI](ui.md#run-activity).
+- **Chat**: channels in the chat drawer. A repository declaring a `conversation()`
+  (`opendataframework` 0.6.0's `Conversation`) joins a channel, and the drawer lists each
+  channel's threads, with a dot on those holding something you haven't seen. A thread
+  shows messages on their sides and, from a repository with no `direction`, cards. It
+  refreshes when a notification is about one of its repositories. Read through
+  `GET /api/channels`, `.../{channel}/threads` and `.../threads/{thread}`. See
+  [Chat](chat.md#channels).
 - **Demo**: `demo/bakery`, a whole application built with `odf`, running with
   `docker compose up`. A bakery's café POS, messenger, email and spreadsheets run as
   simulated tools, and an `odf` project joins them through webhooks, a polled mailbox, a

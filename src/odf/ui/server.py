@@ -40,7 +40,17 @@ from opendataframework.view import (
     VideoView,
 )
 
-from odf.ui import annotations, arguments, data, events, keys, layout, media, themes
+from odf.ui import (
+    annotations,
+    arguments,
+    conversations,
+    data,
+    events,
+    keys,
+    layout,
+    media,
+    themes,
+)
 from odf.ui.notebooks import NotebookServer, local_host, theme_rewrite
 from odf.ui.origin import HostCheck, OriginCheck
 from odf.ui.topology import TopologyView, build_topology
@@ -145,7 +155,14 @@ class UiServer:
         notebooks: bool = False,
         grid: str = "iso",
     ) -> None:
-        """Build the FastAPI app and register every route (see class docstring for args)."""
+        """Build the FastAPI app and register every route (see class docstring for args).
+
+        Raises:
+            ValueError: If a repository's conversation, or a ``Record``
+                argument, names a field or repository that doesn't exist
+                (see ``odf.ui.conversations.validate``).
+        """
+        conversations.validate(context)
         self._context = context
         self._project = project
         self._host = host
@@ -669,6 +686,33 @@ class UiServer:
                 "enabled": self._chat is not None,
                 "model": self._chat.model if self._chat else None,
             }
+
+        # Channels: repositories declaring a conversation (see
+        # odf.ui.conversations), merged by channel into threads.
+        @app.get("/api/channels")
+        def list_channels() -> list[dict]:
+            """List every channel and the repositories in it."""
+            return conversations.channels(self._context)
+
+        @app.get("/api/channels/{channel}/threads")
+        def list_threads(channel: str) -> list[dict]:
+            """List a channel's threads, the one with the latest item first."""
+            found = conversations.threads(self._context, channel)
+            if found is None:
+                raise HTTPException(status_code=404, detail=f"No channel '{channel}'")
+            return jsonable_encoder(found)
+
+        @app.get("/api/channels/{channel}/threads/{thread}")
+        def read_thread(
+            channel: str,
+            thread: str,
+            limit: Annotated[int, Query(ge=1, le=1000)] = conversations.DEFAULT_LIMIT,
+        ) -> list[dict]:
+            """Return a thread's latest items, oldest first: messages and cards."""
+            found = conversations.thread(self._context, channel, thread, limit=limit)
+            if found is None:
+                raise HTTPException(status_code=404, detail=f"No channel '{channel}'")
+            return jsonable_encoder(found)
 
         @app.post("/api/chat")
         def chat(body: dict) -> StreamingResponse:

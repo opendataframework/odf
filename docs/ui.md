@@ -658,6 +658,9 @@ registered name:
 | `GET /api/events` | every protocol call the project makes, as server-sent events (see below) |
 | `GET /api/notifications` | every notification the project's components publish, as server-sent events (see below) |
 | `GET /api/notifications/history` | the notifications published so far, newest first, a page at a time (see below) |
+| `GET /api/channels` | every channel and the repositories in it (see [Chat](chat.md#channels)) |
+| `GET /api/channels/{channel}/threads` | a channel's threads, the one with the latest item first, each with its last item and a count |
+| `GET /api/channels/{channel}/threads/{thread}` | a thread's latest items, oldest first (`?limit=`, default 200): messages, and cards with their actions |
 
 The collection comes from the execution type, not the key's namespace: a `@Task`
 registered as `loader` is `/api/tasks/loader`, whatever its key. An action that
