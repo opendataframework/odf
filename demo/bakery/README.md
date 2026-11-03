@@ -155,21 +155,35 @@ Things to try:
 - **Watch it become a draft.** Right after, a second notice says the order
   change awaits confirmation: `Drafting` reacted to the message and had the
   **order-desk** agent draft it, on a worker of its own, so the messenger's
-  webhook never waited. The draft is in Drafts: the message, each product
-  before and after, and the reply. Rules read the usual phrasings; a freeform
-  message is marked for review unless there's a model. A message from anyone
-  not on the restaurants sheet gets no draft by itself; invoke **order-desk**
-  with its id in Messages to draft one anyway.
+  webhook never waited. Open **Chat** in the header: under **restaurants**,
+  the restaurant's thread has its message, and the draft answering it as a
+  card: the message, each product before and after, and the reply. Rules read
+  the usual phrasings; a freeform message is marked for review unless there's
+  a model. A message from anyone not on the restaurants sheet gets no draft
+  by itself, and no thread; invoke **order-desk** with its id in Messages to
+  draft one anyway. Every draft is in Drafts too, a document each.
 - **Follow it through.** **Show run** on either notice opens the whole run as
   one tree: the message taken in, its notification, `Drafting`'s reaction
   under it, the order-desk's draft, and the notification that the draft
   awaits confirmation. On the topology, the dotted link from
   `ingest-message` to `Drafting` lights up while it reacts.
-- **Confirm it** by calling **confirm-draft** with the draft's id. The reply
-  goes back to the restaurant (watch the messenger's thread, or Mailpit for
-  an emailed change), and the change reaches the bake sheet. If tomorrow's
-  sheet was already worked out, it's worked out again. **reject-draft** sends
-  nothing, and keeps a reason.
+- **Confirm it** from the card: **Confirm draft** opens with the reply and the
+  changes filled in, to change before it goes. The reply goes back to the
+  restaurant (watch the messenger's thread, or Mailpit for an emailed change),
+  shows in the bakery's thread on its side, and the change reaches the bake
+  sheet. If tomorrow's sheet was already worked out, it's worked out again.
+  **Edit draft** saves a change without sending it, and **Reject draft** sends
+  nothing and keeps a reason. **confirm-draft**, **edit-draft** and
+  **reject-draft** take the draft's id anywhere else (the inspector, MCP).
+- **Write again before confirming.** Send "2 extra croissants tomorrow please"
+  from the same restaurant while its draft waits: the card turns outdated,
+  and a new one answers both messages, so the two can't both be sent. If you
+  had edited the old one, the new one says what you'd changed.
+- **Ask in the thread.** With a model, type "@agent.order-desk make it 30
+  croissants" in the restaurant's thread: the agent drafts again with your
+  instruction, from the message the thread shows it, and the old card turns
+  outdated. The question and its answer stay in the thread as notes, which
+  the restaurant never sees.
 - **Watch the day go by.** At 15:00 on the demo clock the café closes: the
   `close-cafe` pipeline counts its leftovers, and the **specials** agent drafts
   tomorrow's specials board from them. At 21:00 the `night-run` pipeline
@@ -248,8 +262,8 @@ draft message 12`, or `@repository.invoices which came from Hill Farm?`.
 The model then sees only that component's tools, so it answers sooner and
 picks the right one: `@repository.drafts what's waiting for me?`. Answers
 vary from run to run with a local model; asking again, or more narrowly,
-usually settles it. Confirming a draft from chat works too, but the drafts are there to be read
-first.
+usually settles it. Confirming a draft by asking works too, but a draft is
+there to be read first: its card, in the restaurant's thread, is the place.
 
 ## How it fits together
 
@@ -288,7 +302,8 @@ shows on the topology, and its notice's **Show logs** finds it.
 | `pos.reconciled` | yes, a warning |
 | `bakery.onboarded` | yes, once |
 | `drafts.created` | yes: "Order change for Le Petit awaits confirmation", a warning when it needs review |
-| `drafts.confirmed`, `drafts.rejected` | yes |
+| `drafts.confirmed`, `drafts.rejected`, `drafts.edited` | yes |
+| `drafts.outdated` | yes: "Order change for Le Petit drafted again", when a newer message or an instruction replaced a draft |
 | `invoices.received` | yes: "Vale Dairy: Invoice VAL-2026-0005" |
 | `prices.changed` | only when a price moved 5% or more, a warning from a 10% rise: "Vale Dairy: butter up 55% (£7.20 to £11.15 a kg)" |
 | `margins.below-cost` | yes, a warning: "2 contracts now below cost: The Fig Tree's brioche, Olive & Ash's croissant" |
@@ -310,7 +325,7 @@ own (`history-max-bytes`) for days of notices.
 
 | Agent | Started by | Reads with | Drafts |
 |---|---|---|---|
-| `order-desk` | `Drafting`, when a restaurant's message arrives; or a person, on any message (UI, MCP) | rules for the usual phrasings, then the model, else marked for review | an order change and its reply |
+| `order-desk` | `Drafting`, when a restaurant's message arrives; or a person, on any message (UI, MCP), or with an instruction from the restaurant's thread | rules for the usual phrasings, then the model, else marked for review | an order change and its reply, for every message the restaurant sent since the bakery last wrote |
 | `specials` | `close-cafe` at 15:00, or a person | rules pick the dishes and prices; the model only writes the lines | tomorrow's specials board |
 | `invoice-clerk` | `Purchasing`, when an invoice arrives; or a person, on any invoice | rules for the typed invoices, then the model, else marked for review | nothing when the rules read it cleanly: it records the prices; otherwise its reading, to confirm |
 | `account-manager` | `Renegotiating`, when a contract falls below cost; or a person | rules work out the prices; the model only writes the email | an email to the restaurant asking for new prices |
@@ -414,6 +429,18 @@ Choices that aren't obvious from the code:
   side. What goes out of the bakery (a reply, new prices, a notice) waits for
   a person. `confirm-draft` sends first and saves after, so a reply that
   fails leaves the draft pending.
+- **One thread per restaurant.** Messenger and email go in the same thread,
+  since a restaurant is one customer whichever it writes with, and each
+  message is tagged with how it came. What the bakery sends is saved in
+  Messages too, going out, so a thread has both sides.
+- **A newer message outdates a draft.** A restaurant that writes again before
+  its draft is confirmed gets one new draft, reading every message since the
+  bakery last wrote, and the old one can't be confirmed any more. Two drafts
+  answering the same restaurant could otherwise both be sent.
+- **What's sent is what the record shows.** An edit is saved on the draft
+  (its author becomes "edited") before anything goes out, so the draft shows
+  what was sent, not what was drafted. A draft replaced after an edit says,
+  in the new one, what the person had changed, rather than dropping it.
 - **Safe to call by mistake.** A model in chat may call a tool nobody asked
   for. `sync-sheets` leaves alone the records of a sheet that isn't on the
   drive, so it can't empty a table.

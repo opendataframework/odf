@@ -52,7 +52,10 @@
   `docker compose up`. A bakery's café POS, messenger, email and spreadsheets run as
   simulated tools, and an `odf` project joins them through webhooks, a polled mailbox, a
   watched drive and a scheduler. Agents react to what arrives and draft order changes,
-  price renegotiations and allergen notices for a person to confirm. Its topology is
+  price renegotiations and allergen notices for a person to confirm. Each restaurant's
+  messages, and what the bakery sends back, are one thread in the chat, with the draft
+  answering them as a card to confirm, edit first or reject. A restaurant writing again,
+  or a person asking in the thread, outdates the draft for a new one. Its topology is
   laid out by area, with the bakery's own icons (`[ui] icon-scripts`). See
   [Demo](demo.md).
 - **UI**: the topology draws a dotted link from each `@Publisher` to each `@Subscriber` its

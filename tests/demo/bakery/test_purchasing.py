@@ -13,6 +13,7 @@ from email.message import EmailMessage
 
 import pytest
 from app import services
+from app.agents import OrderDesk
 from app.clients import Drive, Mail
 from app.drafts import confirm_draft, reject_draft
 from app.ingest import ingest_invoice, sync_sheets
@@ -231,6 +232,15 @@ def _confirm(bakery, hub, draft_id, mail=None):
         hub.bound_to("function.confirm-draft", Publisher.of(confirm_draft)),
         lambda date: [],
         lambda date: [],
+        FakeClock(),
+        OrderDesk(
+            FakeClock(),
+            *_repos(bakery, "messages", "products", "standing_orders", "order_changes"),
+            bakery["drafts"],
+            FakeModel(available=False),
+            hub.bound_to("agent.order-desk", Publisher.of(OrderDesk)),
+        ),
+        bakery["products"],
     )
 
 

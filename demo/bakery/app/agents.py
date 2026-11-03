@@ -75,7 +75,12 @@ you can't express, and say why in "note". Otherwise "note" is empty.
 
 "reply" is a short, friendly answer to the restaurant from the bakery, in \
 British English, saying what will change. It is sent only after a person \
-at the bakery checks your changes."""
+at the bakery checks your changes.
+
+There may be several messages, oldest first: read them together, as one \
+request, a later one correcting an earlier one ("actually, make it 6"). If a \
+person at the bakery asks for the changes drafted so far to be changed, do \
+what they ask, keeping the rest."""
 
 
 def _describe(change: Change, names: dict[str, str]) -> str:
@@ -93,14 +98,21 @@ def _describe(change: Change, names: dict[str, str]) -> str:
 
 
 @layers.Wholesale
-@Publisher("drafts.created")
+@Publisher("drafts.created", "drafts.outdated")
 @Agent
 class OrderDesk:
-    """Reads a restaurant's message and drafts the order change it asks for, with a reply.
+    """Reads a restaurant's messages and drafts the order change they ask for, with a reply.
 
-    ``invoke(message_id)`` drafts for one message from Messages. The draft
-    shows each product's quantity before and after, and the reply that
-    confirming it sends. Rules read the usual phrasings; the model, if
+    ``invoke(message_id)`` drafts for a message from Messages, and for every
+    message of that restaurant still unanswered with it: a restaurant that
+    writes again before its draft is confirmed ("actually, make it 6") gets
+    one draft reading both, and the older draft is outdated, so the two
+    can't both be sent. ``invoke(message_id, instruction=...)`` drafts again
+    with a person's instruction ("make it 30 croissants"), outdating the open
+    draft the same way.
+
+    The draft shows each product's quantity before and after, and the reply
+    that confirming it sends. Rules read the usual phrasings; the model, if
     there is one, reads the rest; otherwise the draft waits for a person.
     """
 
@@ -131,41 +143,85 @@ class OrderDesk:
         self.standing_orders, self.order_changes = standing_orders, order_changes
         self.drafts, self.model, self.notifications = drafts, model, notifications
 
-    def invoke(self, message_id: int) -> dict:
+    def invoke(self, message_id: int, instruction: str = "") -> dict:
         """Draft the order change message ``message_id`` asks for.
 
-        A message that already has a draft waiting gets that draft back,
-        not a second one.
+        A message the open draft already answers gets that draft back, not
+        a second one, unless there's an ``instruction``.
 
         Args:
             message_id: The message's id in Messages.
+            instruction: What a person wants changed in the open draft, such
+                as "make it 30 croissants". Needs the model.
 
         Returns:
-            ``{"draft", "status", "author", "changes", "reply"}``.
+            ``{"draft", "status", "author", "changes", "reply"}``, and
+            ``"outdated"``, the draft this one replaced, if any.
 
         Raises:
             KeyError: If there's no such message.
+            ValueError: If there's an instruction but no model to read it.
         """
         found = self.messages.where("id", message_id)
         if not found:
             raise KeyError(f"no message {message_id}")
         message = found[0]
-        draft = self.drafts.open_for_message(message_id)
-        if draft is None:
-            draft = self._draft(message)
-            self.drafts.save(draft)
-            message.status = "drafted"
-            self.messages.save(message)
-            who = message.restaurant or message.sender
-            waiting = "awaits confirmation" if draft.status == "pending" else "needs review"
-            self.notifications.publish(
-                "drafts.created",
-                {"draft": draft.id, "kind": draft.kind, "status": draft.status},
-                summary=f"Order change for {who} {waiting}",
-                level="info" if draft.status == "pending" else "warning",
-                subject=Drafts,
-                record=draft.id,
-            )
+        if instruction and not self.model.available():
+            raise ValueError("Drafting again from an instruction needs the model, and there's none")
+        if message.restaurant is None:
+            open_draft = self.drafts.open_for_message(message_id)
+        else:
+            open_draft = self.drafts.open_for_restaurant("order-change", message.restaurant)
+        answered = open_draft is not None and (open_draft.message or 0) >= message_id
+        if answered and not instruction:
+            return self._result(open_draft)
+        if message.restaurant is None:
+            thread = [message]
+        else:
+            up_to = max(message_id, open_draft.message or 0) if open_draft else message_id
+            thread = self.messages.unanswered(message.restaurant, up_to) or [message]
+        draft = self._draft(thread, instruction, open_draft)
+        self.drafts.save(draft)
+        if open_draft is not None:
+            self._outdate(open_draft, draft, instruction)
+        for answered_message in thread:
+            answered_message.status = "drafted"
+            self.messages.save(answered_message)
+        who = message.restaurant or message.sender
+        waiting = "awaits confirmation" if draft.status == "pending" else "needs review"
+        self.notifications.publish(
+            "drafts.created",
+            {"draft": draft.id, "kind": draft.kind, "status": draft.status},
+            summary=f"Order change for {who} {waiting}",
+            level="info" if draft.status == "pending" else "warning",
+            subject=Drafts,
+            record=draft.id,
+        )
+        result = self._result(draft)
+        if open_draft is not None:
+            result["outdated"] = open_draft.id
+        return result
+
+    def describe(self, draft: Draft) -> str:
+        """Return ``draft``'s body again, from the messages it answers and its changes now.
+
+        After a person edits a draft (see ``app.drafts.edit_draft``), its
+        table and reply are redrawn from what they changed.
+        """
+        found = self.messages.where("id", draft.message) if draft.message else []
+        if not found:
+            return draft.body
+        message = found[0]
+        thread = (
+            self.messages.unanswered(message.restaurant, message.id) or [message]
+            if message.restaurant
+            else [message]
+        )
+        names = {p.sku: p.name for p in self.products.all()}
+        changes = [Change(**c) for c in json.loads(draft.changes)]
+        return self._body(thread, changes, draft.reply, draft.author, draft.note, names)
+
+    def _result(self, draft: Draft) -> dict:
         return {
             "draft": draft.id,
             "status": draft.status,
@@ -174,33 +230,67 @@ class OrderDesk:
             "reply": draft.reply,
         }
 
-    def _draft(self, message: Message) -> Draft:
-        """Read ``message`` and return its draft, unsaved."""
+    def _outdate(self, old: Draft, new: Draft, instruction: str) -> None:
+        """Mark ``old`` outdated by ``new``, and say so."""
+        why = (
+            f"Drafted again as draft {new.id}, as asked: {instruction}"
+            if instruction
+            else f"A newer message came in: draft {new.id} answers it too."
+        )
+        old.status, old.note = "outdated", why
+        old.body = f"{old.body.rstrip()}\n\n**Outdated.** {why}\n"
+        self.drafts.save(old)
+        who = old.restaurant or "a sender"
+        self.notifications.publish(
+            "drafts.outdated",
+            {"draft": old.id, "by": new.id},
+            summary=f"Order change for {who} drafted again",
+            subject=Drafts,
+            record=old.id,
+        )
+
+    def _draft(
+        self, thread: list[Message], instruction: str = "", previous: Draft | None = None
+    ) -> Draft:
+        """Read ``thread`` (oldest first) and return its draft, unsaved."""
+        message = thread[-1]
         received = datetime.fromtimestamp(message.received_at).date()
+        first_sent = datetime.fromtimestamp(thread[0].received_at).date()
         products = self.products.all()
         names = {p.sku: p.name for p in products}
         changes, reply, author, note = None, "", "nobody", ""
+        read = [
+            read_order_change(gist(m.text), products, datetime.fromtimestamp(m.received_at).date())
+            for m in thread
+        ]
         if message.restaurant is None:
             note = "It isn't from a restaurant on the restaurants sheet."
+        elif not instruction and all(r is not None for r in read):
+            changes = [c for r in read for c in r]
+            author = "rules"
+            reply = (
+                "Thanks, that's noted: "
+                + "; ".join(_describe(c, names) for c in changes)
+                + ". See you in the morning!"
+            )
+        elif self.model.available():
+            changes, reply, note = self._ask_model(thread, first_sent, instruction, previous)
+            author = self.model.author
         else:
-            changes = read_order_change(gist(message.text), products, received)
-            if changes is not None:
-                author = "rules"
-                reply = (
-                    "Thanks, that's noted: "
-                    + "; ".join(_describe(c, names) for c in changes)
-                    + ". See you in the morning!"
-                )
-            elif self.model.available():
-                changes, reply, note = self._ask_model(message, received)
-                author = self.model.author
-            else:
-                note = (
-                    "The rules don't know this phrasing, and there's no model to read it. "
-                    "Reply to it yourself, then reject this draft."
-                )
+            note = (
+                "The rules don't know this phrasing, and there's no model to read it. "
+                "Edit this draft with the changes and a reply, or reply to it yourself "
+                "and reject it."
+            )
         status = "pending" if changes and not note else "needs-review"
         first = min((c.date for c in changes), default=None) if changes else None
+        body = self._body(thread, changes or [], reply, author, note, names)
+        if previous is not None and previous.author == "edited":
+            edited = ", ".join(_describe(Change(**c), names) for c in json.loads(previous.changes))
+            body += (
+                f"\n**Draft {previous.id} had been edited** before this one replaced it: "
+                f"{edited or 'no changes'}. Its reply: {previous.reply or '(none)'}\n"
+            )
         return Draft(
             id=None,
             created_at=self.clock.now().timestamp(),
@@ -214,35 +304,53 @@ class OrderDesk:
             reply=reply,
             author=author,
             note=note,
-            body=self._body(message, changes or [], reply, author, note, names),
+            body=body,
         )
 
-    def _ask_model(self, message: Message, received: date) -> tuple[list[Change] | None, str, str]:
-        """Ask the model for ``message``'s changes. Returns the changes, the reply and a note."""
+    def _ask_model(
+        self,
+        thread: list[Message],
+        received: date,
+        instruction: str = "",
+        previous: Draft | None = None,
+    ) -> tuple[list[Change] | None, str, str]:
+        """Ask the model for ``thread``'s changes. Returns the changes, the reply and a note."""
+        restaurant = thread[-1].restaurant
         products = self.products.all()
         week = []
         for offset in range(1, 8):
             day = received + timedelta(days=offset)
             usual = restaurant_orders(day, self.standing_orders, self.order_changes).get(
-                message.restaurant, {}
+                restaurant, {}
             )
             items = ", ".join(f"{sku} {q}" for sku, q in usual.items()) or "nothing"
             week.append(f"- {day:%A} {day.isoformat()}: {items}")
         catalogue = "\n".join(
             f"- {p.sku}: {p.name}" for p in products if p.wholesale_price is not None
         )
+        sent = []
+        for m in thread:
+            day = datetime.fromtimestamp(m.received_at).date()
+            sent.append(f"Sent on {day:%A} {day.isoformat()} by {restaurant}:\n{m.text}")
         prompt = (
             f"Products:\n{catalogue}\n\n"
-            f"{message.restaurant}'s order for the next seven days:\n" + "\n".join(week) + "\n\n"
-            f"Sent on {received:%A} {received.isoformat()} by {message.restaurant}:\n"
-            f"{message.text}"
+            f"{restaurant}'s order for the next seven days:\n"
+            + "\n".join(week)
+            + "\n\n"
+            + "\n\n".join(sent)
         )
+        if instruction:
+            drafted = previous.changes if previous is not None else "[]"
+            prompt += (
+                f"\n\nThe changes drafted so far: {drafted}\n"
+                f"A person at the bakery asks for them to be changed: {instruction}"
+            )
         answer = self.model.ask(_ORDER_SYSTEM, prompt, _ORDER_SCHEMA)
         if not isinstance(answer, dict):
             return (
                 None,
                 "",
-                "The model didn't answer. Reply to it yourself, then reject this draft.",
+                "The model didn't answer. Edit this draft, or reply to it yourself and reject it.",
             )
         changes = check_changes(answer.get("changes"), products, received)
         note = str(answer.get("note") or "")
@@ -254,7 +362,7 @@ class OrderDesk:
 
     def _body(
         self,
-        message: Message,
+        thread: list[Message],
         changes: list[Change],
         reply: str,
         author: str,
@@ -262,17 +370,18 @@ class OrderDesk:
         names: dict[str, str],
     ) -> str:
         """Return the draft as a person reads it, in Markdown."""
-        sent = datetime.fromtimestamp(message.received_at)
-        quoted = "\n".join(f"> {line}" for line in message.text.splitlines() if line.strip())
-        lines = [
-            f"## Order change for {message.restaurant or message.sender}",
-            "",
-            quoted,
-            "",
-            f"*{message.channel.capitalize()}, {label(sent.date())} {sent:%H:%M}. "
-            f"Read by {author}.*",
-            "",
-        ]
+        message = thread[-1]
+        lines = [f"## Order change for {message.restaurant or message.sender}", ""]
+        for m in thread:
+            sent = datetime.fromtimestamp(m.received_at)
+            lines += [
+                "\n".join(f"> {line}" for line in m.text.splitlines() if line.strip()),
+                "",
+                f"*{m.channel.capitalize()}, {label(sent.date())} {sent:%H:%M}.*",
+                "",
+            ]
+        read_by = "Edited by a person" if author == "edited" else f"Read by {author}"
+        lines += [f"*{read_by}.*", ""]
         if note:
             lines += [f"**Needs review.** {note}", ""]
         if changes:

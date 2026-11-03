@@ -6,6 +6,7 @@ from datetime import date
 
 from opendataframework import (
     ContentMetadata,
+    Conversation,
     DocumentView,
     LocationView,
     Repository,
@@ -180,7 +181,12 @@ class Contracts(_Table):
 @layers.Wholesale
 @Repository(Message)
 class Messages(_Table):
-    """Messages to the bakery, by chat and email, newest first, each opened as a document."""
+    """Messages to and from the bakery, by chat and email, newest first, each opened as a document.
+
+    In the chat, one thread per restaurant in the ``restaurants`` channel,
+    messenger and email together, with the drafts answering them (see
+    ``Drafts``).
+    """
 
     table, entity = "messages", Message
 
@@ -202,6 +208,25 @@ class Messages(_Table):
             )
             self.db.conn.commit()
 
+    def unanswered(self, restaurant: str, up_to: int) -> list[Message]:
+        """Return ``restaurant``'s unanswered messages up to id ``up_to``, oldest first.
+
+        That's every message in that hasn't been dealt with (``new``, or
+        ``drafted``) since the bakery last wrote to the restaurant.
+        """
+        with self.db.lock:
+            row = self.db.conn.execute(
+                "SELECT MAX(received_at) FROM messages WHERE restaurant = ? AND direction = 'out'",
+                (restaurant,),
+            ).fetchone()
+        since = row[0] if row[0] is not None else 0
+        return self._select(
+            "WHERE restaurant = ? AND direction = 'in' AND status IN ('new', 'drafted') "
+            "AND id <= ? AND received_at >= ?",
+            (restaurant, up_to, since),
+            order="received_at, id",
+        )
+
     def by_external_id(self, external_id: str) -> Message | None:
         """Return the message with this id in the tool it came from, if it's been taken in."""
         found = self._select("WHERE external_id = ?", (external_id,))
@@ -210,6 +235,17 @@ class Messages(_Table):
     def data_view(self) -> DocumentView:
         """Open each message's text as a document."""
         return DocumentView(field="text")
+
+    def conversation(self) -> Conversation:
+        """Read each restaurant's messages as one thread, both sides, in the chat."""
+        return Conversation(
+            channel="restaurants",
+            thread="restaurant",
+            time="received_at",
+            text="text",
+            direction="direction",
+            sender="sender",
+        )
 
 
 @layers.Cafe
@@ -344,6 +380,17 @@ class Drafts(_Table):
     def data_view(self) -> DocumentView:
         """Open each draft as the Markdown a person reads it in."""
         return DocumentView(field="body")
+
+    def conversation(self) -> Conversation:
+        """Show each draft for a restaurant as a card in its thread, with its actions.
+
+        Order changes and new prices are for one restaurant. An invoice's
+        reading, the specials and an allergen notice (for several) aren't for
+        any, so they stay in Drafts.
+        """
+        return Conversation(
+            channel="restaurants", thread="restaurant", time="created_at", text="body"
+        )
 
     def content_metadata(self, draft: Draft) -> ContentMetadata:
         """Declare each draft's body Markdown, so the UI renders it."""

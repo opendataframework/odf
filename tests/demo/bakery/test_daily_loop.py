@@ -5,14 +5,15 @@ fixed demo clock (Monday 2 November 2026, 21:00), a fake messenger and mail,
 and either no model or a fake one.
 """
 
+import dataclasses
 import json
 from datetime import date, datetime, timedelta
 
 import pytest
 from app.agents import OrderDesk, Specials
 from app.clients import Drive
-from app.drafts import confirm_draft, reject_draft
-from app.entities import BakeSheetLine, CafeSale, Leftover, OrderChange, StandingOrder
+from app.drafts import confirm_draft, edit_draft, reject_draft
+from app.entities import BakeSheetLine, CafeSale, Draft, Leftover, OrderChange, StandingOrder
 from app.ingest import ingest_message, sync_sheets
 from app.planning import (
     bake_sheet,
@@ -218,7 +219,7 @@ def _usual(bakery, restaurant, day):
     return wholesale_order(standing, bakery["order_changes"].for_day(day), day).get(restaurant, {})
 
 
-def _confirm(bakery, hub, draft_id, messenger=None, mail=None, rebaked=None):
+def _confirm(bakery, hub, draft_id, messenger=None, mail=None, rebaked=None, **edit):
     rebaked = [] if rebaked is None else rebaked
     return confirm_draft(
         draft_id,
@@ -235,6 +236,10 @@ def _confirm(bakery, hub, draft_id, messenger=None, mail=None, rebaked=None):
         hub.bound_to("function.confirm-draft", Publisher.of(confirm_draft)),
         lambda date: rebaked.append(("bake", date)),
         lambda date: rebaked.append(("plan", date)),
+        FakeClock(),
+        _desk(bakery, hub),
+        bakery["products"],
+        **edit,
     )
 
 
@@ -522,7 +527,9 @@ def test_order_desk_marks_an_unsure_or_bad_model_answer_for_review(bakery, hub):
     )  # fmt: skip
 
     first = _desk(bakery, hub, unsure).invoke(_message(bakery, hub, data.FREEFORM_MESSAGES[0]))
-    second = _desk(bakery, hub, bad).invoke(_message(bakery, hub, data.FREEFORM_MESSAGES[1], n=2))
+    # From another restaurant: a second message from the same one would outdate the first draft.
+    other = _message(bakery, hub, data.FREEFORM_MESSAGES[1], sender="+447700900202", n=2)
+    second = _desk(bakery, hub, bad).invoke(other)
 
     assert first["status"] == second["status"] == "needs-review"
     assert "How many people?" in bakery["drafts"].get(first["draft"]).note
@@ -674,6 +681,351 @@ def test_reject_keeps_the_reason_and_puts_the_message_back(bakery, hub):
     assert bakery["messages"].where("id", message_id)[0].status == "new"
     with pytest.raises(ValueError, match="rejected already"):
         reject_draft(draft_id, bakery["drafts"], bakery["messages"], bakery["invoices"], hub)
+
+
+def _edit(bakery, hub, draft_id, **edit):
+    return edit_draft(
+        draft_id,
+        bakery["drafts"],
+        bakery["messages"],
+        bakery["products"],
+        _desk(bakery, hub),
+        hub.bound_to("function.edit-draft", Publisher.of(edit_draft)),
+        **edit,
+    )
+
+
+def _reject(bakery, hub, draft_id, reason=""):
+    return reject_draft(
+        draft_id,
+        bakery["drafts"],
+        bakery["messages"],
+        bakery["invoices"],
+        hub.bound_to("function.reject-draft", Publisher.of(reject_draft)),
+        reason=reason,
+    )
+
+
+def _status(bakery, message_id):
+    return bakery["messages"].where("id", message_id)[0].status
+
+
+# --- outdated drafts, edits, and what was sent ---
+
+
+def test_a_second_message_outdates_the_open_draft_and_drafts_from_both(bakery, hub):
+    first = _message(bakery, hub, "4 extra baguettes tomorrow please")
+    desk = _desk(bakery, hub)
+    old = desk.invoke(first)["draft"]
+    second = _message(bakery, hub, "2 extra croissants tomorrow please", n=2)
+
+    redrafted = desk.invoke(second)
+
+    assert redrafted["outdated"] == old
+    assert redrafted["changes"] == [
+        {"sku": "BAG", "date": "2026-11-03", "mode": "add", "quantity": 4},
+        {"sku": "CRO", "date": "2026-11-03", "mode": "add", "quantity": 2},
+    ]
+    outdated = bakery["drafts"].get(old)
+    assert outdated.status == "outdated"
+    assert f"draft {redrafted['draft']}" in outdated.note
+    assert "**Outdated.**" in outdated.body
+    new = bakery["drafts"].get(redrafted["draft"])
+    assert "4 extra baguettes" in new.body and "2 extra croissants" in new.body
+    assert [n.topic for n in hub.seen].count("drafts.outdated") == 1
+    with pytest.raises(ValueError, match="outdated"):
+        _confirm(bakery, hub, old)
+
+    _confirm(bakery, hub, redrafted["draft"])
+
+    assert _status(bakery, first) == _status(bakery, second) == "done"
+
+
+def test_a_message_the_open_draft_answers_gets_it_back_without_outdating_it(bakery, hub):
+    first = _message(bakery, hub, "4 extra baguettes tomorrow please")
+    desk = _desk(bakery, hub)
+    draft_id = desk.invoke(first)["draft"]
+    desk.invoke(_message(bakery, hub, "2 extra croissants tomorrow please", n=2))
+
+    again = desk.invoke(first)
+
+    assert again["draft"] != draft_id  # the one answering both, not the outdated one
+    assert len([d for d in bakery["drafts"].all() if d.status in Drafts.OPEN]) == 1
+
+
+def test_a_draft_answers_only_what_came_in_since_the_bakery_last_wrote(bakery, hub):
+    first = _message(bakery, hub, "4 extra baguettes tomorrow please")
+    desk = _desk(bakery, hub)
+    _confirm(bakery, hub, desk.invoke(first)["draft"])
+    later = _message(bakery, hub, "2 extra croissants tomorrow please", n=2)
+    bakery["messages"].save(
+        dataclasses.replace(
+            bakery["messages"].where("id", later)[0], received_at=FakeClock().now().timestamp() + 60
+        )
+    )
+
+    drafted = desk.invoke(later)
+
+    assert [c["sku"] for c in drafted["changes"]] == ["CRO"]
+    assert "outdated" not in drafted
+
+
+def test_confirming_saves_what_was_sent_as_the_bakerys_side_of_the_thread(bakery, hub):
+    message_id = _message(bakery, hub, "4 extra baguettes tomorrow please")
+    draft_id = _desk(bakery, hub).invoke(message_id)["draft"]
+
+    _confirm(bakery, hub, draft_id)
+
+    [sent] = [m for m in bakery["messages"].all() if m.direction == "out"]
+    draft = bakery["drafts"].get(draft_id)
+    assert (sent.channel, sent.sender, sent.restaurant) == (
+        "messenger",
+        "+447700900201",
+        "Le Petit",
+    )
+    assert (sent.text, sent.status, sent.external_id) == (
+        draft.reply,
+        "sent",
+        f"sent:draft-{draft_id}:1",
+    )
+    assert sent.received_at == FakeClock().now().timestamp()
+    assert "**Confirmed**: applied, reply sent by messenger." in draft.body
+
+
+def test_confirming_with_an_edit_sends_and_applies_the_edit(bakery, hub):
+    message_id = _message(bakery, hub, "4 extra baguettes tomorrow please")
+    draft_id = _desk(bakery, hub).invoke(message_id)["draft"]
+    before = _usual(bakery, "Le Petit", TUESDAY).get("BAG", 0)
+    messenger = FakeSender()
+
+    _confirm(
+        bakery, hub, draft_id, messenger=messenger, reply="Five it is!",
+        changes=[{"sku": "BAG", "date": "2026-11-03", "mode": "add", "quantity": 5}],
+    )  # fmt: skip
+
+    assert messenger.sent == [("+447700900201", "Five it is!")]
+    assert _usual(bakery, "Le Petit", TUESDAY)["BAG"] == before + 5
+    draft = bakery["drafts"].get(draft_id)
+    assert (draft.author, draft.reply) == ("edited", "Five it is!")
+    assert f"| Tue 3 Nov | Baguette | {before} | **{before + 5}** |" in draft.body
+
+
+def test_an_edit_that_cant_be_sent_isnt_kept(bakery, hub):
+    class Down:
+        def send(self, *args):
+            raise OSError("messenger down")
+
+    draft_id = _desk(bakery, hub).invoke(
+        _message(bakery, hub, "4 extra baguettes tomorrow please")
+    )["draft"]
+
+    with pytest.raises(OSError):
+        _confirm(bakery, hub, draft_id, messenger=Down(), reply="Five it is!")
+
+    draft = bakery["drafts"].get(draft_id)
+    assert (draft.status, draft.author) == ("pending", "rules")
+
+
+def test_editing_a_draft_saves_it_without_sending_anything(bakery, hub):
+    draft_id = _desk(bakery, hub).invoke(
+        _message(bakery, hub, "4 extra baguettes tomorrow please")
+    )["draft"]
+
+    edited = _edit(bakery, hub, draft_id, reply="Six, then!", changes=[
+        {"sku": "BAG", "date": "2026-11-03", "mode": "add", "quantity": 6},
+    ])  # fmt: skip
+
+    assert (edited["status"], edited["reply"]) == ("pending", "Six, then!")
+    draft = bakery["drafts"].get(draft_id)
+    assert draft.author == "edited" and "Edited by a person" in draft.body
+    assert bakery["order_changes"].all() == []
+    assert hub.seen[-1].topic == "drafts.edited"
+
+
+def test_editing_a_draft_that_needs_review_with_changes_that_check_out_makes_it_ready(bakery, hub):
+    draft_id = _desk(bakery, hub).invoke(_message(bakery, hub, data.FREEFORM_MESSAGES[0]))["draft"]
+
+    edited = _edit(bakery, hub, draft_id, reply="Brioche on Friday, then.", changes=[
+        {"sku": "BRI", "date": "2026-11-06", "mode": "add", "quantity": 12},
+    ])  # fmt: skip
+
+    draft = bakery["drafts"].get(draft_id)
+    assert (edited["status"], draft.note) == ("pending", "")
+    assert "Needs review" not in draft.body
+
+
+@pytest.mark.parametrize(
+    "edit",
+    [
+        {"changes": [{"sku": "CAKE", "date": "2026-11-03", "mode": "add", "quantity": 1}]},
+        {"changes": [{"sku": "BAG", "date": "2027-01-01", "mode": "add", "quantity": 1}]},
+        {"changes": []},
+        {},
+    ],
+)
+def test_an_edit_that_doesnt_check_out_is_refused(bakery, hub, edit):
+    draft_id = _desk(bakery, hub).invoke(
+        _message(bakery, hub, "4 extra baguettes tomorrow please")
+    )["draft"]
+
+    with pytest.raises(ValueError, match="check out|nothing to change"):
+        _edit(bakery, hub, draft_id, **edit)
+
+    assert bakery["drafts"].get(draft_id).author == "rules"
+
+
+def test_confirming_with_the_drafts_own_reply_and_changes_isnt_an_edit(bakery, hub):
+    draft_id = _desk(bakery, hub).invoke(
+        _message(bakery, hub, "4 extra baguettes tomorrow please")
+    )["draft"]
+    draft = bakery["drafts"].get(draft_id)
+
+    _confirm(bakery, hub, draft_id, reply=draft.reply, changes=json.loads(draft.changes))
+
+    assert bakery["drafts"].get(draft_id).author == "rules"
+
+
+def test_confirming_a_draft_needing_review_with_its_changes_is_its_review(bakery, hub):
+    unsure = FakeModel(
+        {"changes": [{"sku": "BRI", "date": "2026-11-06", "mode": "add", "quantity": 12}],
+         "reply": "Brioche on Friday!", "unclear": True, "note": "40 people?"}
+    )  # fmt: skip
+    draft_id = _desk(bakery, hub, unsure).invoke(_message(bakery, hub, data.FREEFORM_MESSAGES[0]))[
+        "draft"
+    ]
+    draft = bakery["drafts"].get(draft_id)
+    assert draft.status == "needs-review"
+
+    _confirm(bakery, hub, draft_id, reply=draft.reply, changes=json.loads(draft.changes))
+
+    confirmed = bakery["drafts"].get(draft_id)
+    assert (confirmed.status, confirmed.author) == ("confirmed", "model:fake")
+
+
+def test_a_renegotiation_confirmed_from_its_card_sends_its_edited_reply(bakery, hub):
+    changes = [
+        {
+            "sku": "BAG",
+            "product": "Baguette",
+            "price": 1.0,
+            "cost": 1.2,
+            "proposed": 1.5,
+            "weekly": 10,
+        }
+    ]
+    draft = Draft(
+        None, 0.0, "renegotiation", "pending", "New prices for Le Petit", "2026-11-16",
+        "Le Petit", None, json.dumps(changes), "Hello", "rules", "", "## New prices",
+    )  # fmt: skip
+    bakery["drafts"].save(draft)
+    mail = FakeSender()
+
+    _confirm(bakery, hub, draft.id, mail=mail, reply="Hello again", changes=changes)
+
+    [(_, _, text)] = mail.sent
+    assert text == "Hello again"
+    assert bakery["drafts"].get(draft.id).author == "edited"
+
+
+def test_an_outdated_draft_a_person_edited_is_named_in_the_one_replacing_it(bakery, hub):
+    desk = _desk(bakery, hub)
+    old = desk.invoke(_message(bakery, hub, "4 extra baguettes tomorrow please"))["draft"]
+    _edit(bakery, hub, old, reply="Four more, see you then")
+
+    new = desk.invoke(_message(bakery, hub, "2 extra croissants tomorrow please", n=2))["draft"]
+
+    body = bakery["drafts"].get(new).body
+    assert f"**Draft {old} had been edited**" in body
+    assert "Four more, see you then" in body
+
+
+def test_rejecting_puts_back_every_message_the_draft_answered(bakery, hub):
+    first = _message(bakery, hub, "4 extra baguettes tomorrow please")
+    desk = _desk(bakery, hub)
+    desk.invoke(first)
+    second = _message(bakery, hub, "2 extra croissants tomorrow please", n=2)
+    draft_id = desk.invoke(second)["draft"]
+
+    _reject(bakery, hub, draft_id, reason="Called them")
+
+    assert _status(bakery, first) == _status(bakery, second) == "new"
+    assert "**Rejected**: Called them." in bakery["drafts"].get(draft_id).body
+
+
+def test_a_persons_instruction_drafts_again_with_the_model(bakery, hub):
+    model = FakeModel(
+        {
+            "changes": [{"sku": "BAG", "date": "2026-11-03", "mode": "add", "quantity": 6}],
+            "reply": "Six extra baguettes tomorrow, noted!",
+            "unclear": False,
+            "note": "",
+        }
+    )
+    message_id = _message(bakery, hub, "4 extra baguettes tomorrow please")
+    desk = _desk(bakery, hub, model)
+    old = desk.invoke(message_id)["draft"]
+
+    redrafted = desk.invoke(message_id, instruction="make it 6")
+
+    assert redrafted["outdated"] == old
+    assert (redrafted["author"], redrafted["status"]) == ("model:fake", "pending")
+    assert redrafted["changes"][0]["quantity"] == 6
+    assert "make it 6" in bakery["drafts"].get(old).note
+    assert "make it 6" in model.asked[-1] and '"quantity": 4' in model.asked[-1]
+
+
+def test_an_instruction_without_a_model_is_refused_and_keeps_the_draft(bakery, hub):
+    message_id = _message(bakery, hub, "4 extra baguettes tomorrow please")
+    desk = _desk(bakery, hub)
+    draft_id = desk.invoke(message_id)["draft"]
+
+    with pytest.raises(ValueError, match="needs the model"):
+        desk.invoke(message_id, instruction="make it 6")
+
+    assert bakery["drafts"].get(draft_id).status == "pending"
+
+
+def test_messages_and_drafts_are_one_thread_per_restaurant_in_the_chat(bakery):
+    import typing
+
+    from odf.ui.conversations import _record_of
+
+    messages = bakery["messages"].conversation()
+    drafts = bakery["drafts"].conversation()
+
+    assert messages.channel == drafts.channel == "restaurants"
+    assert messages.thread == drafts.thread == "restaurant"
+    assert (messages.direction, drafts.direction) == ("direction", None)  # drafts are cards
+    for action in (confirm_draft, edit_draft, reject_draft):
+        hints = typing.get_type_hints(action, include_extras=True)
+        record = _record_of(hints["draft_id"])
+        assert (record.repository, record.field) == (Drafts, "id")
+
+
+def test_an_older_database_gets_the_direction_column(tmp_path):
+    import sqlite3
+
+    path = tmp_path / "old.db"
+    conn = sqlite3.connect(path)
+    conn.execute(
+        "CREATE TABLE messages (id INTEGER PRIMARY KEY AUTOINCREMENT, received_at REAL NOT NULL,"
+        " channel TEXT NOT NULL, sender TEXT NOT NULL, restaurant TEXT, subject TEXT,"
+        " text TEXT NOT NULL, external_id TEXT UNIQUE NOT NULL, status TEXT NOT NULL)"
+    )
+    conn.execute(
+        "INSERT INTO messages (received_at, channel, sender, restaurant, subject, text,"
+        " external_id, status) VALUES (1, 'messenger', '+44', 'Le Petit', NULL, 'hi', 'm1', 'new')"
+    )
+    conn.commit()
+    conn.close()
+
+    sqlite = SQLite(Config({"component": {"sqlite": {"path": str(path)}}}))
+    try:
+        [message] = Messages(sqlite).all()
+    finally:
+        sqlite.on_stop()
+
+    assert message.direction == "in"
 
 
 # --- specials ---

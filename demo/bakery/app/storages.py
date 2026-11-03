@@ -27,7 +27,7 @@ CREATE TABLE IF NOT EXISTS contracts (
 CREATE TABLE IF NOT EXISTS messages (
     id INTEGER PRIMARY KEY AUTOINCREMENT, received_at REAL NOT NULL, channel TEXT NOT NULL,
     sender TEXT NOT NULL, restaurant TEXT, subject TEXT, text TEXT NOT NULL,
-    external_id TEXT UNIQUE NOT NULL, status TEXT NOT NULL
+    external_id TEXT UNIQUE NOT NULL, status TEXT NOT NULL, direction TEXT NOT NULL DEFAULT 'in'
 );
 CREATE TABLE IF NOT EXISTS cafe_sales (
     id INTEGER PRIMARY KEY AUTOINCREMENT, sold_at REAL NOT NULL, order_id TEXT NOT NULL,
@@ -114,9 +114,23 @@ class SQLite:
         self.conn = sqlite3.connect(path, check_same_thread=False)
         self.lock = threading.Lock()  # guards the shared connection across threads
         self.conn.executescript(SCHEMA)
+        _add_missing_columns(self.conn)
         self.conn.commit()
 
     def on_stop(self) -> None:
         """Close the connection when the project stops."""
         with self.lock:
             self.conn.close()
+
+
+# Columns added since the first version, for a data volume that predates them:
+# (table, column, its definition).
+_ADDED = [("messages", "direction", "TEXT NOT NULL DEFAULT 'in'")]
+
+
+def _add_missing_columns(conn: sqlite3.Connection) -> None:
+    """Add each column in ``_ADDED`` its table lacks, so an older database keeps working."""
+    for table, column, definition in _ADDED:
+        names = {row[1] for row in conn.execute(f"PRAGMA table_info({table})")}  # nosec B608
+        if column not in names:
+            conn.execute(f"ALTER TABLE {table} ADD COLUMN {column} {definition}")  # nosec B608
