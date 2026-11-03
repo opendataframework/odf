@@ -39,8 +39,8 @@ from app.repositories import (
     StandingOrders,
 )
 
-# One import of the sheets at a time: two at once would interleave their rows.
-_IMPORTING = threading.Lock()
+# One sync of the sheets at a time: two at once would interleave their rows.
+_SYNCING = threading.Lock()
 
 # Lines that are only a greeting, as an email's first line usually is.
 _GREETINGS = ("hi", "hello", "hey", "morning", "good morning", "good evening")
@@ -176,7 +176,7 @@ def _price(value: str) -> float | None:
 @layers.Integrations
 @Publisher("sheets.changed")
 @Function
-def import_sheets(
+def sync_sheets(
     drive: Drive,
     products: Products,
     restaurants: Restaurants,
@@ -215,14 +215,14 @@ def import_sheets(
     Returns:
         How many rows each sheet on the drive had.
     """
-    with _IMPORTING:
-        return _import_sheets(
+    with _SYNCING:
+        return _sync_sheets(
             drive, products, restaurants, standing_orders, contracts, ingredients, recipes,
             allergens, messages, notifications, announce,
         )  # fmt: skip
 
 
-def _import_sheets(
+def _sync_sheets(
     drive: Drive,
     products: Products,
     restaurants: Restaurants,
@@ -235,7 +235,7 @@ def _import_sheets(
     notifications: Notifications,
     announce: bool,
 ) -> dict:
-    """Do ``import_sheets``' work, under its lock."""
+    """Do ``sync_sheets``' work, under its lock."""
     # What each sheet's rows are called, its file, where they go, and how a row reads.
     sheets = [
         ("products", "products.csv", products.replace_all, lambda r: Product(

@@ -22,7 +22,7 @@ from opendataframework import Config, Logger, Service
 
 from app import layers
 from app.clients import Clock, Drive, Mail, Messenger, Pos
-from app.ingest import import_sheets, ingest_invoice, ingest_message, ingest_sale
+from app.ingest import ingest_invoice, ingest_message, ingest_sale, sync_sheets
 from app.pipelines import CloseCafe, NightRun, Onboard
 from app.repositories import BakeSheets, CafeSales
 from app.settings import setting
@@ -301,7 +301,7 @@ class SharedDrive:
         config: Config,
         drive: Drive,
         sqlite: SQLite,
-        import_all: Annotated[Callable[..., dict], import_sheets],
+        sync: Annotated[Callable[..., dict], sync_sheets],
         logger: Logger,
     ) -> None:
         """Read how often to look; leave the service stopped.
@@ -310,11 +310,11 @@ class SharedDrive:
             config: Project config; reads ``service.shared-drive.interval``.
             drive: The shared drive.
             sqlite: To tell which sheets have been imported.
-            import_all: ``import_sheets``.
+            sync: ``sync_sheets``.
             logger: The service's logger.
         """
         self.interval = float(config.get("service").get("shared-drive").get("interval", 5))
-        self.drive, self.db, self.import_all, self.logger = drive, sqlite, import_all, logger
+        self.drive, self.db, self.sync, self.logger = drive, sqlite, sync, logger
         self._versions: dict[str, float] = {}
         self._stopping = threading.Event()
 
@@ -334,7 +334,7 @@ class SharedDrive:
         missing = self.never_imported()
         if missing:
             self.logger.info(f"importing sheets never imported: {', '.join(missing)}")
-            self.import_all(announce=False)
+            self.sync(announce=False)
 
     def setup(self) -> None:
         """Note the sheets as they are now; only later changes are imported."""
@@ -352,7 +352,7 @@ class SharedDrive:
             if versions != self._versions:
                 self._versions = versions
                 try:
-                    self.import_all()
+                    self.sync()
                 except (OSError, KeyError, ValueError) as exc:
                     self.logger.warning(f"couldn't import the sheets: {exc!r}")
 

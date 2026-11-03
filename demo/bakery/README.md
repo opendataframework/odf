@@ -275,7 +275,7 @@ Each kind of integration is one `odf` component:
 
 Whatever brings an item in, the item goes through one function in
 `app/ingest.py` (`ingest_message`, `ingest_sale`, `ingest_invoice`,
-`import_sheets`). That
+`sync_sheets`). That
 function saves it, takes it only once (a webhook retried does no harm), and
 publishes a notification. Each item is a call of its own, so it's logged, it
 shows on the topology, and its notice's **Show logs** finds it.
@@ -408,7 +408,7 @@ Choices that aren't obvious from the code:
   a person. `confirm-draft` sends first and saves after, so a reply that
   fails leaves the draft pending.
 - **Safe to call by mistake.** A model in chat may call a tool nobody asked
-  for. `import-sheets` leaves alone the records of a sheet that isn't on the
+  for. `sync-sheets` leaves alone the records of a sheet that isn't on the
   drive, so it can't empty a table.
 - **The bakery's own mail is skipped.** Mailpit's mailbox also holds what
   the bakery sends, so the mailbox ignores the bakery's address.
@@ -428,7 +428,7 @@ bakery/
 ├── app/                  # the bakery's odf project
 │   ├── layers.py         # one Layer per area: integrations, wholesale, cafe, production, ...
 │   ├── clients.py        # Clock, Pos, Messenger, Drive, Weather, Mail: one per tool
-│   ├── ingest.py         # ingest_message, ingest_sale, ingest_invoice, import_sheets
+│   ├── ingest.py         # ingest_message, ingest_sale, ingest_invoice, sync_sheets
 │   ├── services.py       # WebhookReceiver, Mailbox, SharedDrive, Scheduler
 │   ├── tasks.py          # history imports, POS reconciliation
 │   ├── pipelines.py      # Onboard, NightRun, CloseCafe

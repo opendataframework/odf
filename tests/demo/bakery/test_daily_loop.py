@@ -13,7 +13,7 @@ from app.agents import OrderDesk, Specials
 from app.clients import Drive
 from app.drafts import confirm_draft, reject_draft
 from app.entities import BakeSheetLine, CafeSale, Leftover, OrderChange, StandingOrder
-from app.ingest import import_sheets, ingest_message
+from app.ingest import ingest_message, sync_sheets
 from app.planning import (
     bake_sheet,
     count_leftovers,
@@ -169,7 +169,7 @@ def bakery(tmp_path, db, hub):
         "invoices": Invoices(db),
         "prices": IngredientPrices(db),
     }
-    import_sheets(
+    sync_sheets(
         drive,
         repos["products"],
         repos["restaurants"],
@@ -179,7 +179,7 @@ def bakery(tmp_path, db, hub):
         repos["recipes"],
         Allergens(db),
         repos["messages"],
-        hub.bound_to("function.import-sheets", Publisher.of(import_sheets)),
+        hub.bound_to("function.sync-sheets", Publisher.of(sync_sheets)),
         announce=False,
     )
     return repos

@@ -5,7 +5,7 @@ from email.utils import format_datetime, make_msgid
 import pytest
 from app import services
 from app.clients import Drive, Mail, Messenger, Pos
-from app.ingest import gist, import_sheets, ingest_message, ingest_sale
+from app.ingest import gist, ingest_message, ingest_sale, sync_sheets
 from app.repositories import (
     Allergens,
     CafeSales,
@@ -73,7 +73,7 @@ def drive(tmp_path):
 
 
 def _sheets(drive, db, hub, announce=False):
-    return import_sheets(
+    return sync_sheets(
         drive,
         Products(db),
         Restaurants(db),
@@ -83,7 +83,7 @@ def _sheets(drive, db, hub, announce=False):
         Recipes(db),
         Allergens(db),
         Messages(db),
-        hub.bound_to("function.import-sheets", Publisher.of(import_sheets)),
+        hub.bound_to("function.sync-sheets", Publisher.of(sync_sheets)),
         announce=announce,
     )
 
@@ -102,7 +102,7 @@ def _order(order_id="ord_1"):
     }
 
 
-def test_import_sheets_fills_the_repositories_and_announces_it(drive, db, hub):
+def test_sync_sheets_fills_the_repositories_and_announces_it(drive, db, hub):
     counts = _sheets(drive, db, hub, announce=True)
 
     assert counts["products"] == len(data.PRODUCTS)
@@ -113,7 +113,7 @@ def test_import_sheets_fills_the_repositories_and_announces_it(drive, db, hub):
     assert changed.summary.startswith("Sheets updated: 12 products, 8 restaurants")
 
 
-def test_import_sheets_replaces_what_was_there(drive, db, hub):
+def test_sync_sheets_replaces_what_was_there(drive, db, hub):
     _sheets(drive, db, hub)
     rows = (drive.path / "restaurants.csv").read_text().splitlines()
     (drive.path / "restaurants.csv").write_text("\n".join(rows[:3]) + "\n")
@@ -124,7 +124,7 @@ def test_import_sheets_replaces_what_was_there(drive, db, hub):
     assert [r.name for r in Restaurants(db).all()] == ["Le Petit", "Harbour Kitchen"]
 
 
-def test_import_sheets_leaves_alone_what_a_missing_sheet_holds(drive, db, hub):
+def test_sync_sheets_leaves_alone_what_a_missing_sheet_holds(drive, db, hub):
     _sheets(drive, db, hub)
     (drive.path / "restaurants.csv").unlink()
 
@@ -135,7 +135,7 @@ def test_import_sheets_leaves_alone_what_a_missing_sheet_holds(drive, db, hub):
     assert hub.seen[-1].summary.endswith("; not on the drive: restaurants.csv")
 
 
-def test_import_sheets_without_a_drive_changes_and_announces_nothing(tmp_path, drive, db, hub):
+def test_sync_sheets_without_a_drive_changes_and_announces_nothing(tmp_path, drive, db, hub):
     _sheets(drive, db, hub)
     away = Drive(Config({"component": {"drive": {"path": str(tmp_path / "not-mounted")}}}))
 
@@ -341,7 +341,7 @@ def test_parse_email_reads_crlf_lines_as_plain_newlines():
     assert parse_email(raw)["text"] == "Hi,\n\nTwo"
 
 
-def test_import_sheets_matches_messages_that_came_before_their_restaurant(drive, db, hub):
+def test_sync_sheets_matches_messages_that_came_before_their_restaurant(drive, db, hub):
     # The mailbox can take in mail before onboarding has imported the restaurants.
     ingest_message(
         "email",

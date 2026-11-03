@@ -19,7 +19,7 @@ from app.allergens import (
     trace_ingredient,
 )
 from app.clients import Drive
-from app.ingest import import_sheets, ingest_invoice
+from app.ingest import ingest_invoice, sync_sheets
 from app.pdf import pdf_rows
 from app.purchasing import InvoiceClerk, read_invoice
 from app.reactions import AllergenNotices, Labelling
@@ -213,11 +213,11 @@ def test_a_sheet_reimported_keeps_what_an_invoice_declared(bakery, hub, drive_pa
         _labelling(bakery, hub), "component.labelling", _published(hub, "ingredients.changed")[0]
     )
 
-    import_sheets(
+    sync_sheets(
         Drive(Config({"component": {"drive": {"path": str(drive_path)}}})),
         *_repos(bakery, "products", "restaurants", "standing_orders", "contracts"),
         *_repos(bakery, "ingredients", "recipes", "allergens", "messages"),
-        hub.bound_to("function.import-sheets", Publisher.of(import_sheets)),
+        hub.bound_to("function.sync-sheets", Publisher.of(sync_sheets)),
         announce=False,
     )
 

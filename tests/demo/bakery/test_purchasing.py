@@ -15,7 +15,7 @@ import pytest
 from app import services
 from app.clients import Drive, Mail
 from app.drafts import confirm_draft, reject_draft
-from app.ingest import import_sheets, ingest_invoice
+from app.ingest import ingest_invoice, sync_sheets
 from app.margins import AccountManager, margins, proposed_price, what_if
 from app.pdf import pdf_rows, pdf_text
 from app.purchasing import InvoiceClerk, read_invoice
@@ -138,14 +138,14 @@ def bakery(drive_path, db, hub):
         "order_changes": OrderChanges(db),
         "sheets": BakeSheets(db),
     }
-    import_sheets(
+    sync_sheets(
         Drive(Config({"component": {"drive": {"path": str(drive_path)}}})),
         *(repos[k] for k in ("products", "restaurants", "standing_orders", "contracts")),
         repos["ingredients"],
         repos["recipes"],
         repos["allergens"],
         repos["messages"],
-        hub.bound_to("function.import-sheets", Publisher.of(import_sheets)),
+        hub.bound_to("function.sync-sheets", Publisher.of(sync_sheets)),
         announce=False,
     )
     return repos

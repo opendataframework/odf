@@ -97,10 +97,6 @@
     "col": 5,
     "row": 4
   },
-  "function.import-sheets": {
-    "col": 2,
-    "row": 4
-  },
   "function.ingest-invoice": {
     "col": 2,
     "row": 3
@@ -128,6 +124,10 @@
   "function.reject-draft": {
     "col": 12,
     "row": 7
+  },
+  "function.sync-sheets": {
+    "col": 2,
+    "row": 4
   },
   "function.trace-ingredient": {
     "col": 7,
