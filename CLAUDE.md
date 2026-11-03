@@ -160,7 +160,7 @@ not per commit; format mirrors `opendataframework`'s release notes).
 
 ## Examples
 
-`examples/` has 26 examples. `01-table-view/` (a repository with no
+`examples/` has 27 examples. `01-table-view/` (a repository with no
 `data_view()` at all, so the UI falls back to the implicit default table)
 and `06-location-view/` (`data_view() -> LocationView` overriding that
 default with a map) are the two ends of the `data_view()` concept.
@@ -182,9 +182,11 @@ repositories, with a grouped `TimeseriesView`), `23-reverse-proxy/`
 as `docs/ui.md#deploying` describes), `24-custom-theme/` (a glitch theme of
 the project's own, selected by `[ui] theme = "./themes/glitch"`),
 `25-flat-grid/` (`[ui] grid = "flat"`: one node of each kind showing its
-type's glyph, with a `layout.json` `flatIcon` override) and
+type's glyph, with a `layout.json` `flatIcon` override),
 `26-notifications/` (notifications a café counter publishes, shown as toasts
-with Open and Show logs) were added here since. Treat new examples here as small and focused, one concept each, matching
+with Open and Show logs) and `27-channels/` (a help desk's messages and
+tickets in one chat channel, a ticket a card whose action is a
+`Record(Tickets)` function) were added here since. Treat new examples here as small and focused, one concept each, matching
 `opendataframework/examples/`'s style. Anything that needs most of ODF at
 once belongs in `demo/` instead.
 

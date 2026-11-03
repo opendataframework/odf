@@ -209,6 +209,10 @@ time, a `datetime` as itself and a string as ISO 8601.
 The UI checks every conversation when it starts: one naming a field its
 entity lacks, or on a repository with no `all()`, fails `Server.start()`.
 
+See [`examples/27-channels`](https://github.com/opendataframework/odf/tree/main/examples/27-channels):
+a help desk's messages and tickets in one channel, with a ticket's reply sent
+from its card.
+
 ### Asking in a thread
 
 With chat on, a thread has the same input as the assistant. What you ask
