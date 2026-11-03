@@ -209,21 +209,18 @@ class Messages(_Table):
             self.db.conn.commit()
 
     def unanswered(self, restaurant: str, up_to: int) -> list[Message]:
-        """Return ``restaurant``'s unanswered messages up to id ``up_to``, oldest first.
+        """Return what a draft for ``restaurant``'s message ``up_to`` answers, oldest first.
 
-        That's every message in that hasn't been dealt with (``new``, or
-        ``drafted``) since the bakery last wrote to the restaurant.
+        That message, and the ones before it the restaurant's open draft
+        answers already (``drafted``), since a restaurant writing again
+        before its draft is confirmed is adding to the same request. A
+        message nobody drafted for isn't part of it: history caught up on
+        quietly, or one a rejected draft put back for a person.
         """
-        with self.db.lock:
-            row = self.db.conn.execute(
-                "SELECT MAX(received_at) FROM messages WHERE restaurant = ? AND direction = 'out'",
-                (restaurant,),
-            ).fetchone()
-        since = row[0] if row[0] is not None else 0
         return self._select(
-            "WHERE restaurant = ? AND direction = 'in' AND status IN ('new', 'drafted') "
-            "AND id <= ? AND received_at >= ?",
-            (restaurant, up_to, since),
+            "WHERE restaurant = ? AND direction = 'in' "
+            "AND (id = ? OR (status = 'drafted' AND id < ?))",
+            (restaurant, up_to, up_to),
             order="received_at, id",
         )
 

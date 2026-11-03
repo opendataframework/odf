@@ -770,6 +770,33 @@ def test_a_draft_answers_only_what_came_in_since_the_bakery_last_wrote(bakery, h
     assert "outdated" not in drafted
 
 
+def test_history_caught_up_quietly_isnt_folded_into_a_draft(bakery, hub):
+    # Imported at onboarding, never drafted for: still "new", and the bakery
+    # has never written back, but it isn't part of today's request.
+    _message(bakery, hub, "9 extra brioche tomorrow please")
+    _message(bakery, hub, "5 extra rye loaves tomorrow please", n=2)
+    latest = _message(bakery, hub, "4 extra baguettes tomorrow please", n=3)
+
+    drafted = _desk(bakery, hub).invoke(latest)
+
+    assert [c["sku"] for c in drafted["changes"]] == ["BAG"]
+    draft = bakery["drafts"].get(drafted["draft"])
+    assert "brioche" not in draft.body and "rye" not in draft.body
+    assert _status(bakery, latest - 1) == "new"
+
+
+def test_a_message_a_rejected_draft_put_back_isnt_folded_into_the_next(bakery, hub):
+    desk = _desk(bakery, hub)
+    first = _message(bakery, hub, "9 extra brioche tomorrow please")
+    _reject(bakery, hub, desk.invoke(first)["draft"], reason="Called them")
+    second = _message(bakery, hub, "4 extra baguettes tomorrow please", n=2)
+
+    drafted = desk.invoke(second)
+
+    assert [c["sku"] for c in drafted["changes"]] == ["BAG"]
+    assert _status(bakery, first) == "new"
+
+
 def test_confirming_saves_what_was_sent_as_the_bakerys_side_of_the_thread(bakery, hub):
     message_id = _message(bakery, hub, "4 extra baguettes tomorrow please")
     draft_id = _desk(bakery, hub).invoke(message_id)["draft"]

@@ -391,7 +391,7 @@ def _edit(
 
 
 def _answered(draft: Draft, messages: Messages) -> list[Message]:
-    """Return the messages ``draft`` answers: its own, and the restaurant's unanswered before it."""
+    """Return the messages ``draft`` answers: its own, and those of the draft it outdated."""
     if not draft.message:
         return []
     found = messages.where("id", draft.message)

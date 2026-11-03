@@ -325,7 +325,7 @@ own (`history-max-bytes`) for days of notices.
 
 | Agent | Started by | Reads with | Drafts |
 |---|---|---|---|
-| `order-desk` | `Drafting`, when a restaurant's message arrives; or a person, on any message (UI, MCP), or with an instruction from the restaurant's thread | rules for the usual phrasings, then the model, else marked for review | an order change and its reply, for every message the restaurant sent since the bakery last wrote |
+| `order-desk` | `Drafting`, when a restaurant's message arrives; or a person, on any message (UI, MCP), or with an instruction from the restaurant's thread | rules for the usual phrasings, then the model, else marked for review | an order change and its reply, for the message and those the restaurant's open draft already answered |
 | `specials` | `close-cafe` at 15:00, or a person | rules pick the dishes and prices; the model only writes the lines | tomorrow's specials board |
 | `invoice-clerk` | `Purchasing`, when an invoice arrives; or a person, on any invoice | rules for the typed invoices, then the model, else marked for review | nothing when the rules read it cleanly: it records the prices; otherwise its reading, to confirm |
 | `account-manager` | `Renegotiating`, when a contract falls below cost; or a person | rules work out the prices; the model only writes the email | an email to the restaurant asking for new prices |
@@ -434,9 +434,11 @@ Choices that aren't obvious from the code:
   message is tagged with how it came. What the bakery sends is saved in
   Messages too, going out, so a thread has both sides.
 - **A newer message outdates a draft.** A restaurant that writes again before
-  its draft is confirmed gets one new draft, reading every message since the
-  bakery last wrote, and the old one can't be confirmed any more. Two drafts
-  answering the same restaurant could otherwise both be sent.
+  its draft is confirmed gets one new draft, reading the new message with
+  those the old draft answered, and the old one can't be confirmed any more.
+  Two drafts answering the same restaurant could otherwise both be sent. A
+  message nobody drafted for, such as history caught up on at onboarding,
+  isn't folded in, so a draft never answers last month's requests.
 - **What's sent is what the record shows.** An edit is saved on the draft
   (its author becomes "edited") before anything goes out, so the draft shows
   what was sent, not what was drafted. A draft replaced after an edit says,

@@ -103,13 +103,15 @@ def _describe(change: Change, names: dict[str, str]) -> str:
 class OrderDesk:
     """Reads a restaurant's messages and drafts the order change they ask for, with a reply.
 
-    ``invoke(message_id)`` drafts for a message from Messages, and for every
-    message of that restaurant still unanswered with it: a restaurant that
-    writes again before its draft is confirmed ("actually, make it 6") gets
-    one draft reading both, and the older draft is outdated, so the two
-    can't both be sent. ``invoke(message_id, instruction=...)`` drafts again
-    with a person's instruction ("make it 30 croissants"), outdating the open
-    draft the same way.
+    ``invoke(message_id)`` drafts for a message from Messages, together with
+    the messages the restaurant's open draft answers already: a restaurant
+    that writes again before its draft is confirmed ("actually, make it 6")
+    gets one draft reading both, and the older draft is outdated, so the two
+    can't both be sent. A message nobody drafted for (history caught up on,
+    one a rejected draft put back) isn't folded in.
+    ``invoke(message_id, instruction=...)`` drafts again with a person's
+    instruction ("make it 30 croissants"), outdating the open draft the same
+    way.
 
     The draft shows each product's quantity before and after, and the reply
     that confirming it sends. Rules read the usual phrasings; the model, if
