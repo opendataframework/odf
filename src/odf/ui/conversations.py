@@ -255,8 +255,10 @@ def thread_context(context: Context, channel: str, value: str, *, limit: int = 3
     """Describe a thread for the assistant asked inside it.
 
     The thread's latest ``limit`` messages and cards, oldest first: each
-    message with its side and sender, each card with its key and the tools
-    its actions are called by (``<key>.<verb>``) with the record's argument.
+    message with its side, sender and record (its repository's key and its
+    own, for a tool that takes a message), each card with its record and
+    the tools its actions are called by (``<key>.<verb>``) with the
+    record's argument.
     It ends by saying that only a card's action reaches the outside, so the
     model knows a reply isn't sent by answering.
 
@@ -276,7 +278,7 @@ def thread_context(context: Context, channel: str, value: str, *, limit: int = 3
         if item["kind"] == "message":
             side = "sent" if item["direction"] == "out" else "received"
             who = f" from {item['sender']}" if item["sender"] and side == "received" else ""
-            lines.append(f"- {when}, {side}{who}: {text}")
+            lines.append(f"- {when}, {side}{who}, {item['repository']} {item['key']!r}: {text}")
         else:
             calls = ", ".join(
                 f"{a['id']}.{a['verb']}({a['param']}={a['value']!r})" for a in item["actions"]

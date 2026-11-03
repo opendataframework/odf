@@ -192,8 +192,9 @@ def test_asking_in_a_thread_sends_the_thread_and_keeps_the_turn_as_a_note(tmp_pa
     assert [e["type"] for e in events_of(r)] == ["token", "token"]
     _, context = engine.turns[0]
     assert 'the "ada" thread of the "support" channel' in context
-    assert "received from ada@example.com: My order is late" in context
-    assert "sent: Sorry, it's on its way" in context
+    assert ".messages 1: My order is late" in context
+    assert "received from ada@example.com, " in context
+    assert ".messages 2: Sorry, it's on its way" in context
     assert ".close-ticket.call(ticket_id=10)" in context
     assert "Wrong size" not in context  # bob's thread
     notes = [(i["role"], i["text"]) for i in items if i["kind"] == "note"]
