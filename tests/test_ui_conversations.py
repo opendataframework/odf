@@ -358,3 +358,15 @@ def test_the_chat_drawer_lists_channels_and_shows_threads():
         css = (theme / "theme.css").read_text()
         assert ".chat-card{" in css, theme.name
         assert "#chat-nav[hidden]" in css, theme.name
+
+
+def test_a_card_runs_its_actions_through_the_shared_arguments_form():
+    from odf.ui import themes
+
+    script = (themes.STATIC_DIR / "app.js").read_text()
+
+    assert "function buildArgumentsForm(schema, {" in script
+    # The inspector's form and a card's form are the same form.
+    assert script.count("buildArgumentsForm(schema, {") == 3
+    assert "const hidden = { [action.param]: action.value };" in script
+    assert "fetch(`${action.href}/${action.verb}`" in script

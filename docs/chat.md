@@ -176,6 +176,32 @@ class Tickets:
         return Conversation(channel="support", thread="customer", time="opened", text="body")
 ```
 
+A card carries its actions: every `@Function` or `@Agent` with an argument
+marked as one of the repository's records
+([`Record`](https://opendataframework.github.io/opendataframework/repository/)):
+
+```python
+from typing import Annotated
+
+from opendataframework import Function, Record
+
+
+@Function
+def close_ticket(
+    ticket_id: Annotated[int, Record(Tickets)],  # the ticket's id, its "id" field
+    tickets: Tickets,  # injected, as usual
+    reply: str | None = None,  # named like Ticket.reply
+) -> str: ...
+```
+
+Each action is a button on the card. It opens the function's form inside the
+card, the same form the inspector shows, with `ticket_id` given already and
+hidden. Arguments named like a field of the record (`reply`) start as the
+record's value, so a person can change a reply before it goes out. Running it
+calls the function as **Call** does, and redraws the card from the record as
+it is then. A form being filled in stays open while the thread refreshes
+around it.
+
 A record whose thread field is `None` isn't in any thread. The `time` fields of
 a channel's repositories have to sort together: a number is read as a Unix
 time, a `datetime` as itself and a string as ISO 8601.

@@ -29,8 +29,11 @@
 - **Chat**: channels in the chat drawer. A repository declaring a `conversation()`
   (`opendataframework` 0.6.0's `Conversation`) joins a channel, and the drawer lists each
   channel's threads, with a dot on those holding something you haven't seen. A thread
-  shows messages on their sides and, from a repository with no `direction`, cards. It
-  refreshes when a notification is about one of its repositories. Read through
+  shows messages on their sides and, from a repository with no `direction`, cards. A
+  card's actions are the functions and agents taking one of its records
+  (`Annotated[int, Record(Repo)]`). Each opens its form in the card, with the record's
+  argument given and the arguments named like its fields filled from it, to change before
+  it runs. A thread refreshes when a notification is about one of its repositories. Read through
   `GET /api/channels`, `.../{channel}/threads` and `.../threads/{thread}`. See
   [Chat](chat.md#channels).
 - **Demo**: `demo/bakery`, a whole application built with `odf`, running with

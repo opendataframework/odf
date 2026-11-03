@@ -2491,18 +2491,36 @@ async function openInvokeForm(id) {
   }
   if (selectId !== id) return;
 
-  const props = schema.properties || {};
+  const form = buildArgumentsForm(schema, {
+    accent: nodeAccent(node),
+    onSubmit: (form, props, required) => submitArguments(id, form, props, required),
+  });
+  body.appendChild(form);
+  showInspectorPopup(node);
+  form.querySelector('input,textarea,button').focus();
+}
+
+// Draws the form for a schema from GET {href}/parameters: one field per
+// argument, a submit button and a result line. `prefill` replaces a field's
+// default (a JSON field's string value is shown as it is: a record may hold
+// its JSON as text); `hidden` names arguments given already, left out of the
+// form and passed by the caller; `multiline` edits strings in a textarea.
+// `onSubmit(form, props, required)` gets the visible arguments' schema.
+function buildArgumentsForm(schema, { prefill = {}, hidden = {}, label = 'Run', accent = null, multiline = false, onSubmit }) {
+  const props = Object.fromEntries(Object.entries(schema.properties || {}).filter(([name]) => !(name in hidden)));
   const required = new Set(schema.required || []);
   const fields = Object.entries(props).map(([name, prop]) => {
     const kind = invokeFieldKind(prop);
-    const value = prop.default === undefined ? '' : prop.default;
+    const value = name in prefill ? prefill[name] : prop.default === undefined ? '' : prop.default;
     const label = `<span>${escapeHtml(name)}${required.has(name) ? ' <span class="invoke-required">*</span>' : ''}</span>`;
     let input;
     if (kind === 'boolean') {
       input = `<input type="checkbox" name="${escapeHtml(name)}"${value === true ? ' checked' : ''}>`;
     } else if (kind === 'json') {
-      const text = value === '' ? '' : JSON.stringify(value);
+      const text = value === '' || value === null ? '' : typeof value === 'string' ? value : JSON.stringify(value);
       input = `<textarea name="${escapeHtml(name)}" rows="2" placeholder="JSON">${escapeHtml(text)}</textarea>`;
+    } else if (kind === 'string' && multiline) {
+      input = `<textarea name="${escapeHtml(name)}" rows="3">${escapeHtml(value === null ? '' : String(value))}</textarea>`;
     } else {
       input = `<input type="${kind === 'number' ? 'number' : 'text'}"${kind === 'number' ? ' step="any"' : ''} name="${escapeHtml(name)}" value="${escapeHtml(value === null ? '' : String(value))}">`;
     }
@@ -2511,18 +2529,16 @@ async function openInvokeForm(id) {
 
   const form = document.createElement('form');
   form.className = 'invoke-form';
-  form.style.setProperty('--invoke-accent', nodeAccent(node));
+  if (accent) form.style.setProperty('--invoke-accent', accent);
   form.innerHTML =
     fields.join('') +
-    `<button type="submit" class="invoke-run">Run</button>` +
+    `<button type="submit" class="invoke-run">${escapeHtml(label)}</button>` +
     `<pre class="invoke-result" hidden></pre>`;
   form.addEventListener('submit', e => {
     e.preventDefault();
-    submitArguments(id, form, props, required);
+    onSubmit(form, props, required);
   });
-  body.appendChild(form);
-  showInspectorPopup(node);
-  form.querySelector('input,textarea,button').focus();
+  return form;
 }
 
 // Reads the form back into the call's arguments. An empty optional field is
@@ -3009,7 +3025,80 @@ function chatCard(item, render) {
     body.textContent = item.text;
   }
   card.appendChild(body);
+  if (item.actions && item.actions.length) {
+    const bar = chatEl('div', 'chat-card-actions');
+    for (const action of item.actions) {
+      const btn = chatEl('button', 'data-btn', action.label);
+      btn.type = 'button';
+      btn.title = action.description;
+      btn.addEventListener('click', () => toggleCardAction(card, btn, action));
+      bar.appendChild(btn);
+    }
+    card.appendChild(bar);
+  }
   return card;
+}
+
+// A card's action opens its form inside the card: the record's argument
+// given already and hidden, the arguments named like the record's fields
+// filled from it, for a person to change before it runs. While a form is
+// open the card is `.editing`, so a refresh keeps it. Clicking the action
+// again closes it.
+async function toggleCardAction(card, btn, action) {
+  const open = card.querySelector('.invoke-form');
+  const wasThis = btn.classList.contains('active');
+  if (open) open.remove();
+  card.querySelectorAll('.chat-card-actions .data-btn').forEach(b => b.classList.remove('active'));
+  card.classList.remove('editing');
+  if (wasThis) return;
+
+  let schema;
+  try {
+    const res = await fetch(`${action.href}/parameters`);
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    schema = await res.json();
+  } catch (err) {
+    addLog(`${action.label} parameters failed — ${err.message}`, ACCENT.alert);
+    return;
+  }
+  const hidden = { [action.param]: action.value };
+  const form = buildArgumentsForm(schema, {
+    prefill: action.prefill,
+    hidden,
+    label: action.label,
+    multiline: true,
+    onSubmit: (form, props, required) => runCardAction(card, form, props, required, action, hidden),
+  });
+  btn.classList.add('active');
+  card.classList.add('editing');
+  card.appendChild(form);
+  form.querySelector('input,textarea,button').focus();
+}
+
+async function runCardAction(card, form, props, required, action, hidden) {
+  const btn = form.querySelector('.invoke-run');
+  const out = form.querySelector('.invoke-result');
+  btn.disabled = true;
+  out.classList.remove('error');
+  try {
+    const args = { ...readInvokeForm(form, props, required), ...hidden };
+    const res = await fetch(`${action.href}/${action.verb}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(args),
+    });
+    const body = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error(invokeErrorMessage(body.detail, res.status));
+  } catch (err) {
+    out.textContent = err.message;
+    out.classList.add('error');
+    out.hidden = false;
+    btn.disabled = false;
+    return;
+  }
+  // Done: the card is redrawn from the record as it is now.
+  card.classList.remove('editing');
+  if (chatView.kind === 'thread') loadThread();
 }
 
 // A notification about a record of a repository in a channel (a message

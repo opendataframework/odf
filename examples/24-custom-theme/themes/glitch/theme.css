@@ -361,7 +361,7 @@ canvas{display:block;cursor:grab}
 .chat-card-actions{display:flex;flex-wrap:wrap;gap:6px;margin-top:8px}
 .chat-card-actions .data-btn{margin-left:0}
 .chat-card-actions .data-btn.active{color:var(--title-accent);border-color:var(--title-accent)}
-.chat-card .invoke-form{margin-top:8px}
+.chat-card .invoke-form{margin:8px 0 0;padding:8px 0 0;--invoke-accent:var(--title-accent)}
 #chat-input{flex:1;resize:none;height:38px;background:var(--hover-bg);border:1px solid var(--border-strong);color:var(--text);font-family:inherit;font-size:11.5px;padding:8px 10px;border-radius:2px}
 #chat-input:focus{outline:none;border-color:var(--title-accent);box-shadow:0 0 0 1px var(--split-a),0 0 0 2px color-mix(in srgb, var(--split-b) 60%, transparent)}
 #chat-send{flex-shrink:0}
