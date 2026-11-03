@@ -585,3 +585,32 @@ def test_a_turns_context_follows_the_system_prompt(monkeypatch):
         ("system", "In Le Petit's thread."),
         ("user", "make it 30"),
     ]
+
+
+def test_addressing_keeps_the_channel_tools_with_their_own_arguments(monkeypatch):
+    tools = [
+        *_SCOPED_TOOLS,
+        SimpleNamespace(
+            name="read_thread",
+            description="A thread's items",
+            inputSchema={
+                "type": "object",
+                "properties": {"channel": {"type": "string"}, "thread": {"type": "string"}},
+            },
+        ),
+    ]
+    tool_call = make_tool_call("read_thread", {"channel": "support", "thread": "ada"})
+    client = FakeAsyncClient(
+        [
+            [make_chunk("", tool_calls=[tool_call])],
+            [make_chunk("done")],
+        ]
+    )
+    fake_mcp = FakeMcp(tools=tools, tool_result={"result": []})
+    chat_engine = build_engine(monkeypatch, client, mcp=fake_mcp)
+
+    collect(chat_engine, [{"role": "user", "content": "@component.widget what did ada say?"}])
+
+    assert "read_thread" in {t["function"]["name"] for t in client.calls[0]["tools"]}
+    sent = next(c for c in fake_mcp.calls if c[0] == "read_thread")
+    assert sent == ("read_thread", {"channel": "support", "thread": "ada"})

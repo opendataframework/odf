@@ -35,15 +35,19 @@
   argument given and the arguments named like its fields filled from it, to change before
   it runs. A thread refreshes when a notification is about one of its repositories.
   Asked inside a thread, the assistant gets the thread as the turn's context
-  (`ChatEngine.stream(messages, context)`), and the turn shows there as notes.
+  (`ChatEngine.stream(messages, context)`), and the turn shows there as notes. Read
+  through `GET /api/channels`, `.../{channel}/threads` and `.../threads/{thread}`. See
+  [Chat](chat.md#channels).
 - **Chat**: conversations with the assistant are kept in `chat.json` (`[project]
   chat-file`), each to its latest `[ui] chat-history` turns (default 200, `0` keeps them
   in their browser tab as before), and listed under **Assistant** to reopen or delete.
   A thread holds one of its own. `POST /api/chat` takes `{text, conversation?}` or
   `{text, thread}` to keep a turn, and still `{messages}` for a caller that keeps its own.
-  See [Chat](chat.md#history). Read through
-  `GET /api/channels`, `.../{channel}/threads` and `.../threads/{thread}`. See
-  [Chat](chat.md#channels).
+  See [Chat](chat.md#history).
+- **MCP**: `list_channels` and `read_thread`, the chat's channels and their threads as
+  tools. A card's actions are listed with the tool each is run by (`<key>.<verb>`) and
+  the record it takes, so another client can read a thread and act on its cards. See
+  [MCP](mcp.md#tools).
 - **Demo**: `demo/bakery`, a whole application built with `odf`, running with
   `docker compose up`. A bakery's café POS, messenger, email and spreadsheets run as
   simulated tools, and an `odf` project joins them through webhooks, a polled mailbox, a

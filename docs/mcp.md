@@ -34,9 +34,9 @@ configure.
 
 ## Tools
 
-Each tool takes a component's key, `<namespace>.<name>`, as its `key` argument
-(`start_component(key="service.postgres")`), and `list_components` returns it
-as each entry's `id`.
+Each tool about one component takes its key, `<namespace>.<name>`, as its
+`key` argument (`start_component(key="service.postgres")`), and
+`list_components` returns it as each entry's `id`.
 
 | Tool | Arguments | Does |
 |---|---|---|
@@ -47,8 +47,17 @@ as each entry's `id`.
 | `execute_task` | `key` | Executes a `@Task` or `@Pipeline` and returns what `execute()` returns |
 | `component_logs` | `key`, `lines=50` | Returns the last log entries of any component |
 | `recent_notifications` | `topic`, `key`, `level`, `include_unsummarized=False`, `before`, `limit=20` | Returns the notifications components published, newest first, as `GET /api/notifications/history` does: by default only those with a summary, filtered by topic (`drafts.*` for a prefix), publisher key or level. To read further back, pass the last row's `cursor` as `before`. Needs file logging |
+| `list_channels` | — | Lists every channel, the repositories in it, and its threads, the one with the latest item first, as `GET /api/channels/{channel}/threads` does (see [Chat](chat.md#channels)) |
+| `read_thread` | `channel`, `thread`, `limit=50` | Returns a thread's latest items, oldest first: messages with their direction and sender, and cards with their record and actions. `limit` is 1 to 500 |
 
-On top of these seven, a project adds its own tools, each prefixed by its key.
+On top of these nine, a project adds its own tools, each prefixed by its key.
+
+A card's action from `read_thread` is one of those: it's run by the tool
+`<id>.<verb>` (`drafts.confirm-draft.call`), passing the action's `value` as
+its `param` argument. So another client can read a thread and act on its
+cards the way a person does in the UI. While a chat message addresses a
+component, `list_channels` and `read_thread` stay available as they are, with
+no key forced on them.
 
 ### Agents and functions
 

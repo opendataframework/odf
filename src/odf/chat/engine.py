@@ -39,6 +39,11 @@ _LIFECYCLE_TOOLS = frozenset(
     }
 )
 
+# Fixed tools that read the project as a whole, not one component, so they
+# stay available while a message addresses one, with no key forced on them:
+# the channels and their threads.
+_READ_TOOLS = frozenset({"list_channels", "read_thread"})
+
 # Sent first in a turn that has tools, unless the conversation brings its own
 # system message: without it, a small model fills out an answer with records
 # and activity it never looked up, and runs tools that change things to answer
@@ -211,7 +216,7 @@ class ChatEngine:
             return True
         if name == "query_repository":
             return addressed.get("type") == "repository"
-        return name in _LIFECYCLE_TOOLS
+        return name in _LIFECYCLE_TOOLS or name in _READ_TOOLS
 
     async def _tool_specs(self, addressed: dict | None) -> list[dict] | None:
         if self._mcp is None:

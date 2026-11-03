@@ -13,6 +13,7 @@ from opendataframework.repository import Repository
 from opendataframework.service import Service
 from opendataframework.task import Task
 from opendataframework.view import ContentMetadata, ImageView
+from test_ui_conversations import MESSAGES, TICKETS, Ticket, support_ns
 
 from odf.mcp.server import McpServer
 
@@ -698,3 +699,49 @@ def test_agent_invoke_tool_clashing_with_its_own_mcp_tool_raises():
     with Context(namespaces={NS}) as ctx:
         with pytest.raises(ValueError, match="Duplicate MCP tool name: 'n-s.librarian.invoke'"):
             McpServer(ctx, "proj")
+
+
+# --- channels ---------------------------------------------------------------------
+
+
+def test_list_channels_gives_each_channel_with_its_threads():
+    NS, *_ = support_ns(MESSAGES, TICKETS)
+    with Context(namespaces={NS}) as ctx:
+        mcp = McpServer(ctx, "proj")._mcp
+        (channel,) = structured(call(mcp, "list_channels"))
+
+    assert channel["name"] == "support"
+    assert [t["thread"] for t in channel["threads"]] == ["bob", "ada"]
+
+
+def test_read_thread_gives_messages_and_cards_with_the_tools_their_actions_run_by():
+    NS, *_ = support_ns(MESSAGES, TICKETS)
+    with Context(namespaces={NS}) as ctx:
+        mcp = McpServer(ctx, "proj")._mcp
+        items = structured(call(mcp, "read_thread", {"channel": "support", "thread": "ada"}))
+        names = {tool.name for tool in asyncio.run(mcp.list_tools())}
+
+    assert [i["kind"] for i in items] == ["message", "card", "message"]
+    (action,) = items[1]["actions"]
+    assert f"{action['id']}.{action['verb']}" in names
+    assert (action["param"], action["value"]) == ("ticket_id", 10)
+
+
+def test_a_cards_action_runs_through_its_own_tool():
+    tickets = [Ticket(10, TICKETS[0].opened, "ada", "**Late order**", "On its way")]
+    NS, *_ = support_ns([], tickets)
+    with Context(namespaces={NS}) as ctx:
+        mcp = McpServer(ctx, "proj")._mcp
+        (card,) = structured(call(mcp, "read_thread", {"channel": "support", "thread": "ada"}))
+        (action,) = card["actions"]
+        result = call(mcp, f"{action['id']}.{action['verb']}", {action["param"]: action["value"]})
+
+    assert text(result) == "On its way"
+    assert tickets[0].status == "closed"
+
+
+def test_read_thread_of_an_unknown_channel_is_an_error():
+    with Context(namespaces=set()) as ctx:
+        mcp = McpServer(ctx, "proj")._mcp
+        with pytest.raises(ToolError, match="No channel"):
+            call(mcp, "read_thread", {"channel": "nope", "thread": "ada"})
