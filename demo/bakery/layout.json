@@ -35,6 +35,7 @@
   },
   "component.clock": {
     "col": 0,
+    "icon": "bakery-clock",
     "row": 0
   },
   "component.costing": {
@@ -47,6 +48,7 @@
   },
   "component.drive": {
     "col": 0,
+    "icon": "bakery-sheets",
     "row": 4
   },
   "component.labelling": {
@@ -55,10 +57,12 @@
   },
   "component.mail": {
     "col": 0,
+    "icon": "mailbox",
     "row": 3
   },
   "component.messenger": {
     "col": 0,
+    "icon": "bakery-messenger",
     "row": 2
   },
   "component.model": {
@@ -67,6 +71,7 @@
   },
   "component.pos": {
     "col": 0,
+    "icon": "register",
     "row": 1
   },
   "component.purchasing": {
@@ -79,6 +84,7 @@
   },
   "component.weather": {
     "col": 0,
+    "icon": "bakery-weather",
     "row": 5
   },
   "function.bake-sheet": {
@@ -111,6 +117,7 @@
   },
   "function.labels": {
     "col": 6,
+    "icon": "bakery-label",
     "row": 12
   },
   "function.margins": {
@@ -119,6 +126,7 @@
   },
   "function.plan-deliveries": {
     "col": 7,
+    "icon": "truck",
     "row": 7
   },
   "function.reject-draft": {
@@ -139,10 +147,12 @@
   },
   "pipeline.close-cafe": {
     "col": 8,
+    "icon": "closing-sign",
     "row": 4
   },
   "pipeline.night-run": {
     "col": 8,
+    "icon": "bakery-oven",
     "row": 7
   },
   "pipeline.onboard": {
@@ -151,26 +161,32 @@
   },
   "repository.allergens": {
     "col": 5,
+    "icon": "bakery-label",
     "row": 12
   },
   "repository.bake-sheets": {
     "col": 7,
+    "icon": "bakery-oven",
     "row": 6
   },
   "repository.cafe-sales": {
     "col": 5,
+    "icon": "bakery-cup",
     "row": 3
   },
   "repository.contracts": {
     "col": 7,
+    "icon": "filing-cabinet",
     "row": 0
   },
   "repository.delivery-runs": {
     "col": 8,
+    "icon": "truck",
     "row": 6
   },
   "repository.drafts": {
     "col": 11,
+    "icon": "tray",
     "row": 6
   },
   "repository.forecasts": {
@@ -179,22 +195,27 @@
   },
   "repository.ingredient-prices": {
     "col": 7,
+    "icon": "bakery-sacks",
     "row": 9
   },
   "repository.ingredients": {
     "col": 6,
+    "icon": "bakery-sacks",
     "row": 9
   },
   "repository.invoices": {
     "col": 5,
+    "icon": "bakery-invoice",
     "row": 9
   },
   "repository.leftovers": {
     "col": 7,
+    "icon": "bakery-bread",
     "row": 3
   },
   "repository.messages": {
     "col": 5,
+    "icon": "bakery-messenger",
     "row": 1
   },
   "repository.order-changes": {
@@ -203,18 +224,22 @@
   },
   "repository.products": {
     "col": 5,
+    "icon": "bakery-bread",
     "row": 6
   },
   "repository.recipes": {
     "col": 6,
+    "icon": "bakery-recipe",
     "row": 6
   },
   "repository.restaurants": {
     "col": 5,
+    "icon": "storefront",
     "row": 0
   },
   "repository.standing-orders": {
     "col": 6,
+    "icon": "clipboard",
     "row": 0
   },
   "service.mailbox": {

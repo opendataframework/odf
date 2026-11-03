@@ -349,8 +349,15 @@ the agent and the reaction; and the drafts on the right, where every agent's
 work ends up. Each band is also a `Layer` (`app/layers.py`), so the
 sidebar groups the nodes the same way, and each area has its own color.
 Only `SQLite`, the database every area shares, stays in the built-in
-`Storage`. Moving a node in the UI saves it in the container, so it
-holds until the container is recreated (`docker compose down`).
+`Storage`. The nodes standing for something in the bakery have an icon to
+match: the bakery draws its own in `icons/bakery.js` (an oven, a bread
+rack, an invoice, the messenger, flour sacks...), loaded through
+`[ui] icon-scripts`, and uses odf's built-in ones where they fit (the till,
+the delivery truck, the mailbox). Services, agents, reactions and the
+other functions keep their type's icon. Each node's icon is saved in
+`layout.json`, beside its place. Moving a node or picking another icon in
+the UI saves it in the container, so it holds until the container is
+recreated (`docker compose down`).
 
 The topology draws each of these chains before anything happens: a dotted
 link runs from each publisher to each reaction its topics reach, from
@@ -424,7 +431,8 @@ bakery/
 ├── .env.example          # seed, clock speed, credentials
 ├── Dockerfile            # the bakery: odf from this repository's source, plus app/
 ├── config.toml           # the bakery's odf config: the tools' addresses, ports, intervals
-├── layout.json           # the topology's layout: the integrations, then one band per area
+├── layout.json           # the topology's layout: the integrations, then one band per area, and each node's icon
+├── icons/bakery.js       # the bakery's own topology icons: oven, bread rack, invoice, messenger, ...
 ├── app/                  # the bakery's odf project
 │   ├── layers.py         # one Layer per area: integrations, wholesale, cafe, production, ...
 │   ├── clients.py        # Clock, Pos, Messenger, Drive, Weather, Mail: one per tool

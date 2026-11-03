@@ -21,6 +21,7 @@ RUN useradd --create-home bakery && install -d -o bakery /srv/bakery /srv/bakery
 WORKDIR /srv/bakery
 COPY --chown=bakery demo/bakery/config.toml demo/bakery/layout.json ./
 COPY --chown=bakery demo/bakery/app app
+COPY --chown=bakery demo/bakery/icons icons
 USER bakery
 
 # The UI and MCP bind every interface inside the container; compose publishes

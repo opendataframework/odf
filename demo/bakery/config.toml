@@ -77,6 +77,11 @@ interval = 5
 [service.shared-drive]
 interval = 5
 
+# The bakery's own topology icons (an oven, a bread rack, an invoice...),
+# assigned to nodes in layout.json. The path is relative to where odf runs.
+[ui]
+icon-scripts = ["icons/bakery.js"]
+
 [ui.topology]
 config = false
 components = [  # all but SQLite

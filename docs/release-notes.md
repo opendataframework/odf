@@ -30,7 +30,9 @@
   `docker compose up`. A bakery's café POS, messenger, email and spreadsheets run as
   simulated tools, and an `odf` project joins them through webhooks, a polled mailbox, a
   watched drive and a scheduler. Agents react to what arrives and draft order changes,
-  price renegotiations and allergen notices for a person to confirm. See [Demo](demo.md).
+  price renegotiations and allergen notices for a person to confirm. Its topology is
+  laid out by area, with the bakery's own icons (`[ui] icon-scripts`). See
+  [Demo](demo.md).
 - **UI**: the topology draws a dotted link from each `@Publisher` to each `@Subscriber` its
   declared topics could reach (`opendataframework` 0.6.0's `context.publishers()` and
   `context.subscribers()`), so who reacts to whom shows before anything is published. A
