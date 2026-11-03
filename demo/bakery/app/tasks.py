@@ -6,11 +6,14 @@ from typing import Annotated
 
 from opendataframework import Logger, Notifications, Publisher, Task
 
+from app import layers
 from app.clients import Clock, Messenger, Pos
 from app.ingest import import_sheets, ingest_message, ingest_sale, sale_lines
 from app.repositories import CafeSales
 
 
+# Named apart in the layer, which also holds the import_sheets function.
+@layers.Integrations(name="import-sheets-task")
 @Task
 class ImportSheets:
     """Imports the shared drive's sheets, without announcing it."""
@@ -28,6 +31,7 @@ class ImportSheets:
         return self.import_all(announce=False)
 
 
+@layers.Integrations
 @Task
 class ImportPosHistory:
     """Takes in every past café order from the POS API, in bulk, without announcing each."""
@@ -57,6 +61,7 @@ class ImportPosHistory:
         return after
 
 
+@layers.Integrations
 @Task
 class ImportMessengerHistory:
     """Takes in the restaurants' past chat messages, without announcing them."""
@@ -88,6 +93,7 @@ class ImportMessengerHistory:
         return new
 
 
+@layers.Integrations
 @Publisher("pos.reconciled")
 @Task
 class ReconcilePos:

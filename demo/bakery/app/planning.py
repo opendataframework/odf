@@ -14,6 +14,7 @@ from datetime import date, datetime, timedelta
 
 from opendataframework import Function
 
+from app import layers
 from app.clients import Clock, Weather
 from app.entities import (
     BakeSheetLine,
@@ -131,6 +132,7 @@ def restaurant_orders(
     )
 
 
+@layers.Cafe
 @Function
 def forecast(
     clock: Clock,
@@ -188,6 +190,7 @@ def forecast(
     ]
 
 
+@layers.Production
 @Function
 def bake_sheet(
     clock: Clock,
@@ -266,6 +269,7 @@ def _km(a: tuple[float, float], b: tuple[float, float]) -> float:
     return 2 * 6371 * math.asin(math.sqrt(h))
 
 
+@layers.Production
 @Function
 def plan_deliveries(
     clock: Clock,
@@ -342,6 +346,7 @@ def plan_deliveries(
     ]
 
 
+@layers.Cafe
 @Function
 def count_leftovers(
     clock: Clock,

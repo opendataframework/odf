@@ -15,6 +15,7 @@ from datetime import date, datetime, timedelta
 
 from opendataframework import Agent, Notifications, Publisher
 
+from app import layers
 from app.clients import Clock
 from app.entities import Draft, Message, OrderChange
 from app.ingest import gist
@@ -91,6 +92,7 @@ def _describe(change: Change, names: dict[str, str]) -> str:
     return f"{change.quantity} {item} on {day}"
 
 
+@layers.Wholesale
 @Publisher("drafts.created")
 @Agent
 class OrderDesk:
@@ -332,6 +334,7 @@ as given. Don't add ingredients, prices or claims that aren't in the description
 British English. Answer with one line per SKU given."""
 
 
+@layers.Cafe
 @Publisher("drafts.created")
 @Agent
 class Specials:

@@ -266,11 +266,11 @@ Each kind of integration is one `odf` component:
 
 | How | Component | From |
 |---|---|---|
-| Push | `WebhookReceiver` (`@Api @Service`) checks each webhook's signature and hands each order or message on | POS, messenger |
-| Poll | `Mailbox` (`@Messaging @Service`) reads new mail over POP3, leaving it on the server; an email with a PDF attached is a supplier's invoice | Mailpit |
+| Push | `WebhookReceiver` (`@Service`) checks each webhook's signature and hands each order or message on | POS, messenger |
+| Poll | `Mailbox` (`@Service`) reads new mail over POP3, leaving it on the server; an email with a PDF attached is a supplier's invoice | Mailpit |
 | Files | `SharedDrive` (`@Service`) re-imports the sheets when one changes: products, restaurants, standing orders, contracts, ingredients, recipes and allergens | the shared drive |
 | Schedule | `Scheduler` (`@Service`) onboards once, then each day closes the café at 15:00, runs the night run at 21:00 and reconciles the POS at 23:30, on the demo clock | POS |
-| Pull | `Weather` (`@Api @Component`) reads the weather forecast that the café's forecast uses | the world, in Open-Meteo's shape |
+| Pull | `Weather` (`@Component`) reads the weather forecast that the café's forecast uses | the world, in Open-Meteo's shape |
 | Outbound | Confirming a draft sends its reply through `Messenger` or `Mail` (SMTP), and new prices by `Mail` | messenger, Mailpit |
 
 Whatever brings an item in, the item goes through one function in
@@ -346,7 +346,10 @@ left, from each tool's client through its service to the function that
 takes its items in; then one band each for wholesale, the café, production,
 purchasing and margins, and allergens, read left to right from the data to
 the agent and the reaction; and the drafts on the right, where every agent's
-work ends up. Moving a node in the UI saves it in the container, so it
+work ends up. Each band is also a `Layer` (`app/layers.py`), so the
+sidebar groups the nodes the same way, and each area has its own color.
+Only `SQLite`, the database every area shares, stays in the built-in
+`Storage`. Moving a node in the UI saves it in the container, so it
 holds until the container is recreated (`docker compose down`).
 
 The topology draws each of these chains before anything happens: a dotted
@@ -423,6 +426,7 @@ bakery/
 ├── config.toml           # the bakery's odf config: the tools' addresses, ports, intervals
 ├── layout.json           # the topology's layout: the integrations, then one band per area
 ├── app/                  # the bakery's odf project
+│   ├── layers.py         # one Layer per area: integrations, wholesale, cafe, production, ...
 │   ├── clients.py        # Clock, Pos, Messenger, Drive, Weather, Mail: one per tool
 │   ├── ingest.py         # ingest_message, ingest_sale, ingest_invoice, import_sheets
 │   ├── services.py       # WebhookReceiver, Mailbox, SharedDrive, Scheduler

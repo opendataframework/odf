@@ -10,12 +10,13 @@ import json
 import time
 import urllib.request
 
-from opendataframework import Api, Component, Config, Logger
+from opendataframework import Component, Config, Logger
 
+from app import layers
 from app.settings import setting
 
 
-@Api
+@layers.Integrations
 @Component
 class Model:
     """A local model behind Ollama's HTTP API, or nothing: ``[component.model] url`` unset.

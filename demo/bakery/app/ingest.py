@@ -12,6 +12,7 @@ from functools import partial
 
 from opendataframework import Function, Notifications, Publisher
 
+from app import layers
 from app.clients import Drive
 from app.entities import (
     CafeSale,
@@ -57,6 +58,7 @@ def gist(text: str) -> str:
     return next((line for line in lines if not _is_greeting(line)), lines[0] if lines else "")
 
 
+@layers.Integrations
 @Publisher("messages.received")
 @Function
 def ingest_message(
@@ -135,6 +137,7 @@ def sale_lines(order: dict) -> list[CafeSale]:
     ]
 
 
+@layers.Integrations
 @Publisher("pos.sale")
 @Function
 def ingest_sale(order: dict, sales: CafeSales, notifications: Notifications) -> bool:
@@ -170,6 +173,7 @@ def _price(value: str) -> float | None:
     return float(value) if value.strip() else None
 
 
+@layers.Integrations
 @Publisher("sheets.changed")
 @Function
 def import_sheets(
@@ -278,6 +282,7 @@ def _import_sheets(
     return counts
 
 
+@layers.Integrations
 @Publisher("invoices.received")
 @Function
 def ingest_invoice(

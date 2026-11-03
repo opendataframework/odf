@@ -9,10 +9,10 @@ from opendataframework import (
     DocumentView,
     LocationView,
     Repository,
-    Storage,
     TimeseriesView,
 )
 
+from app import layers
 from app.entities import (
     BakeSheetLine,
     CafeSale,
@@ -132,7 +132,7 @@ class _Table:
         return len(items)
 
 
-@Storage
+@layers.Production
 @Repository(Product)
 class Products(_Table):
     """The bakery's products, from the products sheet."""
@@ -140,7 +140,7 @@ class Products(_Table):
     table, entity = "products", Product
 
 
-@Storage
+@layers.Wholesale
 @Repository(Restaurant)
 class Restaurants(_Table):
     """The restaurants the bakery delivers to, on a map."""
@@ -157,7 +157,7 @@ class Restaurants(_Table):
         return LocationView(fields=("lat", "lon"))
 
 
-@Storage
+@layers.Wholesale
 @Repository(StandingOrder)
 class StandingOrders(_Table):
     """Each restaurant's usual order by weekday, from the standing orders sheet."""
@@ -169,7 +169,7 @@ class StandingOrders(_Table):
         return self._select("WHERE weekday = ?", (weekday,), order="restaurant, sku")
 
 
-@Storage
+@layers.Wholesale
 @Repository(Contract)
 class Contracts(_Table):
     """This quarter's agreed prices, from the contracts sheet."""
@@ -177,7 +177,7 @@ class Contracts(_Table):
     table, entity = "contracts", Contract
 
 
-@Storage
+@layers.Wholesale
 @Repository(Message)
 class Messages(_Table):
     """Messages to the bakery, by chat and email, newest first, each opened as a document."""
@@ -212,7 +212,7 @@ class Messages(_Table):
         return DocumentView(field="text")
 
 
-@Storage
+@layers.Cafe
 @Repository(CafeSale)
 class CafeSales(_Table):
     """Every café order line from the POS, charted over time by product."""
@@ -269,7 +269,7 @@ class CafeSales(_Table):
         return TimeseriesView(field="sold_at", fields=("quantity", "revenue"), group="product")
 
 
-@Storage
+@layers.Wholesale
 @Repository(OrderChange)
 class OrderChanges(_Table):
     """Confirmed changes to what the restaurants take, on top of their standing orders."""
@@ -285,7 +285,7 @@ class OrderChanges(_Table):
         )
 
 
-@Storage
+@layers.Drafts
 @Repository(Draft)
 class Drafts(_Table):
     """What the agents prepared, newest first: the control room, each draft opened as a document."""
@@ -350,7 +350,7 @@ class Drafts(_Table):
         return ContentMetadata(filename=f"draft-{draft.id}.md", content_type="text/markdown")
 
 
-@Storage
+@layers.Cafe
 @Repository(Forecast)
 class Forecasts(_Table):
     """What the café expects to sell, per product per day."""
@@ -362,7 +362,7 @@ class Forecasts(_Table):
         return self._select(order="date DESC, sku")
 
 
-@Storage
+@layers.Production
 @Repository(BakeSheetLine)
 class BakeSheets(_Table):
     """What to bake each night, per product, for the restaurants and the café."""
@@ -382,7 +382,7 @@ class BakeSheets(_Table):
         return [row[0] for row in rows]
 
 
-@Storage
+@layers.Cafe
 @Repository(Leftover)
 class Leftovers(_Table):
     """What the café didn't sell each day, of what was baked for it."""
@@ -394,7 +394,7 @@ class Leftovers(_Table):
         return self._select(order="date DESC, sku")
 
 
-@Storage
+@layers.Production
 @Repository(DeliveryStop)
 class DeliveryRuns(_Table):
     """The morning delivery runs, the latest one on a map."""
@@ -410,7 +410,7 @@ class DeliveryRuns(_Table):
         return LocationView(fields=("lat", "lon"))
 
 
-@Storage
+@layers.Purchasing
 @Repository(Ingredient)
 class Ingredients(_Table):
     """What the bakery bakes with, who sells it, and what it cost on the sheet."""
@@ -418,7 +418,7 @@ class Ingredients(_Table):
     table, entity = "ingredients", Ingredient
 
 
-@Storage
+@layers.Production
 @Repository(RecipeLine)
 class Recipes(_Table):
     """What one of each wholesale product takes, from the recipes sheet."""
@@ -430,7 +430,7 @@ class Recipes(_Table):
         return self._select(order="sku, id")
 
 
-@Storage
+@layers.Purchasing
 @Repository(Invoice)
 class Invoices(_Table):
     """The suppliers' invoices, newest first, each opened as the PDF it came as."""
@@ -466,7 +466,7 @@ class Invoices(_Table):
         return ContentMetadata(filename=invoice.filename, content_type="application/pdf")
 
 
-@Storage
+@layers.Purchasing
 @Repository(IngredientPrice)
 class IngredientPrices(_Table):
     """Every price an invoice charged, charted over time by ingredient."""
@@ -492,7 +492,7 @@ class IngredientPrices(_Table):
         return TimeseriesView(field="priced_at", fields=("unit_price",), group="name")
 
 
-@Storage
+@layers.Allergens
 @Repository(IngredientAllergen)
 class Allergens(_Table):
     """What each ingredient contains or may contain: the sheet's, and what invoices declared."""

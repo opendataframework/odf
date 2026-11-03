@@ -18,8 +18,9 @@ from email.utils import parseaddr, parsedate_to_datetime
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from typing import Annotated
 
-from opendataframework import Api, Config, Logger, Messaging, Service
+from opendataframework import Config, Logger, Service
 
+from app import layers
 from app.clients import Clock, Drive, Mail, Messenger, Pos
 from app.ingest import import_sheets, ingest_invoice, ingest_message, ingest_sale
 from app.pipelines import CloseCafe, NightRun, Onboard
@@ -29,7 +30,7 @@ from app.storages import SQLite
 from app.tasks import ReconcilePos
 
 
-@Api
+@layers.Integrations
 @Service
 class WebhookReceiver:
     """Receives the POS's and the messenger's webhooks, on ``[service.webhook-receiver] port``.
@@ -157,7 +158,7 @@ def parse_email(raw: bytes) -> dict:
     }
 
 
-@Messaging
+@layers.Integrations
 @Service
 class Mailbox:
     """Checks the bakery's mailbox over POP3 every ``[service.mailbox] interval`` seconds.
@@ -275,6 +276,7 @@ class Mailbox:
         self._stopping.set()
 
 
+@layers.Integrations
 @Service
 class SharedDrive:
     """Watches the shared drive's sheets, and imports them again when one changes.
@@ -359,6 +361,7 @@ class SharedDrive:
         self._stopping.set()
 
 
+@layers.Integrations
 @Service
 class Scheduler:
     """Runs what's due on the demo clock: onboarding once, then the day's runs.

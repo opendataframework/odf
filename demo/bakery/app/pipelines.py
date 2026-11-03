@@ -6,6 +6,7 @@ from typing import Annotated
 
 from opendataframework import Notifications, Pipeline, Publisher
 
+from app import layers
 from app.agents import Specials
 from app.clients import Clock
 from app.planning import bake_sheet, count_leftovers, forecast, label, plan_deliveries
@@ -13,6 +14,7 @@ from app.repositories import BakeSheets, CafeSales
 from app.tasks import ImportMessengerHistory, ImportPosHistory, ImportSheets
 
 
+@layers.Integrations
 @Publisher("bakery.onboarded")
 @Pipeline
 class Onboard:
@@ -62,6 +64,7 @@ class Onboard:
         )
 
 
+@layers.Production
 @Publisher("night-run.done")
 @Pipeline
 class NightRun:
@@ -122,6 +125,7 @@ class NightRun:
         return {"date": day.isoformat(), "bake": bake, "deliveries": len(stops), "late": late}
 
 
+@layers.Cafe
 @Pipeline
 class CloseCafe:
     """Closes the café's day: counts what didn't sell, then drafts tomorrow's specials from it.

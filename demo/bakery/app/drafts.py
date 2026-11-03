@@ -13,6 +13,7 @@ from typing import Annotated
 
 from opendataframework import Function, Notifications, Publisher
 
+from app import layers
 from app.clients import Mail, Messenger
 from app.entities import OrderChange
 from app.planning import bake_sheet, label, plan_deliveries
@@ -29,6 +30,7 @@ from app.repositories import (
 )
 
 
+@layers.Drafts
 @Publisher("drafts.confirmed", "prices.changed")
 @Function
 def confirm_draft(
@@ -162,6 +164,7 @@ def confirm_draft(
     return {"draft": draft.id, "changes": changes, "replied": replied, "rebaked": rebaked}
 
 
+@layers.Drafts
 @Publisher("drafts.rejected")
 @Function
 def reject_draft(

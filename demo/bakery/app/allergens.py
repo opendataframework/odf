@@ -15,6 +15,7 @@ from collections import defaultdict
 
 from opendataframework import Agent, Function, Notifications, Publisher
 
+from app import layers
 from app.clients import Clock
 from app.entities import Draft
 from app.planning import label
@@ -157,6 +158,7 @@ def trace(
     }
 
 
+@layers.Allergens
 @Function
 def trace_ingredient(
     ingredient: str,
@@ -188,6 +190,7 @@ def trace_ingredient(
     return trace(ingredient, ingredients, allergens, recipes, products, standing_orders)
 
 
+@layers.Allergens
 @Function
 def labels(allergens: Allergens, recipes: Recipes, products: Products) -> list[dict]:
     """Return what each product's label must declare, from its recipe.
@@ -205,6 +208,7 @@ def labels(allergens: Allergens, recipes: Recipes, products: Products) -> list[d
     return [{"sku": sku, **entry, "label": label_text(entry)} for sku, entry in found.items()]
 
 
+@layers.Allergens
 @Publisher("drafts.created")
 @Agent
 class AllergenOfficer:

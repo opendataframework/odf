@@ -8,6 +8,7 @@ the webhook that brought a message in to the draft it became.
 
 from opendataframework import Component, Logger, Notification, Notifications, Publisher, Subscriber
 
+from app import layers
 from app.agents import OrderDesk
 from app.allergens import (
     AllergenOfficer,
@@ -38,6 +39,7 @@ from app.repositories import (
 )
 
 
+@layers.Wholesale
 @Subscriber("messages.received", deliver="background")
 @Component
 class Drafting:
@@ -71,6 +73,7 @@ class Drafting:
         self.order_desk.invoke(message_id=notification.record)
 
 
+@layers.Purchasing
 @Subscriber("invoices.received", deliver="background")
 @Component
 class Purchasing:
@@ -89,6 +92,7 @@ class Purchasing:
         self.invoice_clerk.invoke(invoice_id=notification.record)
 
 
+@layers.Purchasing
 @Publisher("margins.below-cost")
 @Subscriber("prices.changed", deliver="background")
 @Component
@@ -180,6 +184,7 @@ class Costing:
         }
 
 
+@layers.Purchasing
 @Subscriber("margins.below-cost", deliver="background")
 @Component
 class Renegotiating:
@@ -205,6 +210,7 @@ def _pounds(value: float) -> str:
     return f"{'-' if value < 0 else ''}£{abs(value):.2f}"
 
 
+@layers.Allergens
 @Publisher("allergens.changed")
 @Subscriber("ingredients.changed", deliver="background")
 @Component
@@ -311,6 +317,7 @@ class Labelling:
         }
 
 
+@layers.Allergens
 @Subscriber("allergens.changed", deliver="background")
 @Component
 class AllergenNotices:

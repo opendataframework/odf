@@ -16,6 +16,7 @@ from html import escape
 
 from opendataframework import Agent, Function, Notifications, Publisher
 
+from app import layers
 from app.clients import Clock
 from app.entities import Draft
 from app.model import Model
@@ -107,6 +108,7 @@ def proposed_price(cost: float) -> float:
     return math.ceil(round(cost * (1 + TARGET_MARGIN) / 0.05, 6)) * 0.05
 
 
+@layers.Purchasing
 @Function
 def margins(
     contracts: Contracts,
@@ -145,6 +147,7 @@ def margins(
     }
 
 
+@layers.Purchasing
 @Function
 def what_if(
     ingredient: str,
@@ -264,6 +267,7 @@ _LETTER_SCHEMA = {
 }
 
 
+@layers.Purchasing
 @Publisher("drafts.created")
 @Agent
 class AccountManager:

@@ -14,6 +14,7 @@ from datetime import datetime
 
 from opendataframework import Agent, Notifications, Publisher
 
+from app import layers
 from app.allergens import declared
 from app.clients import Clock
 from app.entities import Draft, Ingredient, IngredientPrice, Invoice
@@ -267,6 +268,7 @@ _INVOICE_SCHEMA = {
 }
 
 
+@layers.Purchasing
 @Publisher("prices.changed", "ingredients.changed", "drafts.created")
 @Agent
 class InvoiceClerk:

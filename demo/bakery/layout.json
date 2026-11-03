@@ -1,4 +1,14 @@
 {
+  "_layers": {
+    "allergens": "#fcc419",
+    "cafe": "#f06595",
+    "drafts": "#cc5de8",
+    "integrations": "#868e96",
+    "production": "#ff922b",
+    "purchasing": "#51cf66",
+    "storage": "#22b8cf",
+    "wholesale": "#4dabf7"
+  },
   "agent.account-manager": {
     "col": 9,
     "row": 10
