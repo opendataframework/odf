@@ -6,8 +6,10 @@
 [project]
 name = "bakery"
 # On the bakery-data volume, so the logs and the notification history outlast
-# the container (docker compose down, then up).
+# the container (docker compose down, then up), and so do the chat's
+# conversations, which would otherwise go with the container's own files.
 log-dir = "data/logs"
+chat-file = "data/chat.json"
 
 # The demo runs for days: each component's log rotates at 5 MB, keeping 3
 # older files. The notification history (every notification, in one file)

@@ -450,7 +450,9 @@ Choices that aren't obvious from the code:
   the bakery sends, so the mailbox ignores the bakery's address.
 - **What outlasts a restart.** The demo clock is saved every second, so a
   stopped stack carries on where it was. The bakery's logs, and with them
-  its notification history, live on its data volume.
+  its notification history, and the chat's conversations (`chat.json`) live
+  on its data volume, so a rebuild keeps them; `docker compose down -v`
+  starts them over.
 
 ## Structure
 
