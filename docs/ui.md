@@ -436,10 +436,12 @@ Every key `odf` reads from `config.toml`:
 | `[ui] favicon`, `[ui] logo` | built-in | Image files replacing the favicon (also the header logo) and the header logo alone |
 | `[ui] brand` | `"ODF"` | Brand label in the header |
 | `[ui] annotations` | `true` | Allow labelling data in the views |
+| `[ui] chat-history` | `200` | How many of each chat conversation's latest turns are kept; `0` keeps conversations in their browser tab only (see [Chat](chat.md#history)). Anything but a whole number of at least 0 raises a `ValueError` |
 | `[ui] notebooks` | `true` if `notebook` is installed | Edit notebooks in the document view with Jupyter (see [Notebooks](#notebooks)); `true` without `notebook` installed raises an `ImportError` |
 | `[ui.topology]` | show everything | What the topology shows (see [above](#choosing-what-the-topology-shows)) |
 | `[project] layout-file` | `"layout.json"` | Where node positions, icons and colors are saved |
 | `[project] annotations-file` | `"annotations.json"` | Where labels and classes are saved |
+| `[project] chat-file` | `"chat.json"` | Where the chat's conversations are kept, with chat on (see [Chat](chat.md#history)) |
 | `[project.chat]` | — | Chat model and Ollama host (see [Chat](chat.md#configuration)) |
 
 ## Deploying
@@ -658,9 +660,12 @@ registered name:
 | `GET /api/events` | every protocol call the project makes, as server-sent events (see below) |
 | `GET /api/notifications` | every notification the project's components publish, as server-sent events (see below) |
 | `GET /api/notifications/history` | the notifications published so far, newest first, a page at a time (see below) |
+| `GET /api/chat/conversations` | the assistant conversations kept, the one changed last first; `404` with history off (see [Chat](chat.md#history)) |
+| `GET /api/chat/conversations/{id}`, `DELETE ...` | one conversation with its turns; deleting it |
+| `POST /api/chat` | one turn, streamed as newline-delimited JSON: `{text, conversation?}`, `{text, thread}` or `{messages, thread?}` (see [Chat](chat.md#history)) |
 | `GET /api/channels` | every channel and the repositories in it (see [Chat](chat.md#channels)) |
 | `GET /api/channels/{channel}/threads` | a channel's threads, the one with the latest item first, each with its last item and a count |
-| `GET /api/channels/{channel}/threads/{thread}` | a thread's latest items, oldest first (`?limit=`, default 200): messages, and cards with their actions |
+| `GET /api/channels/{channel}/threads/{thread}` | a thread's latest items, oldest first (`?limit=`, default 200): messages, cards with their actions, and the notes of the assistant asked in it |
 
 The collection comes from the execution type, not the key's namespace: a `@Task`
 registered as `loader` is `/api/tasks/loader`, whatever its key. An action that

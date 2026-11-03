@@ -33,7 +33,15 @@
   card's actions are the functions and agents taking one of its records
   (`Annotated[int, Record(Repo)]`). Each opens its form in the card, with the record's
   argument given and the arguments named like its fields filled from it, to change before
-  it runs. A thread refreshes when a notification is about one of its repositories. Read through
+  it runs. A thread refreshes when a notification is about one of its repositories.
+  Asked inside a thread, the assistant gets the thread as the turn's context
+  (`ChatEngine.stream(messages, context)`), and the turn shows there as notes.
+- **Chat**: conversations with the assistant are kept in `chat.json` (`[project]
+  chat-file`), each to its latest `[ui] chat-history` turns (default 200, `0` keeps them
+  in their browser tab as before), and listed under **Assistant** to reopen or delete.
+  A thread holds one of its own. `POST /api/chat` takes `{text, conversation?}` or
+  `{text, thread}` to keep a turn, and still `{messages}` for a caller that keeps its own.
+  See [Chat](chat.md#history). Read through
   `GET /api/channels`, `.../{channel}/threads` and `.../threads/{thread}`. See
   [Chat](chat.md#channels).
 - **Demo**: `demo/bakery`, a whole application built with `odf`, running with

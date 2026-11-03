@@ -98,8 +98,12 @@ class ChatEngine:
         self._options = {"num_ctx": int(context_length)} if context_length else None
         self._system = SYSTEM_PROMPT if system_prompt is None else system_prompt
 
-    async def stream(self, messages: list[dict]) -> AsyncIterator[dict]:
+    async def stream(self, messages: list[dict], context: str | None = None) -> AsyncIterator[dict]:
         """Yield ``{"type": ..., ...}`` events for one chat turn.
+
+        ``context`` is what the turn is about, sent as a system message after
+        the system prompt and before the conversation: a channel's thread
+        the user asks in (see ``odf.ui.conversations.thread_context``), say.
 
         Event types: ``token`` (a chunk of assistant text), ``tool_call``
         (about to invoke an MCP tool), ``tool_result`` (its outcome), and
@@ -121,10 +125,14 @@ class ChatEngine:
             addressed = await self._resolve_addressed(last_content)
             tools = await self._tool_specs(addressed)
             history = list(messages)
+            if context:
+                history.insert(0, {"role": "system", "content": context})
+            # Only a system message the conversation brings replaces the
+            # prompt; the turn's context goes after it.
             if (
                 tools is not None
                 and self._system
-                and not any(m.get("role") == "system" for m in history)
+                and not any(m.get("role") == "system" for m in messages)
             ):
                 history.insert(0, {"role": "system", "content": self._system})
             for _ in range(_MAX_TOOL_ROUNDTRIPS):

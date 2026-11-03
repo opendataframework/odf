@@ -2120,7 +2120,7 @@ def test_annotations_are_not_served_for_other_repositories(tmp_path):
 class StubChatEngine:
     model = "stub-model"
 
-    async def stream(self, messages):
+    async def stream(self, messages, context=None):
         yield {"type": "token", "content": "Hello"}
         yield {"type": "token", "content": ", world"}
 
@@ -2131,7 +2131,7 @@ def test_chat_config_endpoint_disabled_by_default():
         r = client.get("/api/chat/config")
 
     assert r.status_code == 200
-    assert r.json() == {"enabled": False, "model": None}
+    assert r.json() == {"enabled": False, "model": None, "history": False}
 
 
 def test_chat_endpoint_returns_404_when_disabled():
@@ -2148,7 +2148,7 @@ def test_chat_config_endpoint_reflects_enabled_engine():
         r = client.get("/api/chat/config")
 
     assert r.status_code == 200
-    assert r.json() == {"enabled": True, "model": "stub-model"}
+    assert r.json() == {"enabled": True, "model": "stub-model", "history": False}
 
 
 def test_chat_endpoint_streams_ndjson_events():

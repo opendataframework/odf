@@ -172,6 +172,52 @@ def test_start_chat_passes_project_chat_config_to_the_engine(monkeypatch):
         server.stop()
 
 
+def test_start_chat_keeps_conversations_in_the_configured_file(monkeypatch, tmp_path):
+    from odf.chat import engine
+
+    class Engine:
+        model = "m"
+
+        def __init__(self, **kwargs): ...
+
+    monkeypatch.setattr(engine, "ChatEngine", Engine)
+    chat_file = tmp_path / "talk.json"
+    server = Server.from_dict({"project": {"chat-file": str(chat_file)}, "ui": {"chat-history": 5}})
+    server.start(ui=True, ui_port=18792, chat=True, app_module=None)
+    try:
+        history = server._ui_server._history
+        assert (history.path, history.limit) == (chat_file, 5)
+    finally:
+        server.stop()
+
+
+def test_start_chat_with_chat_history_0_keeps_nothing(monkeypatch):
+    from odf.chat import engine
+
+    class Engine:
+        model = "m"
+
+        def __init__(self, **kwargs): ...
+
+    monkeypatch.setattr(engine, "ChatEngine", Engine)
+    server = Server.from_dict({"ui": {"chat-history": 0}})
+    server.start(ui=True, ui_port=18793, chat=True, app_module=None)
+    try:
+        assert server._ui_server._history is None
+    finally:
+        server.stop()
+
+
+@pytest.mark.parametrize("value", [-1, 2.5, "200", True])
+def test_start_ui_rejects_a_chat_history_that_isnt_a_whole_number(value):
+    server = Server.from_dict({"ui": {"chat-history": value}})
+    try:
+        with pytest.raises(ValueError, match="chat-history"):
+            server.start(ui=True, ui_port=18794, app_module=None)
+    finally:
+        server.stop()
+
+
 def test_start_ui_rejects_an_unknown_grid():
     server = Server.from_dict({"ui": {"grid": "hex"}})
     try:

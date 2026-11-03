@@ -209,6 +209,49 @@ time, a `datetime` as itself and a string as ISO 8601.
 The UI checks every conversation when it starts: one naming a field its
 entity lacks, or on a repository with no `all()`, fails `Server.start()`.
 
+### Asking in a thread
+
+With chat on, a thread has the same input as the assistant. What you ask
+there is about that thread: the turn is sent with the thread's latest
+messages and cards as its context, each card with the tools its actions are
+called by and the record it takes. "make it 30, not 20" in a
+customer's thread is about that customer's draft, and the model knows which
+record to pass. Its tool access is scoped by `@` as anywhere else, by the
+full key (`@agent.order-desk`).
+
+The question and the answer show in the thread as notes, set apart from the
+messages, since they never reach the other side. The context says so too: only
+a card's action does, run when you ask for it.
+
+## History
+
+Conversations with the assistant are kept in `chat.json` (`[project]
+chat-file`), next to `layout.json`, so they're reopened after a reload or from
+another browser:
+
+- under **Assistant**, **New conversation** starts one, and each kept one is
+  listed by its first question, the one changed last first. **Delete**, in an
+  open conversation, removes it;
+- each thread holds one conversation of its own, its notes, shown between
+  the thread's messages and cards.
+
+Only what was said is kept: a turn's tool calls and their results aren't,
+since they're in the logs and **Show run**. Each conversation keeps its latest
+`[ui] chat-history` turns (default 200). `chat-history = 0` keeps nothing on
+the server: each conversation lives in its browser tab, as before, and is
+sent whole with each turn.
+
+```toml
+[project]
+chat-file = "chat.json"
+
+[ui]
+chat-history = 200
+```
+
+odf doesn't know who is asking yet, so a kept conversation is shared by
+everyone using the UI: a thread's notes are the team's notes.
+
 ## Prerequisites
 
 1. Install and run [Ollama](https://ollama.com) locally: `ollama serve`.

@@ -175,7 +175,11 @@ class Server:
                 window with no ability to act on the project. Connection
                 parameters come from ``[project.chat]`` in config: ``model``
                 (default ``"gpt-oss:20b"``) and ``ollama-host`` (default
-                ``"http://localhost:11434"``).
+                ``"http://localhost:11434"``). Conversations with the
+                assistant are kept in ``[project] chat-file`` (default
+                ``"chat.json"``, see ``odf.ui.chat_history``), each to its
+                latest ``[ui] chat-history`` turns (default 200; ``0`` keeps
+                them in their browser tab only).
             app_module: Import name of the module/package that registers
                 components (``@Entity``/``@Repository``/``@Component``/...)
                 as a side effect of being imported — the same convention
@@ -192,7 +196,8 @@ class Server:
                 ``theme``/``[ui] theme`` names a UI theme that doesn't
                 exist or a theme directory missing a required file, if
                 ``[ui.topology]`` has an unknown key or a value of the wrong
-                type, if ``[ui] notebooks`` isn't a boolean, or
+                type, if ``[ui] notebooks`` isn't a boolean, if ``[ui]
+                chat-history`` isn't a whole number of at least 0, or
                 if ``[ui] grid`` isn't ``"iso"`` or ``"flat"``.
             ImportError: If ``ui=True``/``mcp=True``/``chat=True`` but the
                 corresponding extra is not installed, or if ``[ui] notebooks
@@ -269,6 +274,15 @@ class Server:
             edit_notebooks = ui_cfg.get("notebooks", notebooks.available())
             if not isinstance(edit_notebooks, bool):
                 raise ValueError(f"[ui] notebooks must be true or false, got {edit_notebooks!r}.")
+            chat_history = ui_cfg.get("chat-history", 200)
+            if (
+                isinstance(chat_history, bool)
+                or not isinstance(chat_history, int)
+                or chat_history < 0
+            ):
+                raise ValueError(
+                    f"[ui] chat-history must be a whole number of at least 0, got {chat_history!r}."
+                )
             grid = ui_cfg.get("grid", "iso")
             if grid not in ("iso", "flat"):
                 raise ValueError(f'[ui] grid must be "iso" or "flat", got {grid!r}.')
@@ -294,6 +308,8 @@ class Server:
                 layout_file=self.config.get("project", {}).get("layout-file", "layout.json"),
                 annotations_file=annotations_file if annotate else None,
                 chat_engine=chat_engine,
+                chat_file=self.config.get("project", {}).get("chat-file", "chat.json"),
+                chat_history=chat_history,
                 icon_scripts=icon_scripts,
                 colors=colors,
                 favicon=Path(favicon) if favicon else None,

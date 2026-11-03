@@ -567,3 +567,21 @@ def test_the_system_prompt_is_left_out_without_tools_or_with_the_conversations_o
 
     assert roles_sent(monkeypatch, question) == [("user", "hi")]
     assert roles_sent(monkeypatch, own, mcp=FakeMcp()) == [("system", "Mine."), ("user", "hi")]
+
+
+def test_a_turns_context_follows_the_system_prompt(monkeypatch):
+    client = FakeAsyncClient([[make_chunk("Hi")]])
+    monkeypatch.setattr(engine_module, "AsyncClient", lambda host: client)
+    chat_engine = ChatEngine(model="m", host="h", mcp=FakeMcp())
+
+    async def _collect():
+        question = [{"role": "user", "content": "make it 30"}]
+        return [event async for event in chat_engine.stream(question, "In Le Petit's thread.")]
+
+    asyncio.run(_collect())
+
+    assert [(m["role"], m["content"]) for m in client.calls[0]["messages"]] == [
+        ("system", engine_module.SYSTEM_PROMPT),
+        ("system", "In Le Petit's thread."),
+        ("user", "make it 30"),
+    ]

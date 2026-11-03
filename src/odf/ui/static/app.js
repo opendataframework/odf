@@ -2796,25 +2796,85 @@ function addLog(msg, color) {
 
 // ── Chat ─────────────────────────────────────────────────────────────────
 // Backs the Chat drawer, shown when GET /api/chat/config reports chat
-// enabled (Project.start(chat=True)) or the project has channels. History
-// lives only in this tab (chatHistory), resent in full with each turn — no
-// server-side session storage.
+// enabled (Project.start(chat=True)) or the project has channels. With its
+// `history` on ([ui] chat-history above 0), conversations with the assistant
+// are kept on the server (odf.ui.chat_history): a turn sends only its text,
+// and the drawer lists them to reopen, from any browser. With it off, a
+// conversation lives only in this tab (chatHistory, or threadNotes for the
+// one held in a thread), resent in full with each turn.
 
 let chatHistory = [];
+const threadNotes = {};       // `${channel}/${thread}` -> [{role, content, ts}], with history off
 let chatBusy = false;
 let chatEnabled = false;
+let chatKept = false;         // conversations kept on the server
+let chatConversations = [];   // the kept assistant conversations, changed last first
 
 async function initChat() {
   try {
     const res = await fetch('/api/chat/config');
-    if (res.ok) chatEnabled = Boolean((await res.json()).enabled);
+    if (res.ok) {
+      const cfg = await res.json();
+      chatEnabled = Boolean(cfg.enabled);
+      chatKept = chatEnabled && Boolean(cfg.history);
+    }
   } catch (err) {
     console.error('Failed to load chat config', err);
   }
-  await loadChannels();
+  await Promise.all([loadChannels(), loadConversations()]);
   if (chatEnabled || chatChannels.length) document.getElementById('chat-toggle').classList.add('visible');
-  showChatView(chatChannels.length ? { kind: 'nav' } : { kind: 'assistant' });
+  showChatView(chatHasNav() ? { kind: 'nav' } : { kind: 'assistant', id: null });
 }
+
+// The list is worth showing once there's more than one place to talk.
+function chatHasNav() {
+  return chatChannels.length > 0 || chatConversations.length > 0;
+}
+
+async function loadConversations() {
+  if (!chatKept) return;
+  try {
+    const res = await fetch('/api/chat/conversations');
+    chatConversations = res.ok ? await res.json() : [];
+  } catch (err) {
+    console.error('Failed to load conversations', err);
+    chatConversations = [];
+  }
+  if (chatView.kind === 'nav') renderChatNav();
+  document.getElementById('chat-back').hidden = chatView.kind === 'nav' || !chatHasNav();
+}
+
+// Reopens a kept assistant conversation into #chat-messages; `null` starts
+// a new one.
+async function loadConversation(id) {
+  const list = document.getElementById('chat-messages');
+  list.replaceChildren();
+  if (!id) return;
+  try {
+    const res = await fetch(`/api/chat/conversations/${encodeURIComponent(id)}`);
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    const conversation = await res.json();
+    if (chatView.kind !== 'assistant' || chatView.id !== id) return;
+    document.getElementById('chat-title').textContent = conversation.title || 'Conversation';
+    for (const turn of conversation.turns) appendChatMessage(turn.role, turn.content);
+  } catch (err) {
+    appendChatMessage('error', `Couldn't load the conversation: ${err.message}`);
+  }
+}
+
+document.getElementById('chat-delete').addEventListener('click', async () => {
+  const id = chatView.kind === 'assistant' ? chatView.id : null;
+  if (!id || !confirm('Delete this conversation for everyone?')) return;
+  try {
+    const res = await fetch(`/api/chat/conversations/${encodeURIComponent(id)}`, { method: 'DELETE' });
+    if (!res.ok && res.status !== 404) throw new Error(`HTTP ${res.status}`);
+  } catch (err) {
+    appendChatMessage('error', `Couldn't delete the conversation: ${err.message}`);
+    return;
+  }
+  await loadConversations();
+  showChatView(chatHasNav() ? { kind: 'nav' } : { kind: 'assistant', id: null });
+});
 
 // ── Chat channels ────────────────────────────────────────────────────────
 // Repositories declaring a conversation() (odf.ui.conversations) merge by
@@ -2920,11 +2980,16 @@ function showChatView(view) {
   document.getElementById('chat-nav').hidden = !nav;
   document.getElementById('chat-thread').hidden = !thread;
   document.getElementById('chat-messages').hidden = !assistant;
-  document.getElementById('chat-footer').hidden = !(assistant && chatEnabled);
-  document.getElementById('chat-back').hidden = nav || !chatChannels.length;
-  document.getElementById('chat-title').textContent =
-    thread ? view.thread : assistant && chatChannels.length ? 'Assistant' : 'Chat';
+  document.getElementById('chat-footer').hidden = !((assistant || thread) && chatEnabled);
+  document.getElementById('chat-back').hidden = nav || !chatHasNav();
+  document.getElementById('chat-delete').hidden = !(assistant && chatKept && view.id);
+  document.getElementById('chat-input').placeholder = thread
+    ? 'Ask about this thread, or @ a component…' : 'Ask, or @ a component…';
+  document.getElementById('chat-title').textContent = thread ? view.thread
+    : assistant && chatKept ? (view.id ? 'Conversation' : 'New conversation')
+    : assistant && chatHasNav() ? 'Assistant' : 'Chat';
   if (nav) renderChatNav();
+  if (assistant && chatKept) loadConversation(view.id);
   if (thread) {
     document.getElementById('chat-thread').replaceChildren();
     loadThread();
@@ -2946,9 +3011,16 @@ function renderChatNav() {
   const nav = document.getElementById('chat-nav');
   nav.replaceChildren();
   if (chatEnabled) {
-    nav.appendChild(chatNavItem('Assistant', 'Ask, or @ a component', {
-      onClick: () => showChatView({ kind: 'assistant' }),
+    nav.appendChild(chatEl('div', 'chat-nav-channel', 'Assistant'));
+    nav.appendChild(chatNavItem(chatKept ? 'New conversation' : 'Assistant', 'Ask, or @ a component', {
+      onClick: () => showChatView({ kind: 'assistant', id: null }),
     }));
+    for (const conversation of chatConversations) {
+      nav.appendChild(chatNavItem(conversation.title || 'Untitled', '', {
+        time: conversation.updated,
+        onClick: () => showChatView({ kind: 'assistant', id: conversation.id }),
+      }));
+    }
   }
   const seen = chatSeen();
   for (const channel of chatChannels) {
@@ -2978,6 +3050,13 @@ async function loadThread() {
     if (load === threadLoads) box.replaceChildren(chatEl('div', 'chat-msg error', `Couldn't load the thread: ${err.message}`));
     return;
   }
+  // With history on the server merges the thread's notes in; with it off
+  // they're this tab's.
+  if (!chatKept) {
+    const notes = (threadNotes[`${channel}/${thread}`] || [])
+      .map(t => ({ kind: 'note', role: t.role, text: t.content, time: t.ts }));
+    items = [...items, ...notes].sort((a, b) => a.time - b.time);
+  }
   const render = items.some(i => i.kind === 'card' && i.markdown)
     ? await loadMarkdownRenderer().catch(() => null) : null;
   if (load !== threadLoads || chatView.kind !== 'thread') return;
@@ -2998,6 +3077,8 @@ function renderThread(box, items, render) {
     if (item.kind === 'card') {
       const id = `${item.repository}:${item.key}`;
       box.appendChild(editing.get(id) || chatCard(item, render));
+    } else if (item.kind === 'note') {
+      box.appendChild(chatEl('div', `chat-msg note ${item.role}`, item.text));
     } else {
       box.appendChild(chatThreadMessage(item));
     }
@@ -3114,8 +3195,7 @@ function onChannelNotification(n) {
 
 document.getElementById('chat-back').addEventListener('click', () => showChatView({ kind: 'nav' }));
 
-function appendChatMessage(role, text) {
-  const list = document.getElementById('chat-messages');
+function appendChatMessage(role, text, list = document.getElementById('chat-messages')) {
   const div = document.createElement('div');
   div.className = 'chat-msg ' + role;
   div.textContent = text;
@@ -3124,27 +3204,52 @@ function appendChatMessage(role, text) {
   return div;
 }
 
+// What a turn sends: with history on, only its text, and the server keeps
+// the conversation (an assistant one by id, or the one in a thread); with it
+// off, the whole conversation this tab holds. In a thread the turn is a note
+// and the server adds the thread as its context.
+function chatTurnBody(view, text) {
+  const thread = view.kind === 'thread' ? { channel: view.channel, thread: view.thread } : null;
+  if (chatKept) {
+    return thread ? { thread, text } : { conversation: view.id || undefined, text };
+  }
+  const held = thread ? (threadNotes[`${thread.channel}/${thread.thread}`] ||= []) : chatHistory;
+  held.push({ role: 'user', content: text, ts: Date.now() / 1000 });
+  const body = { messages: held.map(({ role, content }) => ({ role, content })) };
+  if (thread) body.thread = thread;
+  return { ...body, held };
+}
+
 async function sendChatMessage() {
   if (chatBusy) return;
   const input = document.getElementById('chat-input');
   const text = input.value.trim();
   if (!text) return;
+  const view = chatView;
+  const inThread = view.kind === 'thread';
+  if (view.kind !== 'assistant' && !inThread) return;
   input.value = '';
-  chatHistory.push({ role: 'user', content: text });
-  appendChatMessage('user', text);
+  const list = document.getElementById(inThread ? 'chat-thread' : 'chat-messages');
+  const role = r => (inThread ? `note ${r}` : r);
+  // Events from a turn the person has moved away from aren't drawn.
+  const here = () => chatView === view;
+  const { held, ...body } = chatTurnBody(view, text);
+  appendChatMessage(role('user'), text, list);
 
   chatBusy = true;
-  const assistantDiv = appendChatMessage('assistant', '');
+  const assistantDiv = appendChatMessage(role('assistant'), '', list);
   let assistantContent = '';
-  const list = document.getElementById('chat-messages');
 
   try {
     const res = await fetch('/api/chat', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ messages: chatHistory }),
+      body: JSON.stringify(body),
     });
-    if (!res.ok || !res.body) throw new Error(`HTTP ${res.status}`);
+    if (!res.ok || !res.body) {
+      const detail = await res.json().then(b => b.detail).catch(() => null);
+      throw new Error(detail || `HTTP ${res.status}`);
+    }
 
     const reader = res.body.getReader();
     const decoder = new TextDecoder();
@@ -3158,28 +3263,36 @@ async function sendChatMessage() {
       for (const line of lines) {
         if (!line) continue;
         const event = JSON.parse(line);
-        if (event.type === 'token') {
+        if (event.type === 'conversation') {
+          // A new kept conversation: this view is it from now on.
+          view.id = event.id;
+          if (here()) document.getElementById('chat-delete').hidden = false;
+        } else if (event.type === 'token') {
           assistantContent += event.content;
           assistantDiv.textContent = assistantContent;
-          list.scrollTop = list.scrollHeight;
+          if (here()) list.scrollTop = list.scrollHeight;
+        } else if (!here()) {
+          continue;
         } else if (event.type === 'tool_call') {
-          appendChatMessage('tool', `→ ${event.name}(${JSON.stringify(event.arguments)})`);
+          appendChatMessage(role('tool'), `→ ${event.name}(${JSON.stringify(event.arguments)})`, list);
         } else if (event.type === 'tool_result') {
-          appendChatMessage('tool', `← ${event.name}: ${event.result}`);
+          appendChatMessage(role('tool'), `← ${event.name}: ${event.result}`, list);
         } else if (event.type === 'error') {
-          appendChatMessage('error', `Chat error: ${event.message} — is \`ollama serve\` running?`);
+          appendChatMessage('error', `Chat error: ${event.message} — is \`ollama serve\` running?`, list);
         }
       }
     }
   } catch (err) {
-    appendChatMessage('error', `Chat error: ${err.message}`);
+    if (here()) appendChatMessage('error', `Chat error: ${err.message}`, list);
   } finally {
-    if (assistantContent) {
-      chatHistory.push({ role: 'assistant', content: assistantContent });
-    } else {
-      assistantDiv.remove();
+    if (held && assistantContent) {
+      held.push({ role: 'assistant', content: assistantContent, ts: Date.now() / 1000 });
     }
+    if (!assistantContent) assistantDiv.remove();
     chatBusy = false;
+    if (chatKept && !inThread) loadConversations();
+    // Redrawn with the turn as notes, in case the thread refreshed mid-answer.
+    if (inThread && here()) loadThread();
   }
 }
 

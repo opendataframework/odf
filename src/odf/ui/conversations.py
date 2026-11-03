@@ -251,6 +251,46 @@ def actions(context: Context, repository_cls: type) -> list[dict]:
     return sorted(found, key=lambda a: a["label"])
 
 
+def thread_context(context: Context, channel: str, value: str, *, limit: int = 30) -> str | None:
+    """Describe a thread for the assistant asked inside it.
+
+    The thread's latest ``limit`` messages and cards, oldest first: each
+    message with its side and sender, each card with its key and the tools
+    its actions are called by (``<key>.<verb>``) with the record's argument.
+    It ends by saying that only a card's action reaches the outside, so the
+    model knows a reply isn't sent by answering.
+
+    Returns:
+        The description, or ``None`` if there's no such channel.
+    """
+    items = thread(context, channel, value, limit=limit)
+    if items is None:
+        return None
+    lines = [
+        f'You are in the "{value}" thread of the "{channel}" channel. '
+        "Its latest messages and cards, oldest first:"
+    ]
+    for item in items:
+        when = datetime.fromtimestamp(item["time"]).strftime("%Y-%m-%d %H:%M")
+        text = " ".join(item["text"].split())[:400]
+        if item["kind"] == "message":
+            side = "sent" if item["direction"] == "out" else "received"
+            who = f" from {item['sender']}" if item["sender"] and side == "received" else ""
+            lines.append(f"- {when}, {side}{who}: {text}")
+        else:
+            calls = ", ".join(
+                f"{a['id']}.{a['verb']}({a['param']}={a['value']!r})" for a in item["actions"]
+            )
+            lines.append(f"- {when}, card {item['repository']} {item['key']!r}: {text}")
+            if calls:
+                lines.append(f"  Its actions: {calls}")
+    lines.append(
+        "Nothing you write here reaches the other side: only a card's action, run when "
+        "the user asks for it, does. Never run one they didn't ask for."
+    )
+    return "\n".join(lines)
+
+
 def sort_time(value: object) -> float:
     """Return a record's time as a Unix time, so records of several repositories sort together.
 

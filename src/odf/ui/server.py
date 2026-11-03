@@ -7,7 +7,9 @@ outside, so it is constructed and driven directly by ``Server.start(ui=True)``
 
 import dataclasses
 import json
+import re
 import threading
+import time
 from collections.abc import AsyncIterator, Callable, Iterator
 from pathlib import Path
 from typing import TYPE_CHECKING, Annotated
@@ -51,6 +53,7 @@ from odf.ui import (
     media,
     themes,
 )
+from odf.ui import chat_history as chat_history_module
 from odf.ui.notebooks import NotebookServer, local_host, theme_rewrite
 from odf.ui.origin import HostCheck, OriginCheck
 from odf.ui.topology import TopologyView, build_topology
@@ -59,6 +62,8 @@ if TYPE_CHECKING:
     from odf.chat.engine import ChatEngine
 
 _STREAM_BOUNDARY = "odf-frame"
+# What an assistant conversation's id may hold: it's part of a route.
+_CONVERSATION_ID = re.compile(r"[A-Za-z0-9_-]{1,64}")
 
 _MEDIA_CONTENT_TYPES: dict[type, str] = {
     ImageView: "image/jpeg",
@@ -97,6 +102,14 @@ class UiServer:
             or ``None`` (the default) to disable it — the chat toggle stays
             hidden in the UI and ``POST /api/chat`` returns 404. ``Project``
             builds this when ``start(chat=True)`` is passed.
+        chat_file: Path to keep the chat's conversations in (see
+            ``odf.ui.chat_history``), so they're reopened after a reload or
+            from another browser. ``None`` (the default), or no
+            ``chat_engine``, keeps each conversation in its browser tab
+            only, as ``chat_history=0`` does.
+        chat_history: How many of a conversation's latest turns
+            ``chat_file`` keeps. ``0`` keeps none, leaving conversations in
+            their browser tab.
         icon_scripts: Paths to ``.js`` files registering custom icons into
             the UI (see ``odf.ui.extensions``), served under
             ``/api/ui/icon-scripts/{index}`` and listed in
@@ -145,6 +158,8 @@ class UiServer:
         layout_file: str | Path | None = None,
         annotations_file: str | Path | None = None,
         chat_engine: ChatEngine | None = None,
+        chat_file: str | Path | None = None,
+        chat_history: int = 200,
         icon_scripts: list[Path] | None = None,
         colors: dict[str, str] | None = None,
         favicon: str | Path | None = None,
@@ -172,6 +187,11 @@ class UiServer:
         # Saving is load-modify-write on one file, from FastAPI's thread pool.
         self._annotations_lock = threading.Lock()
         self._chat = chat_engine
+        self._history = (
+            chat_history_module.ChatHistory(chat_file, chat_history)
+            if chat_engine is not None and chat_file is not None and chat_history > 0
+            else None
+        )
         self._icon_scripts = list(icon_scripts) if icon_scripts is not None else []
         self._colors = dict(colors) if colors is not None else {}
         self._favicon = Path(favicon) if favicon is not None else None
@@ -685,7 +705,30 @@ class UiServer:
             return {
                 "enabled": self._chat is not None,
                 "model": self._chat.model if self._chat else None,
+                "history": self._history is not None,
             }
+
+        @app.get("/api/chat/conversations")
+        def list_conversations() -> list[dict]:
+            """List the assistant conversations kept, the one changed last first."""
+            return self._history_or_404().conversations()
+
+        @app.get("/api/chat/conversations/{conversation_id}")
+        def read_conversation(conversation_id: str) -> dict:
+            """Return an assistant conversation with its turns."""
+            history = self._history_or_404()
+            found = history.get(chat_history_module.assistant_key(conversation_id))
+            if found is None:
+                raise HTTPException(status_code=404, detail="No such conversation")
+            return {"id": conversation_id, **found}
+
+        @app.delete("/api/chat/conversations/{conversation_id}", status_code=204)
+        def delete_conversation(conversation_id: str) -> Response:
+            """Delete an assistant conversation."""
+            history = self._history_or_404()
+            if not history.delete(chat_history_module.assistant_key(conversation_id)):
+                raise HTTPException(status_code=404, detail="No such conversation")
+            return Response(status_code=204)
 
         # Channels: repositories declaring a conversation (see
         # odf.ui.conversations), merged by channel into threads.
@@ -712,15 +755,75 @@ class UiServer:
             found = conversations.thread(self._context, channel, thread, limit=limit)
             if found is None:
                 raise HTTPException(status_code=404, detail=f"No channel '{channel}'")
+            if self._history is not None:
+                key = chat_history_module.thread_key(channel, thread)
+                notes = [
+                    {"kind": "note", "role": t["role"], "text": t["content"], "time": t["ts"]}
+                    for t in self._history.turns(key)
+                ]
+                found = sorted([*found, *notes], key=lambda i: i["time"])[-limit:]
             return jsonable_encoder(found)
 
         @app.post("/api/chat")
         def chat(body: dict) -> StreamingResponse:
-            """Stream one chat turn's events as newline-delimited JSON."""
+            """Stream one chat turn's events as newline-delimited JSON.
+
+            The body is one of:
+
+            - ``{"text", "conversation"?}``: a turn of an assistant
+              conversation kept on the server, a new one when
+              ``conversation`` is absent (its id comes first, as a
+              ``conversation`` event);
+            - ``{"text", "thread": {"channel", "thread"}}``: a turn of the
+              conversation held inside that thread, with the thread as the
+              turn's context;
+            - ``{"messages", "thread"?}``: the whole conversation, kept by
+              the caller, nothing stored.
+            """
             if self._chat is None:
                 raise HTTPException(status_code=404, detail="Chat is not enabled")
+            thread = body.get("thread")
+            context = None
+            if thread is not None:
+                if not (
+                    isinstance(thread, dict)
+                    and isinstance(thread.get("channel"), str)
+                    and isinstance(thread.get("thread"), str)
+                ):
+                    raise HTTPException(status_code=400, detail="thread must be {channel, thread}")
+                context = conversations.thread_context(
+                    self._context, thread["channel"], thread["thread"]
+                )
+                if context is None:
+                    raise HTTPException(status_code=404, detail=f"No channel '{thread['channel']}'")
+            if "text" not in body:
+                return StreamingResponse(
+                    self._chat_events(body.get("messages", []), context),
+                    media_type="application/x-ndjson",
+                )
+            text = body["text"]
+            if not isinstance(text, str) or not text.strip():
+                raise HTTPException(status_code=400, detail="text must be a non-empty string")
+            if self._history is None:
+                raise HTTPException(
+                    status_code=409, detail="Chat history is off: send the whole conversation"
+                )
+            conversation_id = None
+            if thread is not None:
+                key = chat_history_module.thread_key(thread["channel"], thread["thread"])
+            else:
+                conversation_id = body.get("conversation") or self._history.new_id()
+                if not isinstance(conversation_id, str) or not _CONVERSATION_ID.fullmatch(
+                    conversation_id
+                ):
+                    raise HTTPException(status_code=400, detail="Not a conversation id")
+                key = chat_history_module.assistant_key(conversation_id)
+            turns = self._history.turns(key)
+            messages = [{"role": t["role"], "content": t["content"]} for t in turns]
+            messages.append({"role": "user", "content": text})
             return StreamingResponse(
-                self._chat_events(body.get("messages", [])), media_type="application/x-ndjson"
+                self._chat_events(messages, context, keep=key, conversation_id=conversation_id),
+                media_type="application/x-ndjson",
             )
 
         # The UI's own files are revalidated on every load: ``/theme.css`` and
@@ -943,10 +1046,41 @@ class UiServer:
                 + b"\r\n"
             )
 
-    async def _chat_events(self, messages: list[dict]) -> AsyncIterator[str]:
-        """Newline-delimited JSON events for one chat turn — see ``ChatEngine.stream``."""
-        async for event in self._chat.stream(messages):
-            yield json.dumps(event) + "\n"
+    async def _chat_events(
+        self,
+        messages: list[dict],
+        context: str | None = None,
+        *,
+        keep: str | None = None,
+        conversation_id: str | None = None,
+    ) -> AsyncIterator[str]:
+        """Newline-delimited JSON events for one chat turn — see ``ChatEngine.stream``.
+
+        With ``keep``, the turn's question (the last message) and the answer
+        streamed so far are added to that conversation once the turn ends,
+        or the client goes away.
+        """
+        if conversation_id is not None:
+            yield json.dumps({"type": "conversation", "id": conversation_id}) + "\n"
+        asked = time.time()
+        answer = ""
+        try:
+            async for event in self._chat.stream(messages, context):
+                if event.get("type") == "token":
+                    answer += event.get("content", "")
+                yield json.dumps(event) + "\n"
+        finally:
+            if keep is not None:
+                turns = [{"role": "user", "content": messages[-1]["content"], "ts": asked}]
+                if answer:
+                    turns.append({"role": "assistant", "content": answer, "ts": time.time()})
+                await run_in_threadpool(self._history.append, keep, turns)
+
+    def _history_or_404(self) -> chat_history_module.ChatHistory:
+        """Return the kept conversations, or answer 404 when chat history is off."""
+        if self._history is None:
+            raise HTTPException(status_code=404, detail="Chat history is off")
+        return self._history
 
     @property
     def url(self) -> str:
