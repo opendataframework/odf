@@ -113,6 +113,9 @@
   [`26-notifications`](https://github.com/opendataframework/odf/tree/main/examples/26-notifications),
   `take_order` and `Restock` declare what they publish with `@Publisher`, and `Kitchen` is a
   `@Subscriber("kitchen.ticket")` that receives tickets through `on_notification()`.
+- **Docs**: the site wears the UI's `ink` theme, black and white with grey hairlines and
+  rounded panels, and its stacked-layers tile as the logo and favicon, in a light and a
+  dark variant. The live topology on the home page is drawn in the ink palette too.
 
 ## 0.5.0
 
