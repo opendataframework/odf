@@ -22,6 +22,15 @@ const TYPE_LABEL = {
   function:'@Function',
 };
 
+// The type legend under the topology, in this order, with each type's default
+// isometric icon as the item's tooltip. renderLegend() lists only the types
+// the topology shows.
+const TYPE_LEGEND = [
+  ['config', 'platform'], ['component', 'warehouse'], ['repository', 'server rack'],
+  ['service', 'antenna'], ['task', 'factory cube'], ['pipeline', 'conveyor'],
+  ['agent', 'observatory'], ['function', 'relay box'],
+];
+
 // The map-panel mode each DataView kind opens into (see setMapMode below) —
 // single source of truth shared by showDataView's dispatch and
 // selectFromSidebar's "follow the new selection into the same view" logic.
@@ -44,6 +53,21 @@ let notifies = []; // notification links: {from, to, topics} (see "Notification 
 let nodeMap = {};
 let repoSchemas = {};
 let layoutOverrides = {}; // node id -> {col, row}, persisted via /api/layout
+
+// With [ui.views] declared, the view this page shows (picked in the header's
+// switcher, see initViewSwitcher), else null. A view keeps its own places
+// under layoutOverrides._views[activeView] (see viewPlaces); icons, colors
+// and layer colors stay shared at the top level.
+let activeView = null;
+
+// The view's own places in layoutOverrides, created on first use, or the top
+// level when no view is active.
+function viewPlaces() {
+  if (!activeView) return layoutOverrides;
+  if (!layoutOverrides._views) layoutOverrides._views = {};
+  if (!layoutOverrides._views[activeView]) layoutOverrides._views[activeView] = {};
+  return layoutOverrides._views[activeView];
+}
 
 // A node's or repository's API base path, e.g. /api/tasks/loader. Ids are
 // keys (`task.loader`); the server owns the key -> route mapping and sends it
@@ -441,7 +465,7 @@ function updateGridTitle() {
 }
 
 function saveGridExpand() {
-  layoutOverrides._grid = { ...gridExpand };
+  viewPlaces()._grid = { ...gridExpand };
   fetch('/api/layout', {
     method: 'PUT',
     headers: { 'Content-Type': 'application/json' },
@@ -1555,11 +1579,19 @@ window.addEventListener('mouseup', e => {
 // failed PUT just leaves the previous save in place server-side, so the
 // move still holds for the rest of this session even if it isn't persisted.
 function saveLayoutOverride(node) {
-  const entry = { col: node.col, row: node.row };
+  // A view saves the node's place as its own (see viewPlaces), keeping the
+  // place saved at the top level for the views without one.
+  const top = layoutOverrides[node.id] || {};
+  const entry = activeView ? {} : { col: node.col, row: node.row };
+  if (activeView) {
+    viewPlaces()[node.id] = { col: node.col, row: node.row };
+    if (Number.isInteger(top.col) && Number.isInteger(top.row)) Object.assign(entry, { col: top.col, row: top.row });
+  }
   if (node.icon) entry.icon = node.icon; // omitted entirely once reset, so it doesn't linger as a stale key
   if (node.flatIcon) entry.flatIcon = node.flatIcon; // the flat grid's own icon (see GRID.iconField)
   if (node.color) entry.color = node.color; // ditto for a reset color override
-  layoutOverrides[node.id] = entry;
+  if (Object.keys(entry).length) layoutOverrides[node.id] = entry;
+  else delete layoutOverrides[node.id];
   fetch('/api/layout', {
     method: 'PUT',
     headers: { 'Content-Type': 'application/json' },
@@ -3398,6 +3430,8 @@ async function sendChatMessage() {
 // Suggests component keys from the topology (`nodes`/`nodeMap`, already
 // fetched for the graph view) while typing an `@<namespace>.<name>` mention in
 // chat-input. Typing just the name or the class name finds the key too.
+// `nodes` holds only what the active view shows, so the suggestions follow
+// the view; a hidden component's key typed in full still reaches the chat.
 
 let mentionMatches = [];
 let mentionActive = -1;
@@ -3513,16 +3547,33 @@ function tickClock() {
 
 // ── Stats ─────────────────────────────────────────────────────────────────
 
+// Lists, under the topology, only the types it shows.
+function renderLegend() {
+  const shown = new Set(nodes.map(n => n.type));
+  const legend = document.getElementById('type-legend');
+  legend.style.display = shown.size ? '' : 'none'; // no empty panel over an empty topology
+  legend.innerHTML = TYPE_LEGEND
+    .filter(([type]) => shown.has(type))
+    .map(([type, title]) =>
+      `<div class="tl-item" style="color:var(--accent-${type})" title="${title}"><span class="tl-pip"></span>${TYPE_LABEL[type]}</div>`)
+    .join('');
+}
+
+// Runs once per page (switching views reloads it), so a type the topology
+// doesn't show has its count removed, not hidden: the last count left keeps
+// the theme's :last-child styling.
 function renderStats(data) {
   const types = data.stats.types || {};
+  for (const type of ['service', 'task', 'pipeline', 'agent', 'function']) {
+    if (!types[type]) document.getElementById(`stat-${type}s`)?.closest('.hdr-stat')?.remove();
+  }
   document.getElementById('stat-project').textContent   = data.project;
   document.getElementById('stat-objects').textContent   = String(data.stats.objects);
   document.getElementById('stat-links').textContent     = String(data.stats.links);
-  document.getElementById('stat-services').textContent  = String(types.service || 0);
-  document.getElementById('stat-tasks').textContent     = String(types.task || 0);
-  document.getElementById('stat-pipelines').textContent = String(types.pipeline || 0);
-  document.getElementById('stat-agents').textContent    = String(types.agent || 0);
-  document.getElementById('stat-functions').textContent = String(types.function || 0);
+  for (const type of ['service', 'task', 'pipeline', 'agent', 'function']) {
+    const el = document.getElementById(`stat-${type}s`);
+    if (el) el.textContent = String(types[type]);
+  }
   document.getElementById('hdr-subtitle').textContent   = `Topology · ${data.project}`;
   document.getElementById('node-count').textContent     = String(data.stats.objects).padStart(2, '0');
   document.title = `${BRAND} — ${data.project}`;
@@ -7507,6 +7558,7 @@ async function loadUiExtensions() {
   }
   annotationsEnabled = Boolean(ext.annotations);
   notebooksEnabled = Boolean(ext.notebooks);
+  initViewSwitcher(ext.views || [], ext.defaultView || null);
 
   // An unknown grid name falls back to the isometric one, as a stale icon
   // key falls back to the type default.
@@ -7543,12 +7595,42 @@ async function loadUiExtensions() {
   }
 }
 
+// Picks the view this page shows: the URL's ?view= when it names one, else
+// the one last picked in this browser, else the default. With two or more
+// views the header's switcher lists them; picking one reloads the page at
+// its ?view=, so everything below init() starts again on its topology.
+const VIEW_STORAGE_KEY = 'odf-view';
+
+function initViewSwitcher(views, defaultView) {
+  if (!views.length) return;
+  const known = new Set(views.map(v => v.name));
+  let remembered = null;
+  try { remembered = localStorage.getItem(VIEW_STORAGE_KEY); } catch {}
+  const asked = new URLSearchParams(location.search).get('view');
+  activeView = [asked, remembered, defaultView, views[0].name].find(v => v && known.has(v));
+  try { localStorage.setItem(VIEW_STORAGE_KEY, activeView); } catch {}
+  if (views.length < 2) return;
+  const select = document.getElementById('view-switcher');
+  select.innerHTML = views
+    .map(v => `<option value="${escapeHtml(v.name)}">${escapeHtml(v.label)}</option>`)
+    .join('');
+  select.value = activeView;
+  select.hidden = false;
+  select.addEventListener('change', () => {
+    try { localStorage.setItem(VIEW_STORAGE_KEY, select.value); } catch {}
+    const url = new URL(location.href);
+    url.searchParams.set('view', select.value);
+    location.assign(url);
+  });
+}
+
 async function init() {
   await loadUiExtensions();
 
   let data = { project: 'ODF Project', nodes: [], edges: [], stats: { objects: 0, links: 0, types: {} } };
   try {
-    const res = await fetch('/api/topology');
+    const query = activeView ? `?view=${encodeURIComponent(activeView)}` : '';
+    const res = await fetch(`/api/topology${query}`);
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
     data = await res.json();
   } catch (err) {
@@ -7573,7 +7655,9 @@ async function init() {
     console.error('Failed to load saved layout', err);
   }
 
-  if (layoutOverrides._grid) gridExpand = { ...gridExpand, ...layoutOverrides._grid };
+  // A view's own grid size, else the one saved before views.
+  const savedGrid = viewPlaces()._grid || layoutOverrides._grid;
+  if (savedGrid) gridExpand = { ...gridExpand, ...savedGrid };
 
   nodes = data.nodes;
   edges = data.edges;
@@ -7594,6 +7678,7 @@ async function init() {
   byDepth = [...nodes];
   computeGridBounds();
   renderStats(data);
+  renderLegend();
 
   buildSidebar();
   initTheme();

@@ -78,6 +78,14 @@
   `num_ctx`). A project with many tools needs more than Ollama's default, or the question
   falls out of the window and the model answers something else. See
   [Chat](chat.md#context-length).
+- **UI**: `[ui.views.<name>]` declares named views, picked in a header switcher or by
+  `?view=<name>`: each with a `label`, an optional `default = true`, and a `topology` table
+  taking `[ui.topology]`'s keys. Each view keeps its own node places in `layout.json`, and
+  the chat's `@` suggestions list what the view shows. See [UI](ui.md#views).
+- **UI**: the topology's type legend lists only the types shown, and the header counts only
+  the kinds it has, instead of all eight types and every count down to 0.
+- **Demo**: the bakery opens on a manager's view, its data, agents, routines and the actions
+  a manager takes, with the whole system's wiring a switch away. See [Demo](demo.md).
 - **Chat**: a tool name the model gets slightly wrong, such as `function_margins` for
   `function.margins.call`, calls the tool it matches when only one does. Otherwise the model
   is told the closest names, so it can try again.

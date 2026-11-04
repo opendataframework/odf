@@ -488,7 +488,7 @@ def test_config_hides_only_the_sqlite_connection():
 
     config = tomllib.loads((Path(data.__file__).parents[1] / "config.toml").read_text())
 
-    assert config["ui"]["topology"]["components"] == [
+    assert config["ui"]["views"]["system"]["topology"]["components"] == [
         "clock",
         "pos",
         "messenger",

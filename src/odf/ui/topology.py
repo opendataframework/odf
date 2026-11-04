@@ -69,8 +69,8 @@ class TopologyView:
     config: bool = True
 
     @classmethod
-    def from_config(cls, cfg: Mapping) -> TopologyView:
-        """Build a view from the ``[ui.topology]`` table.
+    def from_config(cls, cfg: Mapping, table: str = "[ui.topology]") -> TopologyView:
+        """Build a view from the ``[ui.topology]`` table, or a view's ``.topology``.
 
         Args:
             cfg: The parsed table: ``connections`` and ``config`` booleans plus
@@ -78,18 +78,20 @@ class TopologyView:
                 ``agents``/``functions``/``components`` as lists of registered
                 names, in any
                 casing (``"LoadJob"`` or ``"load-job"``).
+            table: The table's name in config, for the error messages
+                (``"[ui.views.manager.topology]"``).
 
         Raises:
             ValueError: On an unknown key or a value of the wrong type.
         """
         unknown = set(cfg) - {"connections", "config", *_KIND_KEYS}
         if unknown:
-            raise ValueError(f"Unknown [ui.topology] key(s): {', '.join(sorted(unknown))}")
+            raise ValueError(f"Unknown {table} key(s): {', '.join(sorted(unknown))}")
         flags = {}
         for key in ("connections", "config"):
             value = cfg.get(key, True)
             if not isinstance(value, bool):
-                raise ValueError(f"[ui.topology] {key} must be true or false, got {value!r}")
+                raise ValueError(f"{table} {key} must be true or false, got {value!r}")
             flags[key] = value
         show = {}
         for key, kind in _KIND_KEYS.items():
@@ -97,7 +99,7 @@ class TopologyView:
                 continue
             names = cfg[key]
             if not isinstance(names, list) or not all(isinstance(n, str) for n in names):
-                raise ValueError(f"[ui.topology] {key} must be a list of names, got {names!r}")
+                raise ValueError(f"{table} {key} must be a list of names, got {names!r}")
             show[kind] = frozenset(normalize(n) for n in names)
         return cls(connections=flags["connections"], show=show, config=flags["config"])
 

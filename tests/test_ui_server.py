@@ -114,6 +114,103 @@ def test_topology_endpoint_moves_nodes_off_saved_cells(tmp_path):
     assert {n["id"]: (n["col"], n["row"]) for n in nodes} == {"n-s.bbb": (0, 0), "n-s.aaa": (0, 1)}
 
 
+def make_views():
+    from odf.ui import views
+
+    return views.from_config(
+        {
+            "views": {
+                "manager": {"label": "Bakery", "topology": {"components": ["Front"]}},
+                "system": {"default": True},
+            }
+        }
+    )
+
+
+def make_front_and_plumbing():
+    NS = make_ns()
+
+    @NS
+    @Component
+    class Plumbing: ...
+
+    @NS
+    @Component
+    class Front:
+        def __init__(self, plumbing: Plumbing) -> None: ...
+
+    return NS
+
+
+def test_topology_endpoint_shows_the_view_asked_for_else_the_default():
+    NS = make_front_and_plumbing()
+    views, default = make_views()
+    with Context(namespaces={NS}) as ctx:
+        client = TestClient(UiServer(ctx, "proj", views=views, default_view=default)._app)
+        manager = client.get("/api/topology", params={"view": "manager"}).json()
+        default_body = client.get("/api/topology").json()
+
+    assert manager["view"] == "manager"
+    assert [n["id"] for n in manager["nodes"] if n["type"] == "component"] == ["n-s.front"]
+    assert default_body["view"] == "system"
+    assert {n["id"] for n in default_body["nodes"] if n["type"] == "component"} == {
+        "n-s.front",
+        "n-s.plumbing",
+    }
+
+
+def test_topology_endpoint_404s_on_an_unknown_view_or_a_view_without_views():
+    NS = make_front_and_plumbing()
+    views, default = make_views()
+    with Context(namespaces={NS}) as ctx:
+        with_views = TestClient(UiServer(ctx, "proj", views=views, default_view=default)._app)
+        without = TestClient(UiServer(ctx, "proj")._app)
+
+        assert with_views.get("/api/topology", params={"view": "nope"}).status_code == 404
+        assert without.get("/api/topology", params={"view": "manager"}).status_code == 404
+        assert without.get("/api/topology").json()["view"] is None
+
+
+def test_topology_endpoint_places_nodes_at_the_views_own_cells(tmp_path):
+    NS = make_front_and_plumbing()
+    views, default = make_views()
+    layout_file = tmp_path / "layout.json"
+    layout_file.write_text(
+        json.dumps(
+            {
+                "n-s.front": {"col": 3, "row": 2, "icon": "truck"},
+                "_views": {"manager": {"n-s.front": {"col": 0, "row": 5}}},
+            }
+        )
+    )
+    with Context(namespaces={NS}) as ctx:
+        client = TestClient(
+            UiServer(ctx, "proj", layout_file=layout_file, views=views, default_view=default)._app
+        )
+        manager = client.get("/api/topology", params={"view": "manager"}).json()["nodes"]
+        system = client.get("/api/topology", params={"view": "system"}).json()["nodes"]
+
+    assert {n["id"]: (n["col"], n["row"]) for n in manager}["n-s.front"] == (0, 5)
+    assert {n["id"]: (n["col"], n["row"]) for n in system}["n-s.front"] == (3, 2)
+
+
+def test_extensions_list_the_views_and_the_default():
+    views, default = make_views()
+    with Context(namespaces=set()) as ctx:
+        with_views = TestClient(UiServer(ctx, "proj", views=views, default_view=default)._app)
+        without = TestClient(UiServer(ctx, "proj")._app)
+        listed = with_views.get("/api/ui/extensions").json()
+        none = without.get("/api/ui/extensions").json()
+
+    assert listed["views"] == [
+        {"name": "manager", "label": "Bakery"},
+        {"name": "system", "label": "system"},
+    ]
+    assert listed["defaultView"] == "system"
+    assert none["views"] == []
+    assert none["defaultView"] is None
+
+
 def test_url_reflects_host_and_port():
     with Context(namespaces=set()) as ctx:
         server = UiServer(ctx, "proj", host="127.0.0.1", port=9999)

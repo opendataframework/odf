@@ -10,7 +10,7 @@ import json
 import re
 import threading
 import time
-from collections.abc import AsyncIterator, Callable, Iterator
+from collections.abc import AsyncIterator, Callable, Iterator, Mapping
 from pathlib import Path
 from typing import TYPE_CHECKING, Annotated
 
@@ -57,6 +57,7 @@ from odf.ui import chat_history as chat_history_module
 from odf.ui.notebooks import NotebookServer, local_host, theme_rewrite
 from odf.ui.origin import HostCheck, OriginCheck
 from odf.ui.topology import TopologyView, build_topology
+from odf.ui.views import View
 
 if TYPE_CHECKING:
     from odf.chat.engine import ChatEngine
@@ -135,7 +136,13 @@ class UiServer:
         topology: Which components and connections the topology shows — see
             ``odf.ui.topology.TopologyView``. ``None`` (the default) shows
             everything. Display-only: hidden components stay reachable through
-            the other endpoints.
+            the other endpoints. Not used when ``views`` are given.
+        views: Named views (see ``odf.ui.views``), each with its own topology,
+            picked in the header's switcher and by ``GET /api/topology``'s
+            ``view``. ``None`` (the default) has none, and ``topology``
+            applies.
+        default_view: The view shown when none is asked for. Must name one
+            of ``views``; defaults to the first.
         notebooks: Whether a notebook in a document view can be edited in
             the reader, in a Jupyter Notebook server launched on the first
             edit (see ``odf.ui.notebooks``) and reached through the UI at
@@ -169,6 +176,8 @@ class UiServer:
         topology: TopologyView | None = None,
         notebooks: bool = False,
         grid: str = "iso",
+        views: Mapping[str, View] | None = None,
+        default_view: str | None = None,
     ) -> None:
         """Build the FastAPI app and register every route (see class docstring for args).
 
@@ -199,6 +208,10 @@ class UiServer:
         self._brand = brand
         self._theme_dir = themes.theme_dir(theme)
         self._topology = topology
+        self._views = dict(views) if views else {}
+        if default_view is not None and default_view not in self._views:
+            raise ValueError(f"default_view {default_view!r} is not one of the views")
+        self._default_view = default_view or next(iter(self._views), None)
         self._grid = grid
         self._notebooks: NotebookServer | None = None
         self._events = events.EventHub(context)
@@ -223,10 +236,30 @@ class UiServer:
             )
 
         @app.get("/api/topology")
-        def topology() -> dict:
-            """Return the current node/edge graph for the topology view."""
+        def topology(view: str | None = None) -> dict:
+            """Return the current node/edge graph for the topology view.
+
+            With views declared, ``view`` names one (the default when
+            omitted), and the graph is that view's, at its own places.
+            """
             saved = layout.load(self._layout_path) if self._layout_path is not None else {}
-            return build_topology(self._context, self._project, self._topology, saved)
+            if not self._views:
+                if view is not None:
+                    raise HTTPException(404, "No views are declared")
+                return {
+                    **build_topology(self._context, self._project, self._topology, saved),
+                    "view": None,
+                }
+            name = view if view is not None else self._default_view
+            if name not in self._views:
+                raise HTTPException(404, f"Unknown view: {name}")
+            graph = build_topology(
+                self._context,
+                self._project,
+                self._views[name].topology,
+                layout.for_view(saved, name),
+            )
+            return {**graph, "view": name}
 
         @app.get("/api/layout")
         def get_layout() -> dict:
@@ -241,7 +274,7 @@ class UiServer:
 
         @app.get("/api/ui/extensions")
         def ui_extensions() -> dict:
-            """List icon scripts, colors, the custom logo, brand, grid, and enabled features."""
+            """List icon scripts, colors, logo, brand, grid, views and enabled features."""
             return {
                 "iconScripts": [
                     f"/api/ui/icon-scripts/{i}" for i in range(len(self._icon_scripts))
@@ -252,6 +285,8 @@ class UiServer:
                 "grid": self._grid,
                 "annotations": self._annotations_path is not None,
                 "notebooks": self._notebooks is not None,
+                "views": [{"name": v.name, "label": v.label} for v in self._views.values()],
+                "defaultView": self._default_view,
             }
 
         @app.get("/api/ui/logo")

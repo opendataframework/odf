@@ -139,8 +139,13 @@ class Server:
                 ``Config`` node, and ``repositories``/``services``/``tasks``/
                 ``pipelines``/``components`` list the only components of that
                 kind to show (a kind without a list shows all of its
-                components). A notebook in a document view can be edited in
-                place, in an embedded Jupyter Notebook, when the ``notebook``
+                components). ``[ui.views.<name>]`` declares named views
+                instead, picked in the UI's header: each takes a ``label``,
+                ``default = true`` for the one shown first (else the first
+                declared), and a ``topology`` table with the keys
+                ``[ui.topology]`` takes (see ``odf.ui.views``). A notebook in
+                a document view can be edited in place, in an embedded
+                Jupyter Notebook, when the ``notebook``
                 extra is installed (``pip install odf[notebook]``);
                 ``[ui] notebooks = false`` turns that off. ``[ui] grid =
                 "flat"`` draws the topology as a flat, top-down schematic
@@ -196,7 +201,9 @@ class Server:
                 ``theme``/``[ui] theme`` names a UI theme that doesn't
                 exist or a theme directory missing a required file, if
                 ``[ui.topology]`` has an unknown key or a value of the wrong
-                type, if ``[ui] notebooks`` isn't a boolean, if ``[ui]
+                type, if a ``[ui.views]`` view is invalid or more than one is
+                the default, if ``[ui.topology]`` and ``[ui.views]`` are both
+                set, if ``[ui] notebooks`` isn't a boolean, if ``[ui]
                 chat-history`` isn't a whole number of at least 0, or
                 if ``[ui] grid`` isn't ``"iso"`` or ``"flat"``.
             ImportError: If ``ui=True``/``mcp=True``/``chat=True`` but the
@@ -244,6 +251,7 @@ class Server:
             self._mcp_server.start()
         if ui:
             from odf.ui import extensions, notebooks
+            from odf.ui import views as ui_views
             from odf.ui.server import UiServer
             from odf.ui.topology import TopologyView
 
@@ -294,12 +302,15 @@ class Server:
             annotations_file = self.config.get("project", {}).get(
                 "annotations-file", "annotations.json"
             )
+            views, default_view = ui_views.from_config(ui_cfg)
             topology = TopologyView.from_config(ui_cfg.get("topology", {}))
-            for key, name in topology.unmatched(self.context):
-                warnings.warn(
-                    f"[ui.topology] {key} lists {name!r}, which matches no component.",
-                    stacklevel=2,
-                )
+            checked = [(f"[ui.views.{v.name}.topology]", v.topology) for v in views.values()]
+            for table, view in checked or [("[ui.topology]", topology)]:
+                for key, name in view.unmatched(self.context):
+                    warnings.warn(
+                        f"{table} {key} lists {name!r}, which matches no component.",
+                        stacklevel=2,
+                    )
             self._ui_server = UiServer(
                 self.context,
                 self._display_name(),
@@ -319,6 +330,8 @@ class Server:
                 topology=topology,
                 notebooks=edit_notebooks,
                 grid=grid,
+                views=views,
+                default_view=default_view,
             )
             self._ui_server.start()
         self._running = True

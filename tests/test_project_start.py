@@ -248,6 +248,57 @@ def test_start_ui_warns_about_topology_names_matching_no_component():
         server.stop()
 
 
+def test_start_ui_applies_ui_views_config():
+    server = Server.from_dict(
+        {
+            "ui": {
+                "views": {
+                    "lean": {"default": True, "topology": {"config": False}},
+                    "full": {},
+                }
+            }
+        }
+    )
+    server.start(ui=True, ui_port=18780, app_module=None)
+    try:
+        last_err = None
+        for _ in range(50):
+            try:
+                with urllib.request.urlopen(f"{server.ui_url}/api/topology", timeout=1) as res:
+                    lean = json.load(res)
+                break
+            except OSError as e:
+                last_err = e
+                time.sleep(0.1)
+        else:
+            raise AssertionError(f"UI server never became ready: {last_err}")
+        with urllib.request.urlopen(f"{server.ui_url}/api/topology?view=full", timeout=1) as res:
+            full = json.load(res)
+        assert lean["view"] == "lean"
+        assert not any(n["type"] == "config" for n in lean["nodes"])
+        assert any(n["type"] == "config" for n in full["nodes"])
+    finally:
+        server.stop()
+
+
+def test_start_ui_rejects_ui_topology_alongside_ui_views():
+    server = Server.from_dict({"ui": {"topology": {}, "views": {"a": {}}}})
+    try:
+        with pytest.raises(ValueError, match="both set"):
+            server.start(ui=True, ui_port=18781, app_module=None)
+    finally:
+        server.stop()
+
+
+def test_start_ui_warns_about_view_names_matching_no_component():
+    server = Server.from_dict({"ui": {"views": {"a": {"topology": {"tasks": ["nothing-here"]}}}}})
+    try:
+        with pytest.warns(UserWarning, match=r"\[ui\.views\.a\.topology\] tasks"):
+            server.start(ui=True, ui_port=18782, app_module=None)
+    finally:
+        server.stop()
+
+
 def test_stop_clears_ui_url():
     server = Server(context=Context(namespaces=set()))
     server.start(ui=True, ui_port=18766, app_module=None)

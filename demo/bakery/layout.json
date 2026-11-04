@@ -9,6 +9,134 @@
     "storage": "#22b8cf",
     "wholesale": "#4dabf7"
   },
+  "_views": {
+    "manager": {
+      "agent.account-manager": {
+        "col": 4,
+        "row": 10
+      },
+      "agent.allergen-officer": {
+        "col": 3,
+        "row": 13
+      },
+      "agent.invoice-clerk": {
+        "col": 1,
+        "row": 10
+      },
+      "agent.order-desk": {
+        "col": 2,
+        "row": 1
+      },
+      "agent.specials": {
+        "col": 2,
+        "row": 4
+      },
+      "function.confirm-draft": {
+        "col": 6,
+        "row": 6
+      },
+      "function.edit-draft": {
+        "col": 6,
+        "row": 7
+      },
+      "function.labels": {
+        "col": 1,
+        "row": 12
+      },
+      "function.margins": {
+        "col": 3,
+        "row": 9
+      },
+      "function.reject-draft": {
+        "col": 6,
+        "row": 8
+      },
+      "function.trace-ingredient": {
+        "col": 2,
+        "row": 12
+      },
+      "function.what-if": {
+        "col": 4,
+        "row": 9
+      },
+      "pipeline.close-cafe": {
+        "col": 3,
+        "row": 4
+      },
+      "pipeline.night-run": {
+        "col": 3,
+        "row": 7
+      },
+      "repository.allergens": {
+        "col": 0,
+        "row": 12
+      },
+      "repository.bake-sheets": {
+        "col": 2,
+        "row": 6
+      },
+      "repository.cafe-sales": {
+        "col": 0,
+        "row": 3
+      },
+      "repository.contracts": {
+        "col": 2,
+        "row": 0
+      },
+      "repository.delivery-runs": {
+        "col": 3,
+        "row": 6
+      },
+      "repository.drafts": {
+        "col": 5,
+        "row": 6
+      },
+      "repository.forecasts": {
+        "col": 1,
+        "row": 3
+      },
+      "repository.ingredient-prices": {
+        "col": 2,
+        "row": 9
+      },
+      "repository.ingredients": {
+        "col": 1,
+        "row": 9
+      },
+      "repository.invoices": {
+        "col": 0,
+        "row": 9
+      },
+      "repository.leftovers": {
+        "col": 2,
+        "row": 3
+      },
+      "repository.messages": {
+        "col": 0,
+        "row": 1
+      },
+      "repository.order-changes": {
+        "col": 1,
+        "row": 1
+      },
+      "repository.products": {
+        "col": 0,
+        "row": 6
+      },
+      "repository.recipes": {
+        "col": 1,
+        "row": 6
+      },
+      "repository.restaurants": {
+        "col": 0,
+        "row": 0
+      },
+      "repository.standing-orders": {
+        "col": 1,
+        "row": 0
+      }
+    }
+  },
   "agent.account-manager": {
     "col": 9,
     "row": 10

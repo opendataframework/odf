@@ -11,10 +11,13 @@ config key).
 
 This module treats the file as an opaque JSON object — it neither knows nor
 validates the per-key shape described below; that's entirely the frontend's
-concern.
+concern. The one exception is ``for_view``, which reads the reserved
+``"_views"`` key: with ``[ui.views]`` declared, each view's own places, as
+``{"<view>": {"<node id>": {"col": int, "row": int}, "_grid": {...}}}``.
 """
 
 import json
+from collections.abc import Mapping
 from pathlib import Path
 
 
@@ -45,6 +48,36 @@ def load(path: Path) -> dict[str, dict[str, int | str]]:
     except json.JSONDecodeError:
         return {}
     return data if isinstance(data, dict) else {}
+
+
+def for_view(saved: Mapping[str, object], name: str) -> dict[str, object]:
+    """Return the layout as view ``name`` sees it.
+
+    A view keeps its own places under ``saved["_views"][name]``: a node's
+    ``col``/``row`` there override its top-level ones, and the view's
+    ``_grid`` overrides the top-level ``_grid``. Whatever a view has no place
+    for (a node it was never moved in, icons, colors, layer colors) comes
+    from the top level, so a new view starts from the layout already saved.
+
+    Args:
+        saved: The layout file's contents, as ``load`` returns them.
+        name: The view's name.
+
+    Returns:
+        A new mapping shaped like ``saved``, without ``_views``.
+    """
+    views = saved.get("_views")
+    own = views.get(name) if isinstance(views, Mapping) else None
+    merged = {key: value for key, value in saved.items() if key != "_views"}
+    if not isinstance(own, Mapping):
+        return merged
+    for key, value in own.items():
+        top = merged.get(key)
+        if isinstance(value, Mapping) and isinstance(top, Mapping):
+            merged[key] = {**top, **value}
+        else:
+            merged[key] = value
+    return merged
 
 
 def save(path: Path, positions: dict[str, dict[str, int | str]]) -> None:

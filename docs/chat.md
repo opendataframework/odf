@@ -118,7 +118,8 @@ component's own tools (e.g. a `@Task class MetricsFetcher` is addressed as
 `@task.metrics-fetcher`). Always writing the namespace keeps a mention
 unambiguous as a project grows: a `@Task class Loader` and an
 `@Agent class Loader` are `@task.loader` and `@agent.loader`. The chat input
-autocompletes the key as you type `@`, matching the name or class name too. A
+autocompletes the key as you type `@`, matching the name or class name too,
+among what the topology shows (with [views](ui.md#views), the view open). A
 mention that doesn't match any resolved component's key, such as a bare
 `@loader`, is just left as plain text — the turn falls back to the full, unscoped tool
 set. A message can only address one component at a time — mentioning

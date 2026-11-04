@@ -194,6 +194,56 @@ the UI starts, and a listed name that matches no component produces a warning.
 See
 [`examples/04-data-engineering`](https://github.com/opendataframework/odf/tree/main/examples/04-data-engineering).
 
+The type legend under the topology lists only the types it shows, and the
+header counts only the services, tasks, pipelines, agents and functions it
+has: a type with none shown has no count. Project, Objects and Links always
+show.
+
+### Views
+
+A project whose topology serves more than one kind of reader can declare
+views instead, each its own way of looking at the project: the bakery's
+manager sees the bakery's data, the agents and what they act on, and a
+developer sees the system's wiring as well. Each view is a table under
+`[ui.views]`, and each part of the UI it shapes is a table under the view:
+
+```toml
+[ui.views.manager]
+label = "Bakery"        # the switcher's text; defaults to the name
+default = true          # shown first; else the first view declared is
+
+[ui.views.manager.topology]   # the keys [ui.topology] takes
+components = []
+services = []
+tasks = []
+
+[ui.views.system]
+label = "System"        # no topology table: shows everything
+```
+
+- With two or more views, a switcher in the header lists them. Picking one
+  reloads the page at `?view=<name>`, so a link can open a view. A page
+  opened without `?view=` shows the view last picked in that browser, else
+  the default.
+- A view's `topology` table takes the keys `[ui.topology]` takes (see
+  [above](#choosing-what-the-topology-shows)). Declaring `[ui.topology]` as
+  well raises a `ValueError`, as does an unknown key, a `label` that isn't
+  text, a `default` that isn't `true` or `false`, or more than one default.
+- Each view keeps its own places: a node moved in a view is saved for that
+  view, under `_views.<name>` in `layout.json`, along with the grid's size.
+  A node a view has no place for keeps its place from the top level, where
+  places were saved before there were views, so a new view starts from the
+  layout already there. Icons, colors and layer colors are the same in
+  every view.
+- The chat's `@` suggestions list only what the view shows. A hidden
+  component's key typed in full still addresses it.
+- A view changes what the UI shows, not what anyone can do: MCP, chat and
+  the HTTP API reach every component in every view. Leave access to the
+  proxy in front (see [Deploying](#deploying)).
+
+See [`demo/bakery`](demo.md), whose `manager` and `system` views are
+described in its README.
+
 ## Data views
 
 Repositories can declare a `data_view()` to pick how their data renders
@@ -439,6 +489,7 @@ Every key `odf` reads from `config.toml`:
 | `[ui] chat-history` | `200` | How many of each chat conversation's latest turns are kept; `0` keeps conversations in their browser tab only (see [Chat](chat.md#history)). Anything but a whole number of at least 0 raises a `ValueError` |
 | `[ui] notebooks` | `true` if `notebook` is installed | Edit notebooks in the document view with Jupyter (see [Notebooks](#notebooks)); `true` without `notebook` installed raises an `ImportError` |
 | `[ui.topology]` | show everything | What the topology shows (see [above](#choosing-what-the-topology-shows)) |
+| `[ui.views.<name>]` | no views | A named view, with `label`, `default` and a `topology` table taking `[ui.topology]`'s keys (see [Views](#views)); not together with `[ui.topology]` |
 | `[project] layout-file` | `"layout.json"` | Where node positions, icons and colors are saved |
 | `[project] annotations-file` | `"annotations.json"` | Where labels and classes are saved |
 | `[project] chat-file` | `"chat.json"` | Where the chat's conversations are kept, with chat on (see [Chat](chat.md#history)) |
@@ -646,6 +697,7 @@ registered name:
 
 | Route | For |
 |---|---|
+| `GET /api/topology` | the topology's nodes, links and stats; with [views](#views), `?view=<name>` picks one (the default without it), and an unknown one is a `404` |
 | `GET /api/{collection}/{name}/logs` | any component (`components`, `repositories`, `services`, `tasks`, `pipelines`, `agents`, `functions`): its last log records, or with `?call=<call_id>` one call's records (see below) |
 | `GET /api/{collection}/{name}/details`, `.../chart` | a component implementing `details()` / `chart()` |
 | `POST /api/services/{name}/start`, `.../stop` | a `@Service` |

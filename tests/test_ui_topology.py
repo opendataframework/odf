@@ -641,6 +641,13 @@ def test_view_config_rejects_unknown_keys_and_wrong_types():
         TopologyView.from_config({"components": [1]})
 
 
+def test_view_config_errors_name_the_table_they_came_from():
+    with pytest.raises(ValueError, match=r"\[ui\.topology\] tasks"):
+        TopologyView.from_config({"tasks": "seed"})
+    with pytest.raises(ValueError, match=r"\[ui\.views\.manager\.topology\] tasks"):
+        TopologyView.from_config({"tasks": "seed"}, "[ui.views.manager.topology]")
+
+
 def test_unmatched_reports_names_that_match_no_component_of_that_kind():
     NS, *_ = make_chain()
 

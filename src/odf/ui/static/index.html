@@ -31,6 +31,7 @@
   <div class="hdr-status" id="hdr-status" role="status" aria-live="polite"><span class="dot"></span><span class="hdr-status-text">System Nominal</span></div>
   <div class="hdr-clock mono" id="hdr-clock">--:--:--</div>
   <div class="hdr-actions">
+    <select id="view-switcher" class="view-mode-select" title="View" aria-label="View" hidden></select>
     <button id="notifications-toggle" class="hdr-icon-btn" title="Notifications" aria-label="Show notifications" aria-pressed="false"><svg viewBox="0 0 16 16"><path d="M4 11V7a4 4 0 0 1 8 0v4l1.5 1.5h-11zM6.5 14h3"/></svg></button>
     <button id="activity-toggle" class="hdr-icon-btn" title="Activity log" aria-label="Toggle activity log" aria-pressed="false"><svg viewBox="0 0 16 16"><path d="M1.5 8h3l2-5 3 10 2-5h3"/></svg></button>
     <button id="chat-toggle" class="hdr-icon-btn" title="Chat" aria-label="Toggle chat" aria-pressed="false"><svg viewBox="0 0 16 16"><path d="M2.5 3h11v8h-6l-3 2.5V11h-2z"/></svg></button>
@@ -62,16 +63,7 @@
     <div class="corner-bracket br"></div>
     <div id="toasts" aria-live="polite"></div>
     <div id="coord-readout">CELL <b id="cr-cell">—:—</b> &nbsp;ZOOM <b id="cr-zoom">100%</b></div>
-    <div id="type-legend">
-      <div class="tl-item" style="color:var(--accent-config)" title="platform"><span class="tl-pip"></span>Config</div>
-      <div class="tl-item" style="color:var(--accent-component)" title="warehouse"><span class="tl-pip"></span>@Component</div>
-      <div class="tl-item" style="color:var(--accent-repository)" title="server rack"><span class="tl-pip"></span>@Repository</div>
-      <div class="tl-item" style="color:var(--accent-service)" title="antenna"><span class="tl-pip"></span>@Service</div>
-      <div class="tl-item" style="color:var(--accent-task)" title="factory cube"><span class="tl-pip"></span>@Task</div>
-      <div class="tl-item" style="color:var(--accent-pipeline)" title="conveyor"><span class="tl-pip"></span>@Pipeline</div>
-      <div class="tl-item" style="color:var(--accent-agent)" title="observatory"><span class="tl-pip"></span>@Agent</div>
-      <div class="tl-item" style="color:var(--accent-function)" title="relay box"><span class="tl-pip"></span>@Function</div>
-    </div>
+    <div id="type-legend"></div>
     <div id="zoom-controls">
       <button id="zoom-in"    title="Zoom in">+</button>
       <button id="zoom-out"   title="Zoom out">&minus;</button>

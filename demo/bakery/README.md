@@ -382,7 +382,22 @@ rack, an invoice, the messenger, flour sacks...), loaded through
 `[ui] icon-scripts`, and uses odf's built-in ones where they fit (the till,
 the delivery truck, the mailbox). Services, agents, reactions and the
 other functions keep their type's icon. Each node's icon is saved in
-`layout.json`, beside its place. Moving a node or picking another icon in
+`layout.json`, beside its place.
+
+That's the whole system, and most of it isn't what a manager looks at. The
+UI opens on the **Bakery** view (`[ui.views.manager]` in `config.toml`):
+the bakery's data, the agents drafting from it, the night run and closing
+the café, what a person does to a draft (confirm, edit, reject), and the
+questions a manager asks themselves: the margins, what a price change would
+do, where an ingredient ends up, what each label must say. A routine's
+steps (the forecast, the bake sheet, the delivery plan, counting the
+leftovers) stay hidden behind it, and so does the wiring: the tools'
+clients, the services taking their items in, the imports, the model and
+the clock. The switcher in the header turns to the **System** view, which
+shows all of it. Each view keeps its own places in `layout.json` (the
+manager's under `_views`), so moving a node in one leaves the other as it
+was. A view only changes what's drawn: the chat and MCP reach everything
+from either. Moving a node or picking another icon in
 the UI saves it in the container, so it holds until the container is
 recreated (`docker compose down`).
 
@@ -478,8 +493,8 @@ bakery/
 ├── compose.yaml          # the tools, Mailpit, and the bakery (this directory mounted), ports on loopback only
 ├── .env.example          # seed, clock speed, credentials
 ├── Dockerfile            # the bakery: odf from this repository's source, plus app/
-├── config.toml           # the bakery's odf config: the tools' addresses, ports, intervals
-├── layout.json           # the topology's layout: the integrations, then one band per area, and each node's icon
+├── config.toml           # the bakery's odf config: the tools' addresses, ports, intervals, the UI's views
+├── layout.json           # the topology's layout: the integrations, then one band per area, each node's icon, and the manager view's own places
 ├── icons/bakery.js       # the bakery's own topology icons: oven, bread rack, invoice, messenger, ...
 ├── app/                  # the bakery's odf project
 │   ├── layers.py         # one Layer per area: integrations, wholesale, cafe, production, ...

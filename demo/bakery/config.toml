@@ -84,7 +84,33 @@ interval = 5
 [ui]
 icon-scripts = ["icons/bakery.js"]
 
-[ui.topology]
+# Two views of the bakery, picked in the UI's header. The manager's, shown
+# first, has the bakery's data, the agents drafting from it, the night run
+# and closing the café (their steps stay hidden: the routine stands for
+# them), what a manager does to a draft, and the questions they ask
+# themselves: margins, a price change, an ingredient's trail, the labels.
+# The system view has the wiring as well: the tools' clients, the services
+# taking their items in, the imports, the model, the clock. Each keeps its
+# own places in layout.json.
+[ui.views.manager]
+label = "Bakery"
+default = true
+
+[ui.views.manager.topology]
+config = false
+components = []
+services = []
+tasks = []
+pipelines = ["close-cafe", "night-run"]
+functions = [
+    "confirm-draft", "edit-draft", "reject-draft",
+    "what-if", "margins", "trace-ingredient", "labels",
+]
+
+[ui.views.system]
+label = "System"
+
+[ui.views.system.topology]
 config = false
 components = [  # all but SQLite
     "clock", "pos", "messenger", "drive", "weather", "mail", "model",
