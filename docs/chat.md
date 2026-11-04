@@ -261,12 +261,12 @@ everyone using the UI: a thread's notes are the team's notes.
 
 ## Full screen
 
-**Expand** (the outward arrows in the drawer's header) shows the chat full
+**Expand** (the arrows pointing out to the sides, in the drawer's header) shows the chat full
 screen in place of the topology, as big as the Notifications view. With
 channels or kept conversations, the list stays on the left beside the open
 one, the current one marked, so moving between threads takes one click
 instead of **Back** (the arrow left of the title). **Collapse** (the same
-button, arrows inward) returns to the topology with the drawer still open.
+button, its arrows pointing in) returns to the topology with the drawer still open.
 Leaving the view the way any view is left (Esc outside the input, the
 Notifications or Activity button, a component picked in the sidebar) does the
 same, and **Close** (×) closes the chat. Whether the chat opens full screen

@@ -2516,7 +2516,13 @@ def test_ui_chat_expands_to_full_screen():
     script = (themes.STATIC_DIR / "app.js").read_text()
 
     # The drawer's header buttons are icons, named by their aria-label.
-    for button in ("chat-back", "chat-delete", "chat-expand", "chat-drawer-close"):
+    for button in (
+        "chat-back",
+        "chat-delete",
+        "chat-expand",
+        "chat-drawer-close",
+        "activity-drawer-close",
+    ):
         assert f'id="{button}" class="hdr-icon-btn"' in html, button
     assert "function setChatFull(on)" in script
     assert "CHAT_EXPAND_ICONS.collapse" in script
