@@ -13,6 +13,7 @@ from opendataframework.function import Function
 from opendataframework.namespace import Namespace
 from opendataframework.repository import Repository
 from opendataframework.service import Service
+from opendataframework.task import Task
 from opendataframework.view import (
     AudioView,
     ContentMetadata,
@@ -111,6 +112,103 @@ def test_topology_endpoint_moves_nodes_off_saved_cells(tmp_path):
         nodes = client.get("/api/topology").json()["nodes"]
 
     assert {n["id"]: (n["col"], n["row"]) for n in nodes} == {"n-s.bbb": (0, 0), "n-s.aaa": (0, 1)}
+
+
+def make_views():
+    from odf.ui import views
+
+    return views.from_config(
+        {
+            "views": {
+                "manager": {"label": "Bakery", "topology": {"components": ["Front"]}},
+                "system": {"default": True},
+            }
+        }
+    )
+
+
+def make_front_and_plumbing():
+    NS = make_ns()
+
+    @NS
+    @Component
+    class Plumbing: ...
+
+    @NS
+    @Component
+    class Front:
+        def __init__(self, plumbing: Plumbing) -> None: ...
+
+    return NS
+
+
+def test_topology_endpoint_shows_the_view_asked_for_else_the_default():
+    NS = make_front_and_plumbing()
+    views, default = make_views()
+    with Context(namespaces={NS}) as ctx:
+        client = TestClient(UiServer(ctx, "proj", views=views, default_view=default)._app)
+        manager = client.get("/api/topology", params={"view": "manager"}).json()
+        default_body = client.get("/api/topology").json()
+
+    assert manager["view"] == "manager"
+    assert [n["id"] for n in manager["nodes"] if n["type"] == "component"] == ["n-s.front"]
+    assert default_body["view"] == "system"
+    assert {n["id"] for n in default_body["nodes"] if n["type"] == "component"} == {
+        "n-s.front",
+        "n-s.plumbing",
+    }
+
+
+def test_topology_endpoint_404s_on_an_unknown_view_or_a_view_without_views():
+    NS = make_front_and_plumbing()
+    views, default = make_views()
+    with Context(namespaces={NS}) as ctx:
+        with_views = TestClient(UiServer(ctx, "proj", views=views, default_view=default)._app)
+        without = TestClient(UiServer(ctx, "proj")._app)
+
+        assert with_views.get("/api/topology", params={"view": "nope"}).status_code == 404
+        assert without.get("/api/topology", params={"view": "manager"}).status_code == 404
+        assert without.get("/api/topology").json()["view"] is None
+
+
+def test_topology_endpoint_places_nodes_at_the_views_own_cells(tmp_path):
+    NS = make_front_and_plumbing()
+    views, default = make_views()
+    layout_file = tmp_path / "layout.json"
+    layout_file.write_text(
+        json.dumps(
+            {
+                "n-s.front": {"col": 3, "row": 2, "icon": "truck"},
+                "_views": {"manager": {"n-s.front": {"col": 0, "row": 5}}},
+            }
+        )
+    )
+    with Context(namespaces={NS}) as ctx:
+        client = TestClient(
+            UiServer(ctx, "proj", layout_file=layout_file, views=views, default_view=default)._app
+        )
+        manager = client.get("/api/topology", params={"view": "manager"}).json()["nodes"]
+        system = client.get("/api/topology", params={"view": "system"}).json()["nodes"]
+
+    assert {n["id"]: (n["col"], n["row"]) for n in manager}["n-s.front"] == (0, 5)
+    assert {n["id"]: (n["col"], n["row"]) for n in system}["n-s.front"] == (3, 2)
+
+
+def test_extensions_list_the_views_and_the_default():
+    views, default = make_views()
+    with Context(namespaces=set()) as ctx:
+        with_views = TestClient(UiServer(ctx, "proj", views=views, default_view=default)._app)
+        without = TestClient(UiServer(ctx, "proj")._app)
+        listed = with_views.get("/api/ui/extensions").json()
+        none = without.get("/api/ui/extensions").json()
+
+    assert listed["views"] == [
+        {"name": "manager", "label": "Bakery"},
+        {"name": "system", "label": "system"},
+    ]
+    assert listed["defaultView"] == "system"
+    assert none["views"] == []
+    assert none["defaultView"] is None
 
 
 def test_url_reflects_host_and_port():
@@ -283,6 +381,199 @@ def test_function_logs_endpoint_returns_its_calls(tmp_path):
 
     assert r.status_code == 200
     assert any("completed" in e["message"] for e in r.json())
+
+
+def test_logs_endpoint_with_a_call_returns_that_calls_records_only(tmp_path):
+    NS = make_ns()
+
+    from opendataframework.logger import Logger
+
+    @NS
+    @Task
+    class Load:
+        def __init__(self, logger: Logger) -> None:
+            self.logger = logger
+
+        def execute(self) -> None:
+            self.logger.info("loading")
+
+    seen = []
+    with Context(namespaces={NS}, log_dir=tmp_path) as ctx:
+        ctx.events.subscribe(seen.append)
+        ctx.execute(ctx.key(Load))
+        ctx.execute(ctx.key(Load))
+        client = TestClient(UiServer(ctx, "proj")._app)
+        first = seen[0].call_id
+        r = client.get("/api/tasks/load/logs", params={"call": first})
+
+    assert r.status_code == 200
+    body = r.json()
+    assert [e["message"] for e in body][1] == "loading"
+    assert {e.get("call") or e.get("parent") for e in body} == {first}
+    assert len(body) == 3
+
+
+def test_logs_endpoint_with_a_call_answers_409_without_file_logging():
+    NS = make_ns()
+
+    @NS
+    @Task
+    class Load:
+        def execute(self) -> None: ...
+
+    with Context(namespaces={NS}) as ctx:
+        client = TestClient(UiServer(ctx, "proj")._app)
+        r = client.get("/api/tasks/load/logs", params={"call": "abc"})
+
+    assert r.status_code == 409
+
+
+# --- notification history endpoint ----------------------------------------------
+
+
+def _publish_history(ctx):
+    ctx.notifications.publish("orders.received", {}, summary="Le Petit: 2", key="hooks")
+    ctx.notifications.publish("orders.quiet", {}, key="hooks")
+    ctx.notifications.publish("stock.low", {}, summary="Butter low", level="warning", key="Store")
+
+
+def test_notification_history_endpoint_reads_newest_first_with_a_summary(tmp_path):
+    with Context(log_dir=tmp_path) as ctx:
+        _publish_history(ctx)
+        client = TestClient(UiServer(ctx, "proj")._app)
+        rows = client.get("/api/notifications/history").json()
+        everything = client.get("/api/notifications/history?all=1").json()
+
+    assert [r["summary"] for r in rows] == ["Butter low", "Le Petit: 2"]
+    assert rows[0]["key"] == "Store" and rows[0]["publisher"] == "store"
+    assert rows[0]["level"] == "warning" and rows[0]["cursor"]
+    assert [r["topic"] for r in everything] == ["stock.low", "orders.quiet", "orders.received"]
+
+
+def test_notification_history_endpoint_filters_and_pages(tmp_path):
+    with Context(log_dir=tmp_path) as ctx:
+        _publish_history(ctx)
+        client = TestClient(UiServer(ctx, "proj")._app)
+        get = lambda query: client.get(f"/api/notifications/history?{query}").json()  # noqa: E731
+        by_topic = get("topic=orders.*&all=1")
+        by_topics = get("topic=orders.received&topic=stock.low")
+        by_level = get("level=warning&level=error")
+        by_key = get("key=store")
+        first = get("limit=1")
+        second = get(f"limit=1&before={first[0]['cursor']}")
+
+    assert [r["topic"] for r in by_topic] == ["orders.quiet", "orders.received"]
+    assert [r["topic"] for r in by_topics] == ["stock.low", "orders.received"]
+    assert [r["topic"] for r in by_level] == ["stock.low"]
+    assert [r["key"] for r in by_key] == ["Store"]
+    assert [r["topic"] for r in first + second] == ["stock.low", "orders.received"]
+
+
+def test_notification_history_endpoint_rejects_a_bad_filter(tmp_path):
+    with Context(log_dir=tmp_path) as ctx:
+        _publish_history(ctx)
+        client = TestClient(UiServer(ctx, "proj")._app)
+        bad_topic = client.get("/api/notifications/history?topic=a*b")
+        bad_level = client.get("/api/notifications/history?level=warn")
+        bad_cursor = client.get("/api/notifications/history?before=nope")
+
+    assert (bad_topic.status_code, bad_level.status_code, bad_cursor.status_code) == (400, 400, 400)
+
+
+def test_notification_history_endpoint_clamps_the_limit(tmp_path):
+    with Context(log_dir=tmp_path) as ctx:
+        _publish_history(ctx)
+        client = TestClient(UiServer(ctx, "proj")._app)
+        none = client.get("/api/notifications/history?limit=0")
+        many = client.get("/api/notifications/history?limit=5000")
+
+    assert len(none.json()) == 1
+    assert len(many.json()) == 2
+
+
+def test_notification_history_endpoint_is_409_without_file_logging():
+    with Context() as ctx:
+        client = TestClient(UiServer(ctx, "proj")._app)
+        r = client.get("/api/notifications/history")
+        bad = client.get("/api/notifications/history?level=warn")
+
+    assert r.status_code == 409
+    assert bad.status_code == 400
+
+
+# --- trace endpoint -----------------------------------------------------------
+
+
+def _reaction_ns():
+    """A message taken in, a subscriber reacting to it, and a draft made inside the reaction."""
+    from collections.abc import Callable
+    from typing import Annotated
+
+    from opendataframework import Notification, Notifications, Publisher, Subscriber
+
+    NS = make_ns()
+
+    @NS
+    @Publisher("message.in")
+    @Function
+    def take(text: str, notifications: Notifications) -> None:
+        notifications.publish("message.in", {"text": text}, summary=f"got {text}")
+
+    @NS
+    @Publisher("draft.made")
+    @Function
+    def draft(text: str, notifications: Notifications) -> None:
+        notifications.publish("draft.made", {"text": text}, summary=f"drafted {text}")
+
+    @NS
+    @Subscriber("message.in")
+    @Component
+    class Desk:
+        def __init__(self, make_draft: Annotated[Callable[..., None], draft]) -> None:
+            self.make_draft = make_draft
+
+        def on_notification(self, notification: Notification) -> None:
+            self.make_draft(text=notification.payload["text"])
+
+    return NS, take
+
+
+def test_trace_endpoint_climbs_from_a_reaction_to_the_call_it_started_from(tmp_path):
+    NS, take = _reaction_ns()
+    seen = []
+    with Context(namespaces={NS}, log_dir=tmp_path) as ctx:
+        ctx.events.subscribe(seen.append)
+        ctx.call(ctx.key(take), text="2 baguettes")
+        draft_call = next(e.call_id for e in seen if e.key.endswith(".draft"))
+        client = TestClient(UiServer(ctx, "proj")._app)
+        r = client.get(f"/api/trace/{draft_call}")
+
+    assert r.status_code == 200
+    root = r.json()
+    assert root["key"] == ctx.key(take)
+    (received,) = root["notifications"]
+    assert received["topic"] == "message.in"
+    (reaction,) = received["triggered"]
+    assert reaction["key"].endswith(".desk")
+    (made,) = reaction["children"]
+    assert made["call"] == draft_call
+    assert [n["topic"] for n in made["notifications"]] == ["draft.made"]
+
+
+def test_trace_endpoint_answers_404_for_a_call_not_in_the_logs(tmp_path):
+    with Context(namespaces=set(), log_dir=tmp_path) as ctx:
+        client = TestClient(UiServer(ctx, "proj")._app)
+        r = client.get("/api/trace/nope")
+
+    assert r.status_code == 404
+
+
+def test_trace_endpoint_answers_409_without_file_logging():
+    with Context(namespaces=set()) as ctx:
+        client = TestClient(UiServer(ctx, "proj")._app)
+        r = client.get("/api/trace/abc")
+
+    assert r.status_code == 409
 
 
 def test_function_has_no_details_or_chart():
@@ -519,9 +810,10 @@ def test_events_endpoint_streams_calls_as_server_sent_events():
 def test_notifications_endpoint_streams_published_notifications():
     NS = make_ns()
 
-    from opendataframework.notifications import Notifications
+    from opendataframework.notifications import Notifications, Publisher
     from opendataframework.task import Task
 
+    @Publisher("orders.received")
     @NS
     @Task
     class TakeOrder:
@@ -1925,7 +2217,7 @@ def test_annotations_are_not_served_for_other_repositories(tmp_path):
 class StubChatEngine:
     model = "stub-model"
 
-    async def stream(self, messages):
+    async def stream(self, messages, context=None):
         yield {"type": "token", "content": "Hello"}
         yield {"type": "token", "content": ", world"}
 
@@ -1936,7 +2228,7 @@ def test_chat_config_endpoint_disabled_by_default():
         r = client.get("/api/chat/config")
 
     assert r.status_code == 200
-    assert r.json() == {"enabled": False, "model": None}
+    assert r.json() == {"enabled": False, "model": None, "history": False}
 
 
 def test_chat_endpoint_returns_404_when_disabled():
@@ -1953,7 +2245,7 @@ def test_chat_config_endpoint_reflects_enabled_engine():
         r = client.get("/api/chat/config")
 
     assert r.status_code == 200
-    assert r.json() == {"enabled": True, "model": "stub-model"}
+    assert r.json() == {"enabled": True, "model": "stub-model", "history": False}
 
 
 def test_chat_endpoint_streams_ndjson_events():
@@ -2301,6 +2593,53 @@ def test_ui_header_status_shows_run_activity():
         css = (themes.STATIC_DIR / "themes" / name / "theme.css").read_text()
         assert ".hdr-status.failed{" in css, name
         assert ".hdr-status.running .dot" in css, name
+
+
+def test_ui_has_the_notifications_view():
+    html = (themes.STATIC_DIR / "index.html").read_text()
+    script = (themes.STATIC_DIR / "app.js").read_text()
+
+    assert 'id="notifications-toggle"' in html
+    assert "/api/notifications/history?" in script
+    assert "function showNotificationsView()" in script
+    # One stream backs the toasts and the view, and only the view sees rows
+    # without a summary.
+    assert script.count("new EventSource('/api/notifications')") == 1
+    assert "onNotification(n);\n    if (mapMode === 'notifications') onNotesLive(n);" in script
+
+
+def test_ui_chat_expands_to_full_screen():
+    html = (themes.STATIC_DIR / "index.html").read_text()
+    script = (themes.STATIC_DIR / "app.js").read_text()
+
+    # The drawer's header buttons are icons, named by their aria-label.
+    for button in (
+        "chat-back",
+        "chat-delete",
+        "chat-expand",
+        "chat-drawer-close",
+        "activity-drawer-close",
+    ):
+        assert f'id="{button}" class="hdr-icon-btn"' in html, button
+    assert "function setChatFull(on)" in script
+    assert "CHAT_EXPAND_ICONS.collapse" in script
+    assert "'odf-ui-chat-full'" in script
+    # Collapsing, or leaving the view any other way, keeps the open
+    # conversation (an answer streaming into it included).
+    assert "if (leftChat) layoutChat();" in script
+    for name in themes.list_themes():
+        css = (themes.STATIC_DIR / "themes" / name / "theme.css").read_text()
+        assert "#map.mode-chat #chat-drawer{" in css, name
+        assert "#map.mode-chat #chat-drawer.split{" in css, name
+
+
+def test_ui_draws_notification_links_and_lights_them_for_reactions():
+    script = (themes.STATIC_DIR / "app.js").read_text()
+
+    assert "notifies = data.notifies || [];" in script
+    assert "function drawNotifyLink(fromNode, toNode, reacting)" in script
+    assert "if (e.cause) onReactionEvent(e);" in script
+    assert "rememberNotifier(n);\n    onNotification(n);" in script
 
 
 def test_ui_has_the_lightbox_tool_rail():

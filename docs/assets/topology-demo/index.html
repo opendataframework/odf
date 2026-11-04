@@ -10,92 +10,97 @@
 *,*::before,*::after{margin:0;padding:0;box-sizing:border-box}
 
 :root, :root[data-theme="dark"] {
-  --bg: #050506;
-  --bg-canvas: #030304;
-  --panel: #08090a;
-  --panel-rgb: 8,9,10;
-  --border: #1c1f23;
-  --border-strong: #2c3138;
-  --text: #d8dade;
-  --text-muted: #7d838c;
-  --text-dim: #4a4f57;
-  --hover-bg: #101215;
-  /* No accent hue at all: dark theme's accent is light theme's panel white,
-     and vice versa below — the two themes' own base tones, swapped. */
+  --bg: #000000;
+  --bg-canvas: #000000;
+  --panel: #0a0a0a;
+  --panel-rgb: 10,10,10;
+  --border: #1f1f1f;
+  --border-strong: #333333;
+  --text: #ededed;
+  --text-muted: #a1a1a1;
+  --text-dim: #666666;
+  --hover-bg: #141414;
+  /* No brand hue: everything interactive (active tab, focus ring, primary
+     button, links) is plain white, and the chrome around it is grey. */
   --title-accent: #ffffff;
 
-  --accent-config: #7b8794;
-  --accent-component: #c98a3e;
-  --accent-repository: #6c8ebf;
-  --accent-service: #3fb6c9;
-  --accent-task: #7fa876;
-  --accent-pipeline: #c9a227;
-  --accent-agent: #a48ad6;
-  --accent-function: #d17fb0;
-  --accent-alert: #c9524a;
+  /* Kind and layer colors stay hues, muted, so nodes are still told apart. */
+  --accent-config: #8a8a8a;
+  --accent-component: #c9a06a;
+  --accent-repository: #7f9cc4;
+  --accent-service: #74b3b3;
+  --accent-task: #7fb59a;
+  --accent-pipeline: #c4b26e;
+  --accent-agent: #a597c9;
+  --accent-function: #c497b4;
+  --accent-alert: #d47c7c;
 
-  --layer-api: #7b8ad6;
-  --layer-storage: #cf6f96;
-  --layer-analytics: #a3ab4a;
-  --layer-messaging: #6bab6f;
-  --layer-monitoring: #c9a25a;
-  --layer-security: #c17158;
+  --layer-api: #9890c9;
+  --layer-storage: #c48ea8;
+  --layer-analytics: #aab070;
+  --layer-messaging: #82b392;
+  --layer-monitoring: #c9a96e;
+  --layer-security: #c98c78;
 
-  --wire: #262a2f;
-  --wire-glow: #33383e;
-  --tile-fill: #08090a;
-  --tile-stroke: #17191c;
-  --label-bg-rgb: 5,6,7;
+  --wire: #262626;
+  --wire-glow: #525252;
+  --tile-fill: #0a0a0a;
+  --tile-stroke: #1a1a1a;
+  --label-bg-rgb: 0,0,0;
   --label-bg-alpha: 0.92;
-  --vignette-rgb: 2,2,3;
-  --vignette-alpha: 0.6;
+  --vignette-rgb: 0,0,0;
+  --vignette-alpha: 0.45;
 
-  --panel-shadow: inset 0 1px 0 rgba(255,255,255,.02);
-  --ok: #4fae7a;
+  --panel-shadow: 0 1px 2px rgba(0,0,0,.5);
+  --popover-shadow: 0 8px 24px rgba(0,0,0,.6);
+  --focus-ring: 0 0 0 3px color-mix(in srgb, var(--title-accent) 18%, transparent);
+  --ok: #7fb59a;
 }
 
 :root[data-theme="light"] {
-  --bg: #f2f3f4;
-  --bg-canvas: #e8eaec;
+  --bg: #fafafa;
+  --bg-canvas: #f5f5f5;
   --panel: #ffffff;
   --panel-rgb: 255,255,255;
-  --border: #d7dade;
-  --border-strong: #b9bec4;
-  --text: #14161a;
-  --text-muted: #5a6069;
-  --text-dim: #8b9098;
-  --hover-bg: #eef0f2;
-  /* Dark theme's panel black, used here as the light theme's accent. */
-  --title-accent: #08090a;
+  --border: #eaeaea;
+  --border-strong: #d4d4d4;
+  --text: #0a0a0a;
+  --text-muted: #666666;
+  --text-dim: #a1a1a1;
+  --hover-bg: #f2f2f2;
+  /* Black in light mode, the inverse of dark mode's white. */
+  --title-accent: #000000;
 
-  --accent-config: #5a6672;
-  --accent-component: #a3661f;
-  --accent-repository: #3f5f8f;
-  --accent-service: #0f7a8c;
-  --accent-task: #4f7a49;
-  --accent-pipeline: #8a6d10;
-  --accent-agent: #6b4fa8;
-  --accent-function: #9c4377;
-  --accent-alert: #a83b34;
+  --accent-config: #737373;
+  --accent-component: #9a6f35;
+  --accent-repository: #4f6f99;
+  --accent-service: #3f8585;
+  --accent-task: #4a8a6a;
+  --accent-pipeline: #8c7a35;
+  --accent-agent: #6f5f9e;
+  --accent-function: #9a5f84;
+  --accent-alert: #b44d4d;
 
-  --layer-api: #5262b8;
-  --layer-storage: #a8456f;
-  --layer-analytics: #7c8025;
-  --layer-messaging: #3d7a42;
-  --layer-monitoring: #8f6a1f;
-  --layer-security: #9c4a34;
+  --layer-api: #6a5fa6;
+  --layer-storage: #a05a7c;
+  --layer-analytics: #7a8235;
+  --layer-messaging: #4a8a5c;
+  --layer-monitoring: #9a7535;
+  --layer-security: #a5604a;
 
-  --wire: #c7cbd0;
-  --wire-glow: #aeb3ba;
+  --wire: #d4d4d4;
+  --wire-glow: #a3a3a3;
   --tile-fill: #ffffff;
-  --tile-stroke: #dfe2e6;
+  --tile-stroke: #eaeaea;
   --label-bg-rgb: 255,255,255;
   --label-bg-alpha: 0.94;
-  --vignette-rgb: 30,32,36;
-  --vignette-alpha: 0.045;
+  --vignette-rgb: 0,0,0;
+  --vignette-alpha: 0.03;
 
-  --panel-shadow: inset 0 1px 0 rgba(15,16,20,.02);
-  --ok: #1f8a54;
+  --panel-shadow: 0 1px 2px rgba(0,0,0,.05);
+  --popover-shadow: 0 8px 24px rgba(0,0,0,.08);
+  --focus-ring: 0 0 0 3px color-mix(in srgb, var(--title-accent) 12%, transparent);
+  --ok: #4a8a6a;
 }
 
 *{scrollbar-width:thin;scrollbar-color:var(--border-strong) transparent}
@@ -453,13 +458,7 @@ canvas{display:block;cursor:grab}
     <div id="coord-readout">CELL <b id="cr-cell">—:—</b> &nbsp;ZOOM <b id="cr-zoom">100%</b></div>
     <div id="type-legend">
       <div class="tl-item" style="color:var(--accent-config)" title="platform"><span class="tl-pip"></span>Config</div>
-      <div class="tl-item" style="color:var(--accent-component)" title="warehouse"><span class="tl-pip"></span>@Component</div>
       <div class="tl-item" style="color:var(--accent-repository)" title="server rack"><span class="tl-pip"></span>@Repository</div>
-      <div class="tl-item" style="color:var(--accent-service)" title="antenna"><span class="tl-pip"></span>@Service</div>
-      <div class="tl-item" style="color:var(--accent-task)" title="factory cube"><span class="tl-pip"></span>@Task</div>
-      <div class="tl-item" style="color:var(--accent-pipeline)" title="conveyor"><span class="tl-pip"></span>@Pipeline</div>
-      <div class="tl-item" style="color:var(--accent-agent)" title="observatory"><span class="tl-pip"></span>@Agent</div>
-      <div class="tl-item" style="color:var(--accent-function)" title="relay box"><span class="tl-pip"></span>@Function</div>
     </div>
     <div id="zoom-controls">
       <button id="zoom-in"    title="Zoom in">+</button>

@@ -171,6 +171,107 @@ FREEFORM_MESSAGES = (
 )
 
 
+@dataclass(frozen=True)
+class Supplier:
+    """Someone the bakery buys ingredients from, who emails an invoice after each delivery."""
+
+    name: str
+    email: str
+    weekday: str  # the day its invoice comes
+    # "table": a typed invoice, with a table of lines. "note": the farm's, a
+    # few handwritten-looking lines that only a model (or a person) reads.
+    layout: str
+
+
+SUPPLIERS: tuple[Supplier, ...] = (
+    Supplier("Millers Ltd", "accounts@millers.example", "Monday", "table"),
+    Supplier("Vale Dairy", "invoices@valedairy.example", "Tuesday", "table"),
+    Supplier("Harbour Wholesale", "billing@harbourwholesale.example", "Wednesday", "table"),
+    Supplier("Hill Farm", "tom@hillfarm.example", "Thursday", "note"),
+)
+
+BY_SUPPLIER = {s.name: s for s in SUPPLIERS}
+
+
+@dataclass(frozen=True)
+class Ingredient:
+    """Something that goes into what the bakery bakes, and what a unit of it costs at first.
+
+    ``invoice_name`` is what its supplier calls it on an invoice. Bake time
+    is an ingredient too, by the minute: the baker's time and the ovens',
+    which no supplier invoices.
+    """
+
+    code: str
+    name: str
+    unit: str  # "kg", "L", "each" or "minute"
+    supplier: str  # "" for bake time
+    invoice_name: str
+    price: float  # pounds per unit
+    weekly: float  # roughly how much a week's delivery brings, in units
+
+
+INGREDIENTS: tuple[Ingredient, ...] = (
+    Ingredient(
+        "FLOUR", "Strong white flour", "kg", "Millers Ltd", "Strong white bread flour", 0.95, 220
+    ),
+    Ingredient("RYE-FLOUR", "Rye flour", "kg", "Millers Ltd", "Dark rye flour", 1.30, 40),
+    Ingredient("SUGAR", "Caster sugar", "kg", "Millers Ltd", "Caster sugar", 1.10, 15),
+    Ingredient("YEAST", "Fresh yeast", "kg", "Millers Ltd", "Fresh yeast", 6.50, 3),
+    Ingredient("SALT", "Sea salt", "kg", "Millers Ltd", "Fine sea salt", 0.80, 5),
+    Ingredient("BUTTER", "Butter", "kg", "Vale Dairy", "Unsalted butter", 7.20, 45),
+    Ingredient("MILK", "Whole milk", "L", "Vale Dairy", "Whole milk", 0.95, 30),
+    Ingredient(
+        "CHOCOLATE", "Dark chocolate batons", "kg", "Harbour Wholesale", "Chocolate batons 44%",
+        9.00, 6,
+    ),
+    Ingredient(
+        "OLIVE-OIL", "Olive oil", "L", "Harbour Wholesale", "Extra virgin olive oil", 7.50, 8
+    ),
+    Ingredient("EGGS", "Free-range eggs", "each", "Hill Farm", "eggs", 0.28, 450),
+    Ingredient("BAKE-TIME", "Bake time", "minute", "", "", 0.32, 0),
+)  # fmt: skip
+
+BY_INGREDIENT = {i.code: i for i in INGREDIENTS}
+
+# The 14 allergens UK food law says a label must declare.
+ALLERGENS = (
+    "celery", "gluten", "crustaceans", "eggs", "fish", "lupin", "milk", "molluscs", "mustard",
+    "nuts", "peanuts", "sesame", "soya", "sulphites",
+)  # fmt: skip
+
+# What each ingredient's supplier declares: (ingredient, allergen, "contains" or "may contain").
+INGREDIENT_ALLERGENS: tuple[tuple[str, str, str], ...] = (
+    ("FLOUR", "gluten", "contains"),
+    ("RYE-FLOUR", "gluten", "contains"),
+    ("BUTTER", "milk", "contains"),
+    ("MILK", "milk", "contains"),
+    ("EGGS", "eggs", "contains"),
+    ("CHOCOLATE", "milk", "contains"),
+    ("CHOCOLATE", "soya", "contains"),
+    ("CHOCOLATE", "nuts", "may contain"),
+)
+
+# What one of each wholesale product takes: (sku, ingredient, quantity in its unit).
+RECIPES: tuple[tuple[str, str, float], ...] = (
+    ("SD-LOAF", "FLOUR", 0.5), ("SD-LOAF", "SALT", 0.01), ("SD-LOAF", "BAKE-TIME", 4),
+    ("BAG", "FLOUR", 0.25), ("BAG", "SALT", 0.005), ("BAG", "YEAST", 0.003),
+    ("BAG", "BAKE-TIME", 2),
+    ("RYE", "RYE-FLOUR", 0.35), ("RYE", "FLOUR", 0.1), ("RYE", "SALT", 0.008),
+    ("RYE", "YEAST", 0.005), ("RYE", "BAKE-TIME", 4),
+    ("BRI", "FLOUR", 0.25), ("BRI", "BUTTER", 0.08), ("BRI", "EGGS", 2), ("BRI", "SUGAR", 0.03),
+    ("BRI", "MILK", 0.05), ("BRI", "YEAST", 0.006), ("BRI", "BAKE-TIME", 3),
+    ("FOC", "FLOUR", 0.3), ("FOC", "OLIVE-OIL", 0.04), ("FOC", "SALT", 0.006),
+    ("FOC", "YEAST", 0.004), ("FOC", "BAKE-TIME", 3),
+    ("CRO", "FLOUR", 0.045), ("CRO", "BUTTER", 0.03), ("CRO", "MILK", 0.012),
+    ("CRO", "SUGAR", 0.006), ("CRO", "YEAST", 0.002), ("CRO", "EGGS", 0.1),
+    ("CRO", "BAKE-TIME", 2.5),
+    ("PAC", "FLOUR", 0.045), ("PAC", "BUTTER", 0.03), ("PAC", "CHOCOLATE", 0.012),
+    ("PAC", "MILK", 0.012), ("PAC", "SUGAR", 0.006), ("PAC", "YEAST", 0.002),
+    ("PAC", "EGGS", 0.1), ("PAC", "BAKE-TIME", 2.5),
+)  # fmt: skip
+
+
 def standing_orders(seed: int) -> list[tuple[str, str, str, int]]:
     """Return ``(restaurant, weekday, sku, quantity)`` rows: each restaurant's usual order."""
     rng = random.Random(seed)
@@ -239,6 +340,18 @@ def write_sheets(folder: Path, seed: int, contracts_until: str) -> list[str]:
             ("restaurant", "sku", "price", "valid_until"),
             [(r, sku, f"{price:.2f}", contracts_until) for r, sku, price in contract_prices(seed)],
         ),
+        "ingredients.csv": (
+            ("code", "name", "unit", "supplier", "invoice_name", "price"),
+            [
+                (i.code, i.name, i.unit, i.supplier, i.invoice_name, f"{i.price:.2f}")
+                for i in INGREDIENTS
+            ],
+        ),
+        "recipes.csv": (
+            ("sku", "ingredient", "quantity"),
+            [(sku, ingredient, f"{quantity:g}") for sku, ingredient, quantity in RECIPES],
+        ),
+        "allergens.csv": (("ingredient", "allergen", "kind"), list(INGREDIENT_ALLERGENS)),
     }
     written = []
     for name, (header, rows) in sheets.items():

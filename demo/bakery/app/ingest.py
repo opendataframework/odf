@@ -6,13 +6,41 @@ each item is a call of its own: it's logged, it shows on the topology, and the
 notification it publishes records that call as its ``parent``.
 """
 
+import threading
 from datetime import datetime
+from functools import partial
 
-from opendataframework import Function, Notifications
+from opendataframework import Function, Notifications, Publisher
 
+from app import layers
 from app.clients import Drive
-from app.entities import CafeSale, Contract, Message, Product, Restaurant, StandingOrder
-from app.repositories import CafeSales, Contracts, Messages, Products, Restaurants, StandingOrders
+from app.entities import (
+    CafeSale,
+    Contract,
+    Ingredient,
+    IngredientAllergen,
+    Invoice,
+    Message,
+    Product,
+    RecipeLine,
+    Restaurant,
+    StandingOrder,
+)
+from app.repositories import (
+    Allergens,
+    CafeSales,
+    Contracts,
+    Ingredients,
+    Invoices,
+    Messages,
+    Products,
+    Recipes,
+    Restaurants,
+    StandingOrders,
+)
+
+# One sync of the sheets at a time: two at once would interleave their rows.
+_SYNCING = threading.Lock()
 
 # Lines that are only a greeting, as an email's first line usually is.
 _GREETINGS = ("hi", "hello", "hey", "morning", "good morning", "good evening")
@@ -30,6 +58,8 @@ def gist(text: str) -> str:
     return next((line for line in lines if not _is_greeting(line)), lines[0] if lines else "")
 
 
+@layers.Integrations
+@Publisher("messages.received")
 @Function
 def ingest_message(
     channel: str,
@@ -107,6 +137,8 @@ def sale_lines(order: dict) -> list[CafeSale]:
     ]
 
 
+@layers.Integrations
+@Publisher("pos.sale")
 @Function
 def ingest_sale(order: dict, sales: CafeSales, notifications: Notifications) -> bool:
     """Take in a café order from the POS, once.
@@ -141,13 +173,18 @@ def _price(value: str) -> float | None:
     return float(value) if value.strip() else None
 
 
+@layers.Integrations
+@Publisher("sheets.changed")
 @Function
-def import_sheets(
+def sync_sheets(
     drive: Drive,
     products: Products,
     restaurants: Restaurants,
     standing_orders: StandingOrders,
     contracts: Contracts,
+    ingredients: Ingredients,
+    recipes: Recipes,
+    allergens: Allergens,
     messages: Messages,
     notifications: Notifications,
     announce: bool = True,
@@ -156,8 +193,10 @@ def import_sheets(
 
     The sheets are where the owner keeps this data, so they win. Messages are
     then matched to the restaurants again, so a message that came in before
-    its restaurant was on the sheet is linked to it now. Publishes
-    ``sheets.changed``.
+    its restaurant was on the sheet is linked to it now. A sheet that isn't
+    on the drive leaves its records as they are, so a drive that's away for a
+    moment doesn't empty the bakery; an empty sheet does empty them. Publishes
+    ``sheets.changed``, unless no sheet was there.
 
     Args:
         drive: The shared drive, injected.
@@ -165,48 +204,143 @@ def import_sheets(
         restaurants: Replaced from ``restaurants.csv``, injected.
         standing_orders: Replaced from ``standing_orders.csv``, injected.
         contracts: Replaced from ``contracts.csv``, injected.
+        ingredients: Replaced from ``ingredients.csv``, injected.
+        recipes: Replaced from ``recipes.csv``, injected.
+        allergens: The sheet's replaced from ``allergens.csv``; those an
+            invoice declared are kept, injected.
         messages: Matched to the restaurants again, injected.
         notifications: Bound to this function, injected.
         announce: ``False`` while onboarding: imported, not announced.
 
     Returns:
-        How many rows each sheet had.
+        How many rows each sheet on the drive had.
     """
+    with _SYNCING:
+        return _sync_sheets(
+            drive, products, restaurants, standing_orders, contracts, ingredients, recipes,
+            allergens, messages, notifications, announce,
+        )  # fmt: skip
+
+
+def _sync_sheets(
+    drive: Drive,
+    products: Products,
+    restaurants: Restaurants,
+    standing_orders: StandingOrders,
+    contracts: Contracts,
+    ingredients: Ingredients,
+    recipes: Recipes,
+    allergens: Allergens,
+    messages: Messages,
+    notifications: Notifications,
+    announce: bool,
+) -> dict:
+    """Do ``sync_sheets``' work, under its lock."""
+    # What each sheet's rows are called, its file, where they go, and how a row reads.
+    sheets = [
+        ("products", "products.csv", products.replace_all, lambda r: Product(
+            r["sku"], r["name"], r["kind"], float(r["cafe_price"]), _price(r["wholesale_price"])
+        )),
+        ("restaurants", "restaurants.csv", restaurants.replace_all, lambda r: Restaurant(
+            None, r["name"], r["phone"], r["email"], r["address"], float(r["lat"]),
+            float(r["lon"]), r["kitchen_opens"],
+        )),
+        ("standing orders", "standing_orders.csv", standing_orders.replace_all,
+         lambda r: StandingOrder(None, r["restaurant"], r["weekday"], r["sku"],
+                                 int(r["quantity"]))),
+        ("contract prices", "contracts.csv", contracts.replace_all, lambda r: Contract(
+            None, r["restaurant"], r["sku"], float(r["price"]), r["valid_until"]
+        )),
+        ("ingredients", "ingredients.csv", ingredients.replace_all, lambda r: Ingredient(
+            r["code"], r["name"], r["unit"], r["supplier"], r["invoice_name"], float(r["price"])
+        )),
+        ("recipe lines", "recipes.csv", recipes.replace_all, lambda r: RecipeLine(
+            None, r["sku"], r["ingredient"], float(r["quantity"])
+        )),
+        # Those an invoice declared are kept: only the sheet's own are replaced.
+        ("allergens", "allergens.csv", partial(allergens.replace_where, "source", "sheet"),
+         lambda r: IngredientAllergen(None, r["ingredient"], r["allergen"], r["kind"], "sheet",
+                                      0.0)),
+    ]  # fmt: skip
+    on_drive = drive.versions()
     counts = {
-        "products": products.replace_all(
-            Product(
-                r["sku"], r["name"], r["kind"], float(r["cafe_price"]), _price(r["wholesale_price"])
-            )
-            for r in drive.rows("products.csv")
-        ),
-        "restaurants": restaurants.replace_all(
-            Restaurant(
-                None,
-                r["name"],
-                r["phone"],
-                r["email"],
-                r["address"],
-                float(r["lat"]),
-                float(r["lon"]),
-                r["kitchen_opens"],
-            )
-            for r in drive.rows("restaurants.csv")
-        ),
-        "standing orders": standing_orders.replace_all(
-            StandingOrder(None, r["restaurant"], r["weekday"], r["sku"], int(r["quantity"]))
-            for r in drive.rows("standing_orders.csv")
-        ),
-        "contract prices": contracts.replace_all(
-            Contract(None, r["restaurant"], r["sku"], float(r["price"]), r["valid_until"])
-            for r in drive.rows("contracts.csv")
-        ),
+        what: store(read(r) for r in drive.rows(sheet))
+        for what, sheet, store, read in sheets
+        if sheet in on_drive
     }
-    messages.match_restaurants(restaurants.all())
-    if announce:
+    missing = [sheet for _, sheet, _, _ in sheets if sheet not in on_drive]
+    if counts:
+        messages.match_restaurants(restaurants.all())
+    if announce and counts:
+        summary = "Sheets updated: " + ", ".join(f"{n} {what}" for what, n in counts.items())
         notifications.publish(
             "sheets.changed",
             counts,
-            summary="Sheets updated: " + ", ".join(f"{n} {what}" for what, n in counts.items()),
+            summary=summary + (f"; not on the drive: {', '.join(missing)}" if missing else ""),
             subject=Products,
         )
     return counts
+
+
+@layers.Integrations
+@Publisher("invoices.received")
+@Function
+def ingest_invoice(
+    external_id: str,
+    sender: str,
+    supplier: str,
+    subject: str,
+    filename: str,
+    pdf: bytes,
+    received_at: float,
+    invoices: Invoices,
+    notifications: Notifications,
+    announce: bool = True,
+) -> int | None:
+    """Take in a supplier's invoice, the PDF attached to its email, once.
+
+    Publishes ``invoices.received`` with a summary such as ``"Vale Dairy:
+    Invoice VAL-2026-0012"``, about the saved invoice. Reading it is the
+    invoice-clerk's job.
+
+    Args:
+        external_id: The email's ``Message-ID``.
+        sender: The address it came from.
+        supplier: Who sent it, as the email names them.
+        subject: The email's subject.
+        filename: The attachment's name.
+        pdf: The attachment.
+        received_at: When it was sent, as a Unix time.
+        invoices: Where it's saved, injected.
+        notifications: Bound to this function, injected.
+        announce: ``False`` while catching up on history: saved, not announced.
+
+    Returns:
+        The saved invoice's id, or ``None`` if it had been taken in already.
+    """
+    if invoices.by_external_id(external_id) is not None:
+        return None
+    invoice = Invoice(
+        id=None,
+        received_at=received_at,
+        supplier=supplier,
+        sender=sender,
+        subject=subject,
+        number=None,
+        date=None,
+        total=None,
+        status="new",
+        external_id=external_id,
+        filename=filename,
+        pdf=pdf,
+    )
+    invoices.save(invoice)
+    if announce:
+        notifications.publish(
+            "invoices.received",
+            {"invoice": invoice.id, "supplier": supplier},
+            summary=f"{supplier}: {subject}",
+            subject=Invoices,
+            record=invoice.id,
+        )
+    return invoice.id

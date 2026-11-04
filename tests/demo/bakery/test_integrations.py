@@ -5,19 +5,22 @@ from email.utils import format_datetime, make_msgid
 import pytest
 from app import services
 from app.clients import Drive, Mail, Messenger, Pos
-from app.ingest import gist, import_sheets, ingest_message, ingest_sale
+from app.ingest import gist, ingest_message, ingest_sale, sync_sheets
 from app.repositories import (
+    Allergens,
     CafeSales,
     Contracts,
+    Ingredients,
     Messages,
     Products,
+    Recipes,
     Restaurants,
     StandingOrders,
 )
 from app.services import Mailbox, WebhookReceiver, parse_email
 from app.storages import SQLite
 from app.tasks import ImportPosHistory, ReconcilePos
-from opendataframework import Config
+from opendataframework import Config, Events, Publisher, TaskProtocol
 from opendataframework.logger import LogManager
 from opendataframework.notifications import Notifications
 from tools import data
@@ -25,7 +28,9 @@ from tools import data
 # Deliberately builds the components directly rather than going through
 # Project/Context — opening a Context starts the services, which would bind
 # ports and reach for the tools. A bare Notifications hub stands in for the
-# Context's: `key_of` resolves the repositories given as `subject`.
+# Context's: `key_of` resolves the repositories given as `subject`, and
+# `bound_to(key, Publisher.of(...))` gives each publisher the view the Context
+# would inject.
 
 KEYS = {
     Messages: "repository.messages",
@@ -50,6 +55,17 @@ def hub():
     return notifications
 
 
+@pytest.fixture(autouse=True)
+def in_a_call():
+    """Run each test inside one protocol call, as the Context runs a publisher's.
+
+    An injected ``Notifications`` publishes only while a call is in progress,
+    so the notification records it as its ``parent``.
+    """
+    with Events().notify("test.bakery", TaskProtocol, "execute"):
+        yield
+
+
 @pytest.fixture
 def drive(tmp_path):
     data.write_sheets(tmp_path / "drive", 7, "2026-12-31")
@@ -57,14 +73,17 @@ def drive(tmp_path):
 
 
 def _sheets(drive, db, hub, announce=False):
-    return import_sheets(
+    return sync_sheets(
         drive,
         Products(db),
         Restaurants(db),
         StandingOrders(db),
         Contracts(db),
+        Ingredients(db),
+        Recipes(db),
+        Allergens(db),
         Messages(db),
-        hub.bound_to("function.import-sheets"),
+        hub.bound_to("function.sync-sheets", Publisher.of(sync_sheets)),
         announce=announce,
     )
 
@@ -83,7 +102,7 @@ def _order(order_id="ord_1"):
     }
 
 
-def test_import_sheets_fills_the_repositories_and_announces_it(drive, db, hub):
+def test_sync_sheets_fills_the_repositories_and_announces_it(drive, db, hub):
     counts = _sheets(drive, db, hub, announce=True)
 
     assert counts["products"] == len(data.PRODUCTS)
@@ -94,7 +113,7 @@ def test_import_sheets_fills_the_repositories_and_announces_it(drive, db, hub):
     assert changed.summary.startswith("Sheets updated: 12 products, 8 restaurants")
 
 
-def test_import_sheets_replaces_what_was_there(drive, db, hub):
+def test_sync_sheets_replaces_what_was_there(drive, db, hub):
     _sheets(drive, db, hub)
     rows = (drive.path / "restaurants.csv").read_text().splitlines()
     (drive.path / "restaurants.csv").write_text("\n".join(rows[:3]) + "\n")
@@ -105,10 +124,31 @@ def test_import_sheets_replaces_what_was_there(drive, db, hub):
     assert [r.name for r in Restaurants(db).all()] == ["Le Petit", "Harbour Kitchen"]
 
 
+def test_sync_sheets_leaves_alone_what_a_missing_sheet_holds(drive, db, hub):
+    _sheets(drive, db, hub)
+    (drive.path / "restaurants.csv").unlink()
+
+    counts = _sheets(drive, db, hub, announce=True)
+
+    assert "restaurants" not in counts and counts["products"] == len(data.PRODUCTS)
+    assert len(Restaurants(db).all()) == len(data.RESTAURANTS)
+    assert hub.seen[-1].summary.endswith("; not on the drive: restaurants.csv")
+
+
+def test_sync_sheets_without_a_drive_changes_and_announces_nothing(tmp_path, drive, db, hub):
+    _sheets(drive, db, hub)
+    away = Drive(Config({"component": {"drive": {"path": str(tmp_path / "not-mounted")}}}))
+
+    assert _sheets(away, db, hub, announce=True) == {}
+
+    assert len(Products(db).all()) == len(data.PRODUCTS)
+    assert hub.seen == []
+
+
 def test_ingest_message_matches_the_restaurant_and_announces_it_once(drive, db, hub):
     _sheets(drive, db, hub)
     messages, restaurants = Messages(db), Restaurants(db)
-    notifications = hub.bound_to("function.ingest-message")
+    notifications = hub.bound_to("function.ingest-message", Publisher.of(ingest_message))
 
     def take(external_id, sender):
         return ingest_message(
@@ -156,7 +196,7 @@ def test_ingest_message_matches_an_email_address_in_any_case(drive, db, hub):
         1.0,
         Messages(db),
         Restaurants(db),
-        hub.bound_to("function.ingest-message"),
+        hub.bound_to("function.ingest-message", Publisher.of(ingest_message)),
         subject="Order change",
     )
 
@@ -175,7 +215,7 @@ def test_ingest_message_while_catching_up_announces_nothing(db, hub):
         1.0,
         Messages(db),
         Restaurants(db),
-        hub.bound_to("function.ingest-message"),
+        hub.bound_to("function.ingest-message", Publisher.of(ingest_message)),
         announce=False,
     )
 
@@ -194,7 +234,7 @@ def test_gist_skips_greetings():
 
 def test_ingest_sale_takes_an_order_once_without_a_summary(db, hub):
     sales = CafeSales(db)
-    notifications = hub.bound_to("function.ingest-sale")
+    notifications = hub.bound_to("function.ingest-sale", Publisher.of(ingest_sale))
 
     assert ingest_sale(_order(), sales, notifications) is True
     assert ingest_sale(_order(), sales, notifications) is False
@@ -301,7 +341,7 @@ def test_parse_email_reads_crlf_lines_as_plain_newlines():
     assert parse_email(raw)["text"] == "Hi,\n\nTwo"
 
 
-def test_import_sheets_matches_messages_that_came_before_their_restaurant(drive, db, hub):
+def test_sync_sheets_matches_messages_that_came_before_their_restaurant(drive, db, hub):
     # The mailbox can take in mail before onboarding has imported the restaurants.
     ingest_message(
         "email",
@@ -311,7 +351,7 @@ def test_import_sheets_matches_messages_that_came_before_their_restaurant(drive,
         1.0,
         Messages(db),
         Restaurants(db),
-        hub.bound_to("function.ingest-message"),
+        hub.bound_to("function.ingest-message", Publisher.of(ingest_message)),
         announce=False,
     )
     assert Messages(db).all()[0].restaurant is None
@@ -354,6 +394,7 @@ def test_mailbox_catches_up_quietly_then_announces_new_mail(db, monkeypatch):
         db,
         Mail(Config({})),
         lambda *args, **kwargs: taken.append((args, kwargs)) or 1,
+        lambda *args, **kwargs: None,
         LogManager().logger_for("service.mailbox"),
     )
 
@@ -380,6 +421,7 @@ def test_mailbox_skips_the_bakerys_own_replies(db, monkeypatch):
         db,
         Mail(Config({})),
         lambda *args, **kwargs: taken.append(args) or 1,
+        lambda *args, **kwargs: None,
         LogManager().logger_for("service.mailbox"),
     )
 
@@ -418,11 +460,17 @@ def test_import_pos_history_takes_every_order_once(db):
 
 def test_reconcile_pos_takes_in_missed_orders_and_warns(db, hub):
     sales = CafeSales(db)
-    ingest_sale(_order("ord_1"), sales, hub.bound_to("function.ingest-sale"))
-    pos = _FakePos([_order("ord_1"), _order("ord_2")])
-    take = lambda order: ingest_sale(order, sales, hub.bound_to("function.ingest-sale"))  # noqa: E731
+    notifications = hub.bound_to("function.ingest-sale", Publisher.of(ingest_sale))
 
-    recovered = ReconcilePos(pos, _FakeClock(), take, hub.bound_to("task.reconcile-pos")).execute()
+    def take(order):
+        return ingest_sale(order, sales, notifications)
+
+    take(_order("ord_1"))
+    pos = _FakePos([_order("ord_1"), _order("ord_2")])
+
+    recovered = ReconcilePos(
+        pos, _FakeClock(), take, hub.bound_to("task.reconcile-pos", Publisher.of(ReconcilePos))
+    ).execute()
 
     assert recovered == 1
     assert pos.asked == ["2026-10-31T23:30:00"]
@@ -440,7 +488,7 @@ def test_config_hides_only_the_sqlite_connection():
 
     config = tomllib.loads((Path(data.__file__).parents[1] / "config.toml").read_text())
 
-    assert config["ui"]["topology"]["components"] == [
+    assert config["ui"]["views"]["system"]["topology"]["components"] == [
         "clock",
         "pos",
         "messenger",
@@ -448,5 +496,11 @@ def test_config_hides_only_the_sqlite_connection():
         "weather",
         "mail",
         "model",
+        "drafting",
+        "purchasing",
+        "costing",
+        "renegotiating",
+        "labelling",
+        "allergen-notices",
     ]
     assert config["service"]["webhook-receiver"]["port"] == 4750

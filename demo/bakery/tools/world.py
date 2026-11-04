@@ -8,21 +8,31 @@ bakery's tools. It's the simulation's stage manager:
   "now", and the console can pause it, change its speed or move it on.
 - **The actors.** Café customers ring up orders at the POS through the
   morning; in the evening, restaurants message (or email) order changes for
-  tomorrow.
-- **The history.** On first start it writes the shared drive's sheets and
-  seeds the tools with what a bakery that's been trading a while has: 12
-  weeks of café orders, two weeks of chats, a month of email.
+  tomorrow. Each supplier emails its weekly invoice, a PDF, at 09:00 on its
+  day.
+- **The history.** On first start it seeds the tools with what a bakery
+  that's been trading a while has: 12 weeks of café orders, two weeks of
+  chats, a month of email and invoices. Every start writes any of the shared
+  drive's sheets that aren't there yet.
 - **The weather.** A forecast in Open-Meteo's JSON shape, made up from the
   seed and the date, offline. Rain keeps café customers away.
 - **Scenarios.** Buttons on the console: a party order, a café rush, a
-  missed webhook, a rainy week, and so on.
+  missed webhook, a rainy week, a butter price spike, and so on.
+- **Tours.** A scenario played end to end (``tools/tours.py``): the world
+  follows the bakery's notifications through each step, says what to look
+  at, and can confirm the draft at the end for the presenter.
 """
 
+import csv
+import html
+import json
 import random
 import smtplib
 import threading
 import time
+import urllib.request
 from collections import deque
+from collections.abc import Callable, Iterator
 from contextlib import asynccontextmanager
 from datetime import date, datetime, timedelta
 from email.message import EmailMessage
@@ -35,16 +45,22 @@ from fastapi.responses import HTMLResponse
 from tools.common import connect, env, http_json, page, wait_for
 from tools.data import (
     BAKERY_EMAIL,
+    BY_INGREDIENT,
     BY_SKU,
+    BY_SUPPLIER,
     FREEFORM_MESSAGES,
     MESSAGE_TEMPLATES,
     PLURALS,
     RESTAURANTS,
+    SUPPLIERS,
     WEEKDAYS,
     WHOLESALE,
     Restaurant,
+    Supplier,
     write_sheets,
 )
+from tools.invoices import delivery, invoice_pdf, total
+from tools.tours import ORDER_MESSAGE, ORDER_RESTAURANT, TOURS, capture, matches, needed, say
 
 SEED = int(env("SEED", "7"))
 SPEED = float(env("SPEED", "60"))
@@ -56,6 +72,8 @@ MESSENGER_TOKEN = env("MESSENGER_TOKEN", "messenger-dev-token")
 MAIL_HOST = env("MAIL_HOST", "mailpit")
 MAIL_PORT = int(env("MAIL_PORT", "1025"))
 SHARED_DRIVE = Path(env("SHARED_DRIVE", "shared-drive"))
+# The bakery's odf UI, as the world reaches it: tours follow its notifications.
+BAKERY_URL = env("BAKERY_URL", "http://bakery:4747")
 LINKS = {
     "Bakery (odf)": env("ODF_PUBLIC_URL", "http://localhost:4747"),
     "POS": env("POS_PUBLIC_URL", "http://localhost:8001"),
@@ -276,9 +294,17 @@ def message(restaurant: Restaurant, text: str) -> None:
 
 
 def email(
-    sender_name: str, sender: str, subject: str, text: str, sent: datetime | None = None
+    sender_name: str,
+    sender: str,
+    subject: str,
+    text: str,
+    sent: datetime | None = None,
+    pdf: tuple[str, bytes] | None = None,
 ) -> None:
-    """Someone emails the bakery, at ``sent`` (the simulated time now by default)."""
+    """Someone emails the bakery, at ``sent`` (the simulated time now by default).
+
+    ``pdf``, if given, is a ``(filename, content)`` attached to it.
+    """
     msg = EmailMessage()
     msg["From"] = formataddr((sender_name, sender))
     msg["To"] = formataddr(("The Bakery", BAKERY_EMAIL))
@@ -286,6 +312,8 @@ def email(
     msg["Date"] = format_datetime((sent or clock.now()).astimezone())
     msg["Message-ID"] = make_msgid(domain=sender.split("@")[1])
     msg.set_content(text)
+    if pdf is not None:
+        msg.add_attachment(pdf[1], maintype="application", subtype="pdf", filename=pdf[0])
     try:
         with smtplib.SMTP(MAIL_HOST, MAIL_PORT, timeout=5) as smtp:
             smtp.send_message(msg)
@@ -306,10 +334,87 @@ def restaurant_email(restaurant: Restaurant, text: str, sent: datetime | None = 
     )
 
 
+def price(code: str) -> float:
+    """Return what an ingredient costs now: what its supplier last charged, or its sheet price."""
+    saved = _get(f"price:{code}")
+    return float(saved) if saved is not None else BY_INGREDIENT[code].price
+
+
+def supplier_invoice(
+    supplier: Supplier, sent: datetime | None = None, notes: dict[str, str] | None = None
+) -> None:
+    """``supplier`` emails its invoice for this week's delivery, a PDF, at ``sent`` (now).
+
+    ``notes`` puts a note under an ingredient's line, by its code.
+    """
+    at = sent or clock.now()
+    number = int(_get(f"invoice:{supplier.name}") or 0) + 1
+    _set(**{f"invoice:{supplier.name}": number})
+    reference = f"{supplier.name.split()[0][:3].upper()}-{at:%Y}-{number:04d}"
+    prices = {i: price(i) for i in BY_INGREDIENT}
+    lines = delivery(supplier, prices, random.Random(f"{SEED}-{supplier.name}-{number}"), notes)
+    content = invoice_pdf(supplier, reference, at.date(), lines)
+    note = supplier.layout == "note"
+    email(
+        supplier.name,
+        supplier.email,
+        "Eggs" if note else f"Invoice {reference}",
+        (
+            "Hi, note for this week's eggs attached. Tom"
+            if note
+            else f"Hello,\n\nPlease find attached invoice {reference} for this week's delivery, "
+            f"£{total(lines):,.2f}.\n\nKind regards,\n{supplier.name}"
+        ),
+        sent,
+        pdf=(f"{'eggs' if note else reference}.pdf", content),
+    )
+
+
+def spiked_butter() -> float:
+    """Return a butter price that puts exactly two of the bakery's contracts below cost.
+
+    Works out, for each contract a restaurant actually orders, the butter price
+    at which it stops covering its cost, from the sheets on the shared drive
+    as they are now, and picks one between the second and the third.
+    """
+
+    def rows(name: str) -> list[dict]:
+        with (SHARED_DRIVE / name).open(newline="") as f:
+            return list(csv.DictReader(f))
+
+    recipes: dict[str, dict[str, float]] = {}
+    for row in rows("recipes.csv"):
+        recipes.setdefault(row["sku"], {})[row["ingredient"]] = float(row["quantity"])
+    taken = {(row["restaurant"], row["sku"]) for row in rows("standing_orders.csv")}
+    now = price("BUTTER")
+    limits = []
+    for row in rows("contracts.csv"):
+        recipe = recipes.get(row["sku"], {})
+        if (row["restaurant"], row["sku"]) not in taken or not recipe.get("BUTTER"):
+            continue
+        other = sum(q * price(code) for code, q in recipe.items() if code != "BUTTER")
+        limit = (float(row["price"]) - other) / recipe["BUTTER"]
+        if limit > now:
+            limits.append(limit)
+    limits.sort()
+    if len(limits) >= 3:
+        target = (limits[1] + limits[2]) / 2
+    elif limits:
+        target = limits[-1] + 0.5
+    else:
+        target = now * 1.5
+    return round(-(-target // 0.05) * 0.05, 2)
+
+
 def tick(previous: datetime, now: datetime) -> None:
-    """Act out every simulated minute from ``previous`` to ``now`` (at most the last hour)."""
+    """Act out each simulated minute that began after ``previous``, up to ``now``, once.
+
+    A minute is acted out once it has begun, never before, so the next tick
+    (which starts from this one's ``now``) doesn't act it out again. At most
+    the last hour is acted out.
+    """
     minute = max(previous, now - timedelta(hours=1)).replace(second=0, microsecond=0)
-    while minute < now:
+    while minute + timedelta(minutes=1) <= now:
         minute += timedelta(minutes=1)
         hour = minute.replace(minute=0)
         if cafe_hour["hour"] != hour:
@@ -321,6 +426,10 @@ def tick(previous: datetime, now: datetime) -> None:
         rate = CAFE_RATE.get(minute.hour, 0.0) * weekend * footfall(minute.date())
         if rng.random() < rate and cafe_order():
             cafe_hour["orders"] += 1
+        if minute.hour == 9 and minute.minute == 0:
+            for supplier in SUPPLIERS:
+                if supplier.weekday == WEEKDAYS[minute.weekday()]:
+                    supplier_invoice(supplier)
         if 17 <= minute.hour < 23:
             for restaurant in RESTAURANTS:
                 if rng.random() < EVENING_RATE:
@@ -332,13 +441,17 @@ def tick(previous: datetime, now: datetime) -> None:
 
 
 def seed_history() -> None:
-    """Write the sheets, and fill the tools with the history of a bakery that's been trading."""
-    if _get("seeded") == "1":
-        return
+    """Write any sheets missing, and fill the tools with the history of a bakery that's trading.
+
+    The sheets are checked on every start, so a sheet added to the demo
+    reaches a drive that was written before it; the history is seeded once.
+    """
     start = clock.now()
-    r = random.Random(SEED)
     written = write_sheets(SHARED_DRIVE, SEED, _quarter_end(start).isoformat())
     _log(f"Shared drive: wrote {', '.join(written) or 'nothing (sheets already there)'}")
+    if _get("seeded") == "1":
+        return
+    r = random.Random(SEED)
 
     wait_for(f"{POS_URL}/admin/state")
     orders, number = [], 0
@@ -403,19 +516,15 @@ def seed_history() -> None:
             break
         except OSError:
             time.sleep(1)
-    for day in sorted(r.sample(range(1, 31), 8), reverse=True):
+    for day in sorted(r.sample(range(1, 31), 5), reverse=True):
         at = (start - timedelta(days=day)).replace(hour=r.randint(8, 20), minute=r.randint(0, 59))
-        if r.random() < 0.6:
-            restaurant_email(r.choice(RESTAURANTS), _order_change(r), sent=at)
-        else:
-            email(
-                "Millers Ltd",
-                "accounts@millers.example",
-                "Delivery confirmed",
-                "Hello,\n\nYour flour delivery is confirmed for tomorrow morning.\n\nMillers Ltd",
-                sent=at,
-            )
-    _log("Mail: sent a month of past emails")
+        restaurant_email(r.choice(RESTAURANTS), _order_change(r), sent=at)
+    for day in range(30, 0, -1):
+        at = (start - timedelta(days=day)).replace(hour=9, minute=0, second=0, microsecond=0)
+        for supplier in SUPPLIERS:
+            if supplier.weekday == WEEKDAYS[at.weekday()]:
+                supplier_invoice(supplier, sent=at)
+    _log("Mail: sent a month of past emails and invoices")
     _set(seeded=1)
 
 
@@ -454,7 +563,13 @@ SCENARIOS = {
     "cafe-rush": "Ten café customers at once",
     "missed-webhook": "The POS drops the next order's webhook",
     "rainy-week": "It pours from now on for a week, which nobody forecast for today",
+    "butter-spike": "Vale Dairy's invoice comes early, with butter up sharply",
+    "farm-invoice": "Hill Farm's handwritten-looking note for this week's eggs",
+    "sesame-substitution": "Millers Ltd swaps in another mill's flour, which may contain sesame",
 }
+
+# What Millers Ltd prints under the flour on the sesame-substitution invoice.
+SESAME_NOTE = "Substituted: Hillside Mill strong white flour. May contain sesame."
 
 
 def run_scenario(name: str) -> None:
@@ -473,6 +588,16 @@ def run_scenario(name: str) -> None:
         today = clock.now().date()
         _set(rain_from=today.isoformat(), rain_until=(today + timedelta(days=6)).isoformat())
         _log(f"Weather: rain from now until {today + timedelta(days=6):%A}, café footfall down")
+    elif name == "butter-spike":
+        was, now = price("BUTTER"), spiked_butter()
+        _set(**{"price:BUTTER": now})
+        supplier_invoice(BY_SUPPLIER["Vale Dairy"])
+        _log(f"Vale Dairy: butter from £{was:.2f} to £{now:.2f} a kg, invoice sent")
+    elif name == "farm-invoice":
+        supplier_invoice(BY_SUPPLIER["Hill Farm"])
+    elif name == "sesame-substitution":
+        supplier_invoice(BY_SUPPLIER["Millers Ltd"], notes={"FLOUR": SESAME_NOTE})
+        _log("Millers Ltd: flour from Hillside Mill this week, which may contain sesame")
     elif name == "missed-webhook":
         http_json(
             "POST",
@@ -483,6 +608,262 @@ def run_scenario(name: str) -> None:
         _log(f"POS: dropped the webhook of an order for {_items(cafe_order(r))}")
     else:
         raise KeyError(name)
+
+
+# What each tour acts out once the world follows the bakery's notifications.
+TOUR_STARTS: dict[str, Callable[[], None]] = {
+    "order-change": lambda: message(ORDER_RESTAURANT, ORDER_MESSAGE),
+    "butter-spike": lambda: run_scenario("butter-spike"),
+    "sesame-substitution": lambda: run_scenario("sesame-substitution"),
+}
+# Real seconds a step waits before the console asks whether the bakery is up.
+SLOW_STEP = 60
+
+
+def notification_stream(url: str, timeout: float = 30) -> Iterator[dict | None]:
+    """Yield ``None`` once subscribed to an odf UI's notification stream, then each notification.
+
+    Reads its server-sent events: ``data:`` lines, one JSON item each. The UI
+    writes ``: connected`` once it has subscribed this client, so nothing
+    published after the ``None`` is missed, and pings every 15 seconds, so
+    ``timeout`` only trips on a stream that's gone quiet.
+
+    Raises:
+        OSError: If the stream can't be opened, or breaks.
+    """
+    with urllib.request.urlopen(url, timeout=timeout) as response:
+        for raw in response:
+            line = raw.decode().rstrip("\r\n")
+            if line.startswith(": connected"):
+                yield None
+            elif line.startswith("data: "):
+                item = json.loads(line.removeprefix("data: "))
+                if item.get("type") == "notification":
+                    yield item
+
+
+class Guide:
+    """Plays one tour at a time: acts out its start, then follows the bakery through its steps.
+
+    The clock is paused while a tour plays, so the café and the restaurants
+    don't add notices of their own, and is put back as it was when the tour
+    ends or stops.
+
+    Args:
+        spawn: Runs ``follow(generation)`` in the background; a thread by
+            default.
+    """
+
+    def __init__(self, spawn: Callable[[int], None] | None = None) -> None:
+        """See class docstring for args."""
+        self.lock = threading.Lock()
+        self.generation = 0
+        self.spawn = spawn or (
+            lambda gen: threading.Thread(target=self.follow, args=(gen,), daemon=True).start()
+        )
+        self._clear()
+
+    def _clear(self) -> None:
+        """Forget the tour."""
+        self.name: str | None = None
+        self.index = 0
+        self.captured: dict[str, list] = {}
+        self.seen: list[list[str]] = []
+        # Every notification since the tour started that no step has taken yet.
+        self.unused: deque[dict] = deque(maxlen=500)
+        self.step_since = 0.0
+        self.error: str | None = None
+        self.paused_before: bool | None = None
+
+    def _end(self) -> None:
+        """Stop following the bakery, and put the clock back as it was. Called holding the lock."""
+        self.generation += 1
+        if self.paused_before is not None:
+            clock.update(paused=self.paused_before)
+            self.paused_before = None
+
+    def start(self, name: str) -> None:
+        """Play tour ``name``, instead of any playing.
+
+        Raises:
+            KeyError: If there's no tour ``name``.
+        """
+        tour = TOURS[name]
+        with self.lock:
+            self._end()
+            self._clear()
+            self.name = name
+            self.captured = {k: [v] for k, v in tour.given.items()}
+            self.seen = [[] for _ in tour.steps]
+            self.step_since = time.time()
+            self.paused_before = clock.state()[3]
+            clock.update(paused=True)
+            gen = self.generation
+        _log(f"Tour: {tour.title}")
+        self.spawn(gen)
+
+    def follow(self, gen: int) -> None:
+        """Follow the bakery's notifications for tour ``gen``, acting out its start once subscribed.
+
+        Reconnects every two seconds while the bakery can't be reached, and
+        acts out the start only the first time it's subscribed.
+        """
+        started = False
+        while self.generation == gen:
+            try:
+                for item in notification_stream(f"{BAKERY_URL}/api/notifications"):
+                    if self.generation != gen:
+                        return
+                    if item is not None:
+                        try:
+                            self.notify(gen, item)
+                        except Exception as exc:  # noqa: BLE001 - shown, not lost with the thread
+                            with self.lock:
+                                self.error = f"Couldn't follow {item.get('topic')!r}: {exc!r}"
+                        continue
+                    with self.lock:
+                        self.error = None
+                        name = self.name
+                    if not started and name is not None:
+                        started = True
+                        TOUR_STARTS[name]()
+            except (OSError, ValueError) as exc:
+                with self.lock:
+                    if self.generation == gen:
+                        self.error = f"Can't follow the bakery at {BAKERY_URL}: {exc}"
+            if self.generation == gen:
+                time.sleep(2)
+
+    def notify(self, gen: int, notification: dict) -> None:
+        """Take one of the bakery's notifications: it may complete the current step, or a later one.
+
+        The stream doesn't promise the order things happened in: a reaction
+        on a worker of its own can publish before the notification it reacted
+        to reaches the stream. So a notification no step takes yet is kept,
+        and each step that becomes current first looks through those.
+        """
+        with self.lock:
+            if gen != self.generation or self.name is None or self._done():
+                return
+            self.unused.append(notification)
+            completed = self._catch_up()
+        for what in completed:
+            _log(f"Tour: {what}")
+
+    def _catch_up(self) -> list[str]:
+        """Complete, in order, each step the kept notifications complete. Called holding the lock.
+
+        Returns:
+            What completed each step, as the feed says it.
+        """
+        completed = []
+        while not self._done():
+            step = TOURS[self.name].steps[self.index]
+            for notification in list(self.unused):
+                if len(self.seen[self.index]) >= needed(step, self.captured):
+                    break
+                if matches(step, notification, self.captured):
+                    self.unused.remove(notification)
+                    capture(step, notification, self.captured)
+                    self.seen[self.index].append(
+                        notification.get("summary") or notification["topic"]
+                    )
+            if step.topic is None or len(self.seen[self.index]) < needed(step, self.captured):
+                break
+            completed.append("; ".join(self.seen[self.index]))
+            self._advance()
+        return completed
+
+    def _done(self) -> bool:
+        """Return whether every step is done. Called holding the lock."""
+        return self.name is not None and self.index >= len(TOURS[self.name].steps)
+
+    def _advance(self) -> None:
+        """Move on to the next step, ending the tour after the last. Called holding the lock."""
+        self.index += 1
+        self.step_since = time.time()
+        if self._done():
+            self._end()
+
+    def next(self) -> None:
+        """Move on to the next step, without waiting for its notification."""
+        with self.lock:
+            if self.name is None or self._done():
+                return
+            self._advance()
+            completed = self._catch_up()
+        for what in completed:
+            _log(f"Tour: {what}")
+
+    def stop(self) -> None:
+        """Stop the tour, done or not."""
+        with self.lock:
+            self._end()
+            self._clear()
+
+    def act(self) -> list:
+        """Confirm the drafts the current step waits for, as a person would from their cards.
+
+        Returns:
+            The ids of the drafts confirmed.
+        """
+        with self.lock:
+            if self.name is None or self._done():
+                return []
+            step = TOURS[self.name].steps[self.index]
+            if step.confirms is None:
+                return []
+            confirmed = self.captured.get("confirmed", [])
+            ids = [i for i in self.captured.get(step.confirms, []) if i not in confirmed]
+        done = []
+        for draft_id in ids:
+            try:
+                http_json(
+                    "POST",
+                    f"{BAKERY_URL}/api/functions/confirm-draft/call",
+                    {"draft_id": draft_id},
+                    timeout=60,
+                )
+                done.append(draft_id)
+            except OSError as exc:
+                with self.lock:
+                    self.error = f"Couldn't confirm draft {draft_id}: {exc}"
+        return done
+
+    def state(self) -> dict:
+        """Return the tour for the console: its steps, each done, current or later."""
+        with self.lock:
+            if self.name is None:
+                return {"tour": None}
+            tour = TOURS[self.name]
+            steps = []
+            for i, step in enumerate(tour.steps):
+                status = "done" if i < self.index else "current" if i == self.index else "later"
+                current = status == "current"
+                steps.append(
+                    {
+                        "say": say(step, self.captured),
+                        "look": step.look,
+                        "url": LINKS.get(step.look or ""),
+                        "status": status,
+                        "seen": self.seen[i],
+                        "waits": current and step.topic is not None,
+                        "slow": current
+                        and step.topic is not None
+                        and time.time() - self.step_since > SLOW_STEP,
+                        "acts": current and step.confirms is not None,
+                    }
+                )
+            return {
+                "tour": self.name,
+                "title": tour.title,
+                "done": self._done(),
+                "error": self.error,
+                "steps": steps,
+            }
+
+
+guide = Guide()
 
 
 def _actors() -> None:
@@ -516,6 +897,7 @@ async def lifespan(_: FastAPI):
     clock.resume()
     threading.Thread(target=_actors, daemon=True).start()
     yield
+    guide.stop()  # a tour's paused clock isn't left paused for the next start
     clock.hold()
 
 
@@ -588,6 +970,41 @@ def scenario(name: str) -> dict:
     return {"scenario": name}
 
 
+@app.get("/tour")
+def get_tour() -> dict:
+    """Return the tour playing, if any, with each of its steps."""
+    return guide.state()
+
+
+@app.post("/tour/next")
+def tour_next() -> dict:
+    """Move the tour on to its next step."""
+    guide.next()
+    return guide.state()
+
+
+@app.post("/tour/act")
+def tour_act() -> dict:
+    """Confirm the drafts the tour's current step waits for."""
+    return {"confirmed": guide.act()}
+
+
+@app.post("/tour/stop")
+def tour_stop() -> dict:
+    """Stop the tour."""
+    guide.stop()
+    return guide.state()
+
+
+@app.post("/tour/{name}")
+def tour_start(name: str) -> dict:
+    """Play a tour, instead of any playing."""
+    if name not in TOURS:
+        raise HTTPException(status_code=404, detail=f"no tour {name!r}")
+    guide.start(name)
+    return guide.state()
+
+
 @app.get("/feed")
 def get_feed() -> dict:
     """Return the console's feed, newest first."""
@@ -602,6 +1019,10 @@ def console() -> str:
         f"<button data-scenario='{key}' title='{title}'>{title}</button>"
         for key, title in SCENARIOS.items()
     )
+    tours = "".join(
+        f'<button data-tour="{key}">{html.escape(tour.title)}</button>'
+        for key, tour in TOURS.items()
+    )
     body = f"""
 <section class=panel><h2>Clock</h2>
 <div class=row><strong id=now style="font-size:22px">…</strong>
@@ -612,6 +1033,10 @@ def console() -> str:
 <option value=60>60× (a day in 24 min)</option><option value=300>300×</option></select></label>
 <button data-advance=60>+1 hour</button><button data-to="07:00">To 07:00</button>
 <button data-to="17:00">To 17:00</button></div></section>
+<section class=panel><h2>Tours</h2>
+<p class=muted style="margin:0 0 8px">A flow played end to end: each step says what to look at,
+and the tour moves on when the bakery gets there. The clock stops while it plays.</p>
+<div class=row>{tours}</div><div id=tour></div></section>
 <section class=panel><h2>Scenarios</h2><div class=row>{scenarios}</div></section>
 <section class=panel><h2>Tools</h2><p>{links}</p></section>
 <section class=panel><h2>What's happening</h2><table id=feed></table></section>
@@ -635,7 +1060,52 @@ async function refresh() {{
   document.getElementById('feed').innerHTML = f.feed.map(e =>
     `<tr><td class=muted style="white-space:nowrap">${{esc(e.at)}}</td>
      <td>${{esc(e.text)}}</td></tr>`).join('');
+  renderTour(await (await fetch('/tour')).json());
 }}
+const md = s => esc(s).replace(/\\*\\*(.+?)\\*\\*/g, '<strong>$1</strong>')
+  .replace(/`(.+?)`/g, '<code>$1</code>');
+function tourStep(s) {{
+  const mark = s.status === 'done' ? '✓ ' : '';
+  const style = s.status === 'current'
+    ? 'border-left:3px solid var(--accent);padding-left:8px'
+    : s.status === 'later' ? 'opacity:.5' : '';
+  const seen = s.seen.length
+    ? `<div class=muted>${{s.seen.map(esc).join('<br>')}}</div>` : '';
+  const look = s.status === 'current' && s.url
+    ? ` <a href="${{esc(s.url)}}" target=_blank>Open ${{esc(s.look)}}</a>` : '';
+  const waits = s.waits
+    ? `<div class=muted>${{s.slow ? 'Nothing yet after a minute. Is the bakery up? '
+      + '<strong>Next</strong> skips this step.' : 'Waiting for the bakery…'}}</div>` : '';
+  return `<li style="${{style}}">${{mark}}${{md(s.say)}}${{look}}${{seen}}${{waits}}</li>`;
+}}
+let tourHtml = '';
+function renderTour(t) {{
+  let html = '';
+  if (t.tour) {{
+    const acts = t.steps.some(s => s.acts);
+    html = `<h3 style="margin:12px 0 6px;font-size:14px">${{esc(t.title)}}`
+      + `${{t.done ? ' <span class=muted>(done)</span>' : ''}}</h3>`
+      + `<ol style="margin:0 0 8px;padding-left:20px;display:grid;gap:8px">`
+      + t.steps.map(tourStep).join('') + '</ol>'
+      + (t.error ? `<p style="color:#c0392b;margin:0 0 8px">${{esc(t.error)}}</p>` : '')
+      + '<div class=row>'
+      + (t.done ? '' : '<button data-tour-do=next>Next</button>')
+      + (acts ? '<button class=primary data-tour-do=act>Do it for me</button>' : '')
+      + `<button data-tour-do=stop>${{t.done ? 'Close' : 'Stop'}}</button></div>`;
+  }}
+  if (html !== tourHtml) {{
+    tourHtml = html;
+    document.getElementById('tour').innerHTML = html;
+  }}
+}}
+document.getElementById('tour').onclick = async e => {{
+  const b = e.target.closest('[data-tour-do]');
+  if (!b) return;
+  b.disabled = true; await post('/tour/' + b.dataset.tourDo); refresh();
+}};
+document.querySelectorAll('[data-tour]').forEach(b => b.onclick = async () => {{
+  b.disabled = true; await post('/tour/' + b.dataset.tour); b.disabled = false; refresh();
+}});
 document.getElementById('pause').onclick = async () => {{
   await post('/clock', {{paused: !paused}}); refresh();
 }};

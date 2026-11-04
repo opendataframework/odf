@@ -39,7 +39,7 @@ poetry run odf run
 ```
 
 Requires Python >=3.14, managed with Poetry. `pyproject.toml` depends on
-`opendataframework (>=0.5.0,<0.6.0)` by version, resolved from PyPI. When
+`opendataframework (>=0.6.0,<0.7.0)` by version, resolved from PyPI. When
 developing both repos side by side against unreleased `opendataframework`
 changes, temporarily override the dependency to a local path/git source —
 and revert that override (and regenerate `poetry.lock`) before releasing a
@@ -55,7 +55,7 @@ needs a third-party dependency:
 | `server.py` | `Server` — composes an `opendataframework.Project` and adds `start(ui=, mcp=, chat=)` orchestration on top | (imports the rest of this table lazily) |
 | `cli.py`, `scaffold.py`, `templates/` | `odf init`/`odf run` CLI | `typer`, `rich` |
 | `mcp/server.py` | MCP server exposing component lifecycle + task/pipeline execution + repository data queries as tools | `mcp`, `uvicorn` |
-| `ui/server.py`, `ui/topology.py`, `ui/keys.py`, `ui/data.py`, `ui/arguments.py`, `ui/layout.py`, `ui/extensions.py`, `ui/themes.py` | UI dev server | `fastapi`, `uvicorn` |
+| `ui/server.py`, `ui/topology.py`, `ui/keys.py`, `ui/data.py`, `ui/arguments.py`, `ui/conversations.py`, `ui/chat_history.py`, `ui/layout.py`, `ui/views.py`, `ui/extensions.py`, `ui/themes.py` | UI dev server; `views.py` reads the named `[ui.views.<name>]` views (each a table, its topology settings under `.topology`), and `layout.py` keeps each view's own places under `_views`; `conversations.py` reads repositories declaring a `conversation()` as the chat's channels and threads, with each card's `Record` actions, and `chat_history.py` keeps the assistant conversations in `chat.json` | `fastapi`, `uvicorn` |
 | `ui/static/` | The UI itself: `index.html` + `app.js` shared by every theme, `icons/` holding the built-in topology icons (one file per picker group, plus `shared.js`), `grids/` holding the
 non-isometric topology grids picked by `[ui] grid` (`flat.js`), and `themes/<name>/` holding each theme's `theme.css`, `favicon.svg` and optional `theme.js` | (Leaflet from a CDN; no build step) |
 | `ui/notebooks.py`, `ui/notebook_contents.py`, `ui/notebook_identity.py`, `ui/proxy.py` | Jupyter Notebook launched on demand (on `127.0.0.1` only) to edit notebooks in the document view; `notebook_contents.py` is its contents manager and `notebook_identity.py` its identity provider, both loaded only inside that Jupyter subprocess: the first reads and saves records through the UI's HTTP API, the second accepts only requests carrying the token the UI's proxy adds, so the browser never holds one; `proxy.py` forwards `/proxy/<name>/` (HTTP and WebSockets) to such an embedded app, dropping the browser's `Authorization`, so the browser reaches Jupyter on the UI's own origin | `notebook`, `websockets` (optional) |
@@ -142,7 +142,8 @@ external links to commit messages.
 (`server.py`), `docs/ui.md` (`ui/`, including the `config.toml` reference
 for every `[ui]`/`[project]` key `Server.start()` reads), `docs/mcp.md`
 (`mcp/server.py`), `docs/chat.md` (`chat/engine.py`), plus `docs/index.md`
-(an overview linking to each) and `docs/examples.md`. Built with
+(an overview linking to each), `docs/examples.md` and `docs/demo.md`
+(`demo/`). Built with
 `mkdocs.yml` at the repo root and deployed to GitHub Pages by
 `.github/workflows/docs.yml` when a version tag is pushed — only for the
 highest tag, so tagging an older patch doesn't overwrite the site
@@ -159,7 +160,7 @@ not per commit; format mirrors `opendataframework`'s release notes).
 
 ## Examples
 
-`examples/` has 26 examples. `01-table-view/` (a repository with no
+`examples/` has 27 examples. `01-table-view/` (a repository with no
 `data_view()` at all, so the UI falls back to the implicit default table)
 and `06-location-view/` (`data_view() -> LocationView` overriding that
 default with a map) are the two ends of the `data_view()` concept.
@@ -181,9 +182,11 @@ repositories, with a grouped `TimeseriesView`), `23-reverse-proxy/`
 as `docs/ui.md#deploying` describes), `24-custom-theme/` (a glitch theme of
 the project's own, selected by `[ui] theme = "./themes/glitch"`),
 `25-flat-grid/` (`[ui] grid = "flat"`: one node of each kind showing its
-type's glyph, with a `layout.json` `flatIcon` override) and
+type's glyph, with a `layout.json` `flatIcon` override),
 `26-notifications/` (notifications a café counter publishes, shown as toasts
-with Open and Show logs) were added here since. Treat new examples here as small and focused, one concept each, matching
+with Open and Show logs) and `27-channels/` (a help desk's messages and
+tickets in one chat channel, a ticket a card whose action is a
+`Record(Tickets)` function) were added here since. Treat new examples here as small and focused, one concept each, matching
 `opendataframework/examples/`'s style. Anything that needs most of ODF at
 once belongs in `demo/` instead.
 
@@ -197,6 +200,11 @@ webhooks, a polled mailbox, a watched drive and a scheduler, with agents
 that draft and people who confirm. Its Dockerfile installs `odf` from this
 repository's own source, so it always runs the `odf` next to it. Its tests
 live under `tests/demo/bakery/`, and bandit skips `demo/` as it does
-`examples/`. The demo is still in progress: parts of it wait on upcoming
-`opendataframework` features (e.g. declared listeners in 0.6.0), so it isn't
-yet mentioned in `docs/` or the release notes.
+`examples/`. Its simulated tools (`tools/world.py`, `pos.py`, `messenger.py`)
+open `<DATA_DIR>/<tool>.db` as soon as they're imported, and `DATA_DIR`
+defaults to `./data` in the current directory: the tests' `conftest.py` sets
+it to a temp directory, and any other script importing them must set it too,
+or it leaves databases inside the repo. `docs/demo.md` describes it and maps
+each part to the ODF feature it shows; a change to what the demo does goes
+there and in `demo/bakery/README.md`, whose "Why" section is written to stand
+on its own as a blog post.

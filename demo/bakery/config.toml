@@ -5,6 +5,21 @@
 
 [project]
 name = "bakery"
+# On the bakery-data volume, so the logs and the notification history outlast
+# the container (docker compose down, then up). The chat's conversations
+# (chat.json) and labels (annotations.json) are saved next to this file, like
+# layout.json, in the project directory compose mounts from the host.
+log-dir = "data/logs"
+
+# The demo runs for days: each component's log rotates at 5 MB, keeping 3
+# older files. The notification history (every notification, in one file)
+# rotates at 20 MB, keeping 5: a café sale is one, so this keeps the notices
+# for days despite them.
+[project.logging]
+max-bytes = 5_000_000
+backups = 3
+history-max-bytes = 20_000_000
+history-backups = 5
 
 [component.sqlite]
 path = "data/bakery.db"
@@ -38,7 +53,18 @@ address = "orders@bakery.example"
 # waits for a person. OLLAMA_URL and OLLAMA_MODEL override (see .env.example).
 [component.model]
 url = ""
-name = "llama3.2"
+name = "gpt-oss:20b"
+
+# The UI's chat window (odf run --chat), through the host's Ollama. It calls
+# the same tools MCP serves: the agents, the functions, the repositories. Its
+# model has to call tools: gpt-oss:20b does (ollama pull gpt-oss:20b). Without
+# Ollama, the window says it can't reach it; nothing else needs it.
+[project.chat]
+model = "gpt-oss:20b"
+ollama-host = "http://host.docker.internal:11434"
+# The bakery's 25 tools take about 12k tokens to describe, more than Ollama's
+# default window holds alongside a question.
+context-length = 32768
 
 [service.webhook-receiver]
 host = "0.0.0.0"
@@ -53,6 +79,42 @@ interval = 5
 [service.shared-drive]
 interval = 5
 
-[ui.topology]
+# The bakery's own topology icons (an oven, a bread rack, an invoice...),
+# assigned to nodes in layout.json. The path is relative to where odf runs.
+# The UI wears the built-in ink theme.
+[ui]
+theme = "ink"
+icon-scripts = ["icons/bakery.js"]
+
+# Two views of the bakery, picked in the UI's header. The manager's, shown
+# first, has the bakery's data, the agents drafting from it, the night run
+# and closing the café (their steps stay hidden: the routine stands for
+# them), what a manager does to a draft, and the questions they ask
+# themselves: margins, a price change, an ingredient's trail, the labels.
+# The system view has the wiring as well: the tools' clients, the services
+# taking their items in, the imports, the model, the clock. Each keeps its
+# own places in layout.json.
+[ui.views.manager]
+label = "Bakery"
+default = true
+
+[ui.views.manager.topology]
 config = false
-components = ["clock", "pos", "messenger", "drive", "weather", "mail", "model"]  # all but SQLite
+components = []
+services = []
+tasks = []
+pipelines = ["close-cafe", "night-run"]
+functions = [
+    "confirm-draft", "edit-draft", "reject-draft",
+    "what-if", "margins", "trace-ingredient", "labels",
+]
+
+[ui.views.system]
+label = "System"
+
+[ui.views.system.topology]
+config = false
+components = [  # all but SQLite
+    "clock", "pos", "messenger", "drive", "weather", "mail", "model",
+    "drafting", "purchasing", "costing", "renegotiating", "labelling", "allergen-notices",
+]

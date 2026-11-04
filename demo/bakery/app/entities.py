@@ -95,18 +95,23 @@ class Contract:
 @Entity
 @dataclass
 class Message:
-    """A message to the bakery, by chat or email.
+    """A message to the bakery, or one the bakery sent, by chat or email.
 
     Attributes:
         id: Primary key.
         received_at: When it was sent, as a Unix time.
         channel: ``"messenger"`` or ``"email"``.
-        sender: Who sent it: a phone number or an email address.
-        restaurant: The restaurant that sent it, if it's one of them.
+        sender: The other side's phone number or email address: who sent it,
+            or, for one the bakery sent, who it went to.
+        restaurant: The restaurant on the other side, if it's one of them.
         subject: An email's subject; ``None`` for a chat message.
         text: What it says.
-        external_id: Its id in the tool it came from, so it's never taken twice.
-        status: ``"new"`` until someone deals with it.
+        external_id: Its id in the tool it came from, so it's never taken
+            twice; ``"sent:draft-<id>:<n>"`` for one the bakery sent.
+        status: ``"new"`` until someone deals with it, ``"drafted"`` while a
+            draft answers it, ``"done"`` once that's confirmed; ``"sent"``
+            for one the bakery sent.
+        direction: ``"in"``, to the bakery, or ``"out"``, from it.
     """
 
     id: int | None
@@ -118,6 +123,7 @@ class Message:
     text: str
     external_id: str
     status: str = "new"
+    direction: str = "in"
 
 
 @Entity
@@ -182,8 +188,9 @@ class Draft:
         created_at: When it was drafted, as a Unix time.
         kind: ``"order-change"`` or ``"specials"``.
         status: ``"pending"`` (ready to confirm), ``"needs-review"`` (the
-            agent couldn't read it, so a person has to), ``"confirmed"`` or
-            ``"rejected"``.
+            agent couldn't read it, so a person has to), ``"confirmed"``,
+            ``"rejected"`` or ``"outdated"`` (a newer message, or a person's
+            instruction, replaced it with another draft).
         title: What it's about, such as ``"Order change for Le Petit"``.
         date: The day it's for, ``"YYYY-MM-DD"``.
         restaurant: The restaurant it's for, if any.
@@ -192,7 +199,8 @@ class Draft:
             specials.
         reply: The reply confirming it sends, if any.
         author: Who drafted it: ``"rules"`` or ``"model:<name>"``, or
-            ``"nobody"`` when neither could.
+            ``"nobody"`` when neither could; ``"edited"`` once a person
+            changed it.
         note: Why it needs review, or why it was rejected.
         body: The draft as a person reads it, in Markdown.
     """
@@ -320,3 +328,128 @@ class DeliveryStop:
     eta: str
     load: str
     items: int
+
+
+@Entity
+@dataclass
+class Ingredient:
+    """Something the bakery buys and bakes with, from the ingredients sheet.
+
+    Attributes:
+        code: Its code, as the recipes sheet refers to it.
+        name: Its name.
+        unit: What it's priced by: ``"kg"``, ``"L"``, ``"each"`` or ``"minute"``.
+        supplier: Who sells it; empty for bake time, which nobody invoices.
+        invoice_name: What its supplier calls it on an invoice.
+        price: What a unit cost when the sheet was written, in pounds: used
+            until an invoice says otherwise.
+    """
+
+    code: str
+    name: str
+    unit: str
+    supplier: str
+    invoice_name: str
+    price: float
+
+
+@Entity
+@dataclass
+class RecipeLine:
+    """How much of one ingredient one of a product takes, from the recipes sheet.
+
+    Attributes:
+        id: Primary key.
+        sku: The product.
+        ingredient: The ingredient's code.
+        quantity: How much, in the ingredient's unit.
+    """
+
+    id: int | None
+    sku: str
+    ingredient: str
+    quantity: float
+
+
+@Entity
+@dataclass
+class Invoice:
+    """A supplier's invoice, as the PDF it emailed.
+
+    Attributes:
+        id: Primary key.
+        received_at: When it was emailed, as a Unix time.
+        supplier: Who sent it, as its email names it.
+        sender: The address it came from.
+        subject: The email's subject.
+        number: The invoice's own number, once read.
+        date: The invoice's date, ``"YYYY-MM-DD"``, once read.
+        total: What it comes to, in pounds, once read.
+        status: ``"new"``, ``"recorded"`` (its prices are in IngredientPrices),
+            ``"drafted"`` (its reading waits for a person) or ``"rejected"``.
+        external_id: The email's ``Message-ID``, so it's never taken twice.
+        filename: The attachment's name.
+        pdf: The PDF itself.
+    """
+
+    id: int | None
+    received_at: float
+    supplier: str
+    sender: str
+    subject: str
+    number: str | None
+    date: str | None
+    total: float | None
+    status: str
+    external_id: str
+    filename: str
+    pdf: bytes
+
+
+@Entity
+@dataclass
+class IngredientPrice:
+    """What a supplier charged for a unit of an ingredient, on one invoice.
+
+    Attributes:
+        id: Primary key.
+        priced_at: When the invoice was emailed, as a Unix time.
+        ingredient: The ingredient's code.
+        name: Its name.
+        unit: What it's priced by.
+        unit_price: The price per unit, in pounds.
+        supplier: Who charged it.
+        invoice: The invoice it was on.
+    """
+
+    id: int | None
+    priced_at: float
+    ingredient: str
+    name: str
+    unit: str
+    unit_price: float
+    supplier: str
+    invoice: int
+
+
+@Entity
+@dataclass
+class IngredientAllergen:
+    """An allergen an ingredient contains, or may contain.
+
+    Attributes:
+        id: Primary key.
+        ingredient: The ingredient's code.
+        allergen: One of the 14 a label must declare: ``"gluten"``, ``"sesame"``, ...
+        kind: ``"contains"`` or ``"may contain"``.
+        source: ``"sheet"`` (from the allergens sheet), or the invoice that
+            declared it, such as ``"invoice 31"``.
+        since: When it was recorded, as a Unix time.
+    """
+
+    id: int | None
+    ingredient: str
+    allergen: str
+    kind: str
+    source: str
+    since: float

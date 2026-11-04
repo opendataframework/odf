@@ -152,6 +152,72 @@ def test_start_ui_passes_the_grid_from_config():
         server.stop()
 
 
+def test_start_chat_passes_project_chat_config_to_the_engine(monkeypatch):
+    from odf.chat import engine
+
+    built = {}
+
+    class Engine:
+        def __init__(self, **kwargs):
+            built.update(kwargs)
+
+    monkeypatch.setattr(engine, "ChatEngine", Engine)
+    chat = {"model": "m:1b", "ollama-host": "http://ollama:11434", "context-length": 32768}
+    server = Server.from_dict({"project": {"chat": chat}})
+    server.start(ui=True, ui_port=18790, mcp=True, mcp_port=18791, chat=True, app_module=None)
+    try:
+        assert (built["model"], built["host"]) == ("m:1b", "http://ollama:11434")
+        assert built["context_length"] == 32768 and built["mcp"] is not None
+    finally:
+        server.stop()
+
+
+def test_start_chat_keeps_conversations_in_the_configured_file(monkeypatch, tmp_path):
+    from odf.chat import engine
+
+    class Engine:
+        model = "m"
+
+        def __init__(self, **kwargs): ...
+
+    monkeypatch.setattr(engine, "ChatEngine", Engine)
+    chat_file = tmp_path / "talk.json"
+    server = Server.from_dict({"project": {"chat-file": str(chat_file)}, "ui": {"chat-history": 5}})
+    server.start(ui=True, ui_port=18792, chat=True, app_module=None)
+    try:
+        history = server._ui_server._history
+        assert (history.path, history.limit) == (chat_file, 5)
+    finally:
+        server.stop()
+
+
+def test_start_chat_with_chat_history_0_keeps_nothing(monkeypatch):
+    from odf.chat import engine
+
+    class Engine:
+        model = "m"
+
+        def __init__(self, **kwargs): ...
+
+    monkeypatch.setattr(engine, "ChatEngine", Engine)
+    server = Server.from_dict({"ui": {"chat-history": 0}})
+    server.start(ui=True, ui_port=18793, chat=True, app_module=None)
+    try:
+        assert server._ui_server._history is None
+    finally:
+        server.stop()
+
+
+@pytest.mark.parametrize("value", [-1, 2.5, "200", True])
+def test_start_ui_rejects_a_chat_history_that_isnt_a_whole_number(value):
+    server = Server.from_dict({"ui": {"chat-history": value}})
+    try:
+        with pytest.raises(ValueError, match="chat-history"):
+            server.start(ui=True, ui_port=18794, app_module=None)
+    finally:
+        server.stop()
+
+
 def test_start_ui_rejects_an_unknown_grid():
     server = Server.from_dict({"ui": {"grid": "hex"}})
     try:
@@ -178,6 +244,57 @@ def test_start_ui_warns_about_topology_names_matching_no_component():
     try:
         with pytest.warns(UserWarning, match="nothing-here"):
             server.start(ui=True, ui_port=18772, app_module=None)
+    finally:
+        server.stop()
+
+
+def test_start_ui_applies_ui_views_config():
+    server = Server.from_dict(
+        {
+            "ui": {
+                "views": {
+                    "lean": {"default": True, "topology": {"config": False}},
+                    "full": {},
+                }
+            }
+        }
+    )
+    server.start(ui=True, ui_port=18780, app_module=None)
+    try:
+        last_err = None
+        for _ in range(50):
+            try:
+                with urllib.request.urlopen(f"{server.ui_url}/api/topology", timeout=1) as res:
+                    lean = json.load(res)
+                break
+            except OSError as e:
+                last_err = e
+                time.sleep(0.1)
+        else:
+            raise AssertionError(f"UI server never became ready: {last_err}")
+        with urllib.request.urlopen(f"{server.ui_url}/api/topology?view=full", timeout=1) as res:
+            full = json.load(res)
+        assert lean["view"] == "lean"
+        assert not any(n["type"] == "config" for n in lean["nodes"])
+        assert any(n["type"] == "config" for n in full["nodes"])
+    finally:
+        server.stop()
+
+
+def test_start_ui_rejects_ui_topology_alongside_ui_views():
+    server = Server.from_dict({"ui": {"topology": {}, "views": {"a": {}}}})
+    try:
+        with pytest.raises(ValueError, match="both set"):
+            server.start(ui=True, ui_port=18781, app_module=None)
+    finally:
+        server.stop()
+
+
+def test_start_ui_warns_about_view_names_matching_no_component():
+    server = Server.from_dict({"ui": {"views": {"a": {"topology": {"tasks": ["nothing-here"]}}}}})
+    try:
+        with pytest.warns(UserWarning, match=r"\[ui\.views\.a\.topology\] tasks"):
+            server.start(ui=True, ui_port=18782, app_module=None)
     finally:
         server.stop()
 

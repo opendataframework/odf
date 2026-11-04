@@ -27,7 +27,7 @@ CREATE TABLE IF NOT EXISTS contracts (
 CREATE TABLE IF NOT EXISTS messages (
     id INTEGER PRIMARY KEY AUTOINCREMENT, received_at REAL NOT NULL, channel TEXT NOT NULL,
     sender TEXT NOT NULL, restaurant TEXT, subject TEXT, text TEXT NOT NULL,
-    external_id TEXT UNIQUE NOT NULL, status TEXT NOT NULL
+    external_id TEXT UNIQUE NOT NULL, status TEXT NOT NULL, direction TEXT NOT NULL DEFAULT 'in'
 );
 CREATE TABLE IF NOT EXISTS cafe_sales (
     id INTEGER PRIMARY KEY AUTOINCREMENT, sold_at REAL NOT NULL, order_id TEXT NOT NULL,
@@ -61,6 +61,30 @@ CREATE TABLE IF NOT EXISTS leftovers (
     id INTEGER PRIMARY KEY AUTOINCREMENT, date TEXT NOT NULL, sku TEXT NOT NULL,
     product TEXT NOT NULL, baked INTEGER NOT NULL, sold INTEGER NOT NULL, unsold INTEGER NOT NULL
 );
+CREATE TABLE IF NOT EXISTS ingredients (
+    code TEXT PRIMARY KEY, name TEXT NOT NULL, unit TEXT NOT NULL, supplier TEXT NOT NULL,
+    invoice_name TEXT NOT NULL, price REAL NOT NULL
+);
+CREATE TABLE IF NOT EXISTS recipes (
+    id INTEGER PRIMARY KEY AUTOINCREMENT, sku TEXT NOT NULL, ingredient TEXT NOT NULL,
+    quantity REAL NOT NULL
+);
+CREATE TABLE IF NOT EXISTS invoices (
+    id INTEGER PRIMARY KEY AUTOINCREMENT, received_at REAL NOT NULL, supplier TEXT NOT NULL,
+    sender TEXT NOT NULL, subject TEXT NOT NULL, number TEXT, date TEXT, total REAL,
+    status TEXT NOT NULL, external_id TEXT UNIQUE NOT NULL, filename TEXT NOT NULL,
+    pdf BLOB NOT NULL
+);
+CREATE TABLE IF NOT EXISTS ingredient_prices (
+    id INTEGER PRIMARY KEY AUTOINCREMENT, priced_at REAL NOT NULL, ingredient TEXT NOT NULL,
+    name TEXT NOT NULL, unit TEXT NOT NULL, unit_price REAL NOT NULL, supplier TEXT NOT NULL,
+    invoice INTEGER NOT NULL
+);
+CREATE INDEX IF NOT EXISTS ingredient_prices_latest ON ingredient_prices (ingredient, priced_at);
+CREATE TABLE IF NOT EXISTS allergens (
+    id INTEGER PRIMARY KEY AUTOINCREMENT, ingredient TEXT NOT NULL, allergen TEXT NOT NULL,
+    kind TEXT NOT NULL, source TEXT NOT NULL, since REAL NOT NULL
+);
 CREATE TABLE IF NOT EXISTS delivery_runs (
     id INTEGER PRIMARY KEY AUTOINCREMENT, date TEXT NOT NULL, stop INTEGER NOT NULL,
     restaurant TEXT NOT NULL, address TEXT NOT NULL, lat REAL NOT NULL, lon REAL NOT NULL,
@@ -90,9 +114,23 @@ class SQLite:
         self.conn = sqlite3.connect(path, check_same_thread=False)
         self.lock = threading.Lock()  # guards the shared connection across threads
         self.conn.executescript(SCHEMA)
+        _add_missing_columns(self.conn)
         self.conn.commit()
 
     def on_stop(self) -> None:
         """Close the connection when the project stops."""
         with self.lock:
             self.conn.close()
+
+
+# Columns added since the first version, for a data volume that predates them:
+# (table, column, its definition).
+_ADDED = [("messages", "direction", "TEXT NOT NULL DEFAULT 'in'")]
+
+
+def _add_missing_columns(conn: sqlite3.Connection) -> None:
+    """Add each column in ``_ADDED`` its table lacks, so an older database keeps working."""
+    for table, column, definition in _ADDED:
+        names = {row[1] for row in conn.execute(f"PRAGMA table_info({table})")}  # nosec B608
+        if column not in names:
+            conn.execute(f"ALTER TABLE {table} ADD COLUMN {column} {definition}")  # nosec B608

@@ -1,0 +1,445 @@
+{
+  "_layers": {
+    "allergens": "#fcc419",
+    "cafe": "#f06595",
+    "drafts": "#cc5de8",
+    "integrations": "#868e96",
+    "production": "#ff922b",
+    "purchasing": "#51cf66",
+    "storage": "#22b8cf",
+    "wholesale": "#4dabf7"
+  },
+  "_views": {
+    "manager": {
+      "agent.account-manager": {
+        "col": 4,
+        "row": 10
+      },
+      "agent.allergen-officer": {
+        "col": 3,
+        "row": 13
+      },
+      "agent.invoice-clerk": {
+        "col": 1,
+        "row": 10
+      },
+      "agent.order-desk": {
+        "col": 2,
+        "row": 1
+      },
+      "agent.specials": {
+        "col": 2,
+        "row": 4
+      },
+      "function.confirm-draft": {
+        "col": 6,
+        "row": 6
+      },
+      "function.edit-draft": {
+        "col": 6,
+        "row": 7
+      },
+      "function.labels": {
+        "col": 1,
+        "row": 12
+      },
+      "function.margins": {
+        "col": 3,
+        "row": 9
+      },
+      "function.reject-draft": {
+        "col": 6,
+        "row": 8
+      },
+      "function.trace-ingredient": {
+        "col": 2,
+        "row": 12
+      },
+      "function.what-if": {
+        "col": 4,
+        "row": 9
+      },
+      "pipeline.close-cafe": {
+        "col": 3,
+        "row": 4
+      },
+      "pipeline.night-run": {
+        "col": 3,
+        "row": 7
+      },
+      "repository.allergens": {
+        "col": 0,
+        "row": 12
+      },
+      "repository.bake-sheets": {
+        "col": 2,
+        "row": 6
+      },
+      "repository.cafe-sales": {
+        "col": 0,
+        "row": 3
+      },
+      "repository.contracts": {
+        "col": 2,
+        "row": 0
+      },
+      "repository.delivery-runs": {
+        "col": 3,
+        "row": 6
+      },
+      "repository.drafts": {
+        "col": 5,
+        "row": 6
+      },
+      "repository.forecasts": {
+        "col": 1,
+        "row": 3
+      },
+      "repository.ingredient-prices": {
+        "col": 2,
+        "row": 9
+      },
+      "repository.ingredients": {
+        "col": 1,
+        "row": 9
+      },
+      "repository.invoices": {
+        "col": 0,
+        "row": 9
+      },
+      "repository.leftovers": {
+        "col": 2,
+        "row": 3
+      },
+      "repository.messages": {
+        "col": 0,
+        "row": 1
+      },
+      "repository.order-changes": {
+        "col": 1,
+        "row": 1
+      },
+      "repository.products": {
+        "col": 0,
+        "row": 6
+      },
+      "repository.recipes": {
+        "col": 1,
+        "row": 6
+      },
+      "repository.restaurants": {
+        "col": 0,
+        "row": 0
+      },
+      "repository.standing-orders": {
+        "col": 1,
+        "row": 0
+      }
+    }
+  },
+  "agent.account-manager": {
+    "col": 9,
+    "row": 10,
+    "icon": "bakery-account-manager"
+  },
+  "agent.allergen-officer": {
+    "col": 8,
+    "row": 13,
+    "icon": "bakery-allergen-officer"
+  },
+  "agent.invoice-clerk": {
+    "col": 6,
+    "row": 10,
+    "icon": "bakery-invoice-clerk"
+  },
+  "agent.order-desk": {
+    "col": 7,
+    "row": 1,
+    "icon": "bakery-order-desk"
+  },
+  "agent.specials": {
+    "col": 7,
+    "row": 4,
+    "icon": "bakery-specials"
+  },
+  "component.allergen-notices": {
+    "col": 7,
+    "row": 13,
+    "icon": "bakery-back-office"
+  },
+  "component.clock": {
+    "col": 0,
+    "icon": "bakery-clock",
+    "row": 0
+  },
+  "component.costing": {
+    "col": 7,
+    "row": 10,
+    "icon": "bakery-back-office"
+  },
+  "component.drafting": {
+    "col": 8,
+    "row": 1,
+    "icon": "bakery-back-office"
+  },
+  "component.drive": {
+    "col": 0,
+    "icon": "bakery-sheets",
+    "row": 4
+  },
+  "component.labelling": {
+    "col": 6,
+    "row": 13,
+    "icon": "bakery-back-office"
+  },
+  "component.mail": {
+    "col": 0,
+    "icon": "bakery-post",
+    "row": 3
+  },
+  "component.messenger": {
+    "col": 0,
+    "icon": "bakery-messenger",
+    "row": 2
+  },
+  "component.model": {
+    "col": 0,
+    "row": 6,
+    "icon": "bakery-assistant"
+  },
+  "component.pos": {
+    "col": 0,
+    "icon": "bakery-till",
+    "row": 1
+  },
+  "component.purchasing": {
+    "col": 5,
+    "row": 10,
+    "icon": "bakery-back-office"
+  },
+  "component.renegotiating": {
+    "col": 8,
+    "row": 10,
+    "icon": "bakery-back-office"
+  },
+  "component.weather": {
+    "col": 0,
+    "icon": "bakery-weather",
+    "row": 5
+  },
+  "function.bake-sheet": {
+    "col": 6,
+    "row": 7,
+    "icon": "bakery-proof-rack"
+  },
+  "function.confirm-draft": {
+    "col": 12,
+    "row": 6,
+    "icon": "bakery-approve"
+  },
+  "function.count-leftovers": {
+    "col": 6,
+    "row": 4,
+    "icon": "bakery-day-old"
+  },
+  "function.edit-draft": {
+    "col": 12,
+    "row": 7,
+    "icon": "bakery-amend"
+  },
+  "function.forecast": {
+    "col": 5,
+    "row": 4,
+    "icon": "bakery-forecast"
+  },
+  "function.ingest-invoice": {
+    "col": 2,
+    "row": 3,
+    "icon": "bakery-hatch"
+  },
+  "function.ingest-message": {
+    "col": 2,
+    "row": 2,
+    "icon": "bakery-hatch"
+  },
+  "function.ingest-sale": {
+    "col": 2,
+    "row": 1,
+    "icon": "bakery-hatch"
+  },
+  "function.labels": {
+    "col": 6,
+    "icon": "bakery-label-printer",
+    "row": 12
+  },
+  "function.margins": {
+    "col": 8,
+    "row": 9,
+    "icon": "bakery-margins"
+  },
+  "function.plan-deliveries": {
+    "col": 7,
+    "icon": "bakery-van",
+    "row": 7
+  },
+  "function.reject-draft": {
+    "col": 12,
+    "row": 8,
+    "icon": "bakery-reject"
+  },
+  "function.sync-sheets": {
+    "col": 2,
+    "row": 4,
+    "icon": "bakery-sheets"
+  },
+  "function.trace-ingredient": {
+    "col": 7,
+    "row": 12,
+    "icon": "bakery-trace"
+  },
+  "function.what-if": {
+    "col": 9,
+    "row": 9,
+    "icon": "bakery-what-if"
+  },
+  "pipeline.close-cafe": {
+    "col": 8,
+    "icon": "bakery-shutter",
+    "row": 4
+  },
+  "pipeline.night-run": {
+    "col": 8,
+    "icon": "bakery-oven",
+    "row": 7
+  },
+  "pipeline.onboard": {
+    "col": 3,
+    "row": 0,
+    "icon": "bakery-bistro"
+  },
+  "repository.allergens": {
+    "col": 5,
+    "icon": "bakery-allergen-chart",
+    "row": 12
+  },
+  "repository.bake-sheets": {
+    "col": 7,
+    "icon": "bakery-proof-rack",
+    "row": 6
+  },
+  "repository.cafe-sales": {
+    "col": 5,
+    "icon": "bakery-till",
+    "row": 3
+  },
+  "repository.contracts": {
+    "col": 7,
+    "icon": "bakery-contract",
+    "row": 0
+  },
+  "repository.delivery-runs": {
+    "col": 8,
+    "icon": "bakery-van",
+    "row": 6
+  },
+  "repository.drafts": {
+    "col": 11,
+    "icon": "bakery-in-tray",
+    "row": 6
+  },
+  "repository.forecasts": {
+    "col": 6,
+    "row": 3,
+    "icon": "bakery-forecast"
+  },
+  "repository.ingredient-prices": {
+    "col": 7,
+    "icon": "bakery-price-sacks",
+    "row": 9
+  },
+  "repository.ingredients": {
+    "col": 6,
+    "icon": "bakery-sacks",
+    "row": 9
+  },
+  "repository.invoices": {
+    "col": 5,
+    "icon": "bakery-invoice",
+    "row": 9
+  },
+  "repository.leftovers": {
+    "col": 7,
+    "icon": "bakery-day-old",
+    "row": 3
+  },
+  "repository.messages": {
+    "col": 5,
+    "icon": "bakery-messenger",
+    "row": 1
+  },
+  "repository.order-changes": {
+    "col": 6,
+    "row": 1,
+    "icon": "bakery-order-slips"
+  },
+  "repository.products": {
+    "col": 5,
+    "icon": "bakery-display-case",
+    "row": 6
+  },
+  "repository.recipes": {
+    "col": 6,
+    "icon": "bakery-recipe",
+    "row": 6
+  },
+  "repository.restaurants": {
+    "col": 5,
+    "icon": "bakery-bistro",
+    "row": 0
+  },
+  "repository.standing-orders": {
+    "col": 6,
+    "icon": "bakery-order-book",
+    "row": 0
+  },
+  "service.mailbox": {
+    "col": 1,
+    "row": 3,
+    "icon": "bakery-post"
+  },
+  "service.scheduler": {
+    "col": 1,
+    "row": 0,
+    "icon": "bakery-clock"
+  },
+  "service.shared-drive": {
+    "col": 1,
+    "row": 4,
+    "icon": "bakery-hatch"
+  },
+  "service.webhook-receiver": {
+    "col": 1,
+    "row": 1,
+    "icon": "bakery-hatch"
+  },
+  "task.import-messenger-history": {
+    "col": 3,
+    "row": 2,
+    "icon": "bakery-archive"
+  },
+  "task.import-pos-history": {
+    "col": 3,
+    "row": 1,
+    "icon": "bakery-archive"
+  },
+  "task.import-sheets": {
+    "col": 3,
+    "row": 4,
+    "icon": "bakery-archive"
+  },
+  "task.reconcile-pos": {
+    "col": 2,
+    "row": 0,
+    "icon": "bakery-till"
+  }
+}

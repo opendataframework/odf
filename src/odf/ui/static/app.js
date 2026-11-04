@@ -22,6 +22,15 @@ const TYPE_LABEL = {
   function:'@Function',
 };
 
+// The type legend under the topology, in this order, with each type's default
+// isometric icon as the item's tooltip. renderLegend() lists only the types
+// the topology shows.
+const TYPE_LEGEND = [
+  ['config', 'platform'], ['component', 'warehouse'], ['repository', 'server rack'],
+  ['service', 'antenna'], ['task', 'factory cube'], ['pipeline', 'conveyor'],
+  ['agent', 'observatory'], ['function', 'relay box'],
+];
+
 // The map-panel mode each DataView kind opens into (see setMapMode below) —
 // single source of truth shared by showDataView's dispatch and
 // selectFromSidebar's "follow the new selection into the same view" logic.
@@ -40,9 +49,25 @@ const VIEW_MODE = {
 
 let nodes = [];
 let edges = [];
+let notifies = []; // notification links: {from, to, topics} (see "Notification links")
 let nodeMap = {};
 let repoSchemas = {};
 let layoutOverrides = {}; // node id -> {col, row}, persisted via /api/layout
+
+// With [ui.views] declared, the view this page shows (picked in the header's
+// switcher, see initViewSwitcher), else null. A view keeps its own places
+// under layoutOverrides._views[activeView] (see viewPlaces); icons, colors
+// and layer colors stay shared at the top level.
+let activeView = null;
+
+// The view's own places in layoutOverrides, created on first use, or the top
+// level when no view is active.
+function viewPlaces() {
+  if (!activeView) return layoutOverrides;
+  if (!layoutOverrides._views) layoutOverrides._views = {};
+  if (!layoutOverrides._views[activeView]) layoutOverrides._views[activeView] = {};
+  return layoutOverrides._views[activeView];
+}
 
 // A node's or repository's API base path, e.g. /api/tasks/loader. Ids are
 // keys (`task.loader`); the server owns the key -> route mapping and sends it
@@ -215,6 +240,10 @@ const THEME_STYLE = {
     ctx.shadowColor = accent;
     ctx.shadowBlur = 7;
   },
+  // A notification link (publisher to subscriber, see "Notification
+  // links"): its dash pattern, and its alpha while no reaction runs on it.
+  notifyDash: [2, 3],
+  notifyAlpha: 0.5,
 };
 
 // Strokes the outline of a tile or box face with the caller's strokeStyle and
@@ -436,7 +465,7 @@ function updateGridTitle() {
 }
 
 function saveGridExpand() {
-  layoutOverrides._grid = { ...gridExpand };
+  viewPlaces()._grid = { ...gridExpand };
   fetch('/api/layout', {
     method: 'PUT',
     headers: { 'Content-Type': 'application/json' },
@@ -1078,7 +1107,38 @@ function drawEdge(fromNode, toNode, dashed, flowing) {
 
   // traveling pulse, colored by destination node; still under reduced motion,
   // where the brighter wire alone shows the flow
-  if (!flowing || reduceMotion) return;
+  if (flowing) drawPulse(pts, fromNode, toNode);
+}
+
+// ── Notification links — from a @Publisher to each @Subscriber its declared
+// topics could reach (GET /api/topology's `notifies`), so who reacts to whom
+// shows before anything is published. Dotted, in the title accent, and bent
+// at the other corner from a dependency's wire, so the two don't overlap.
+// While a reaction to one of the publisher's notifications runs, the link is
+// lit and carries a pulse, as a wire does for a call. ──────────────────────
+
+function drawNotifyLink(fromNode, toNode, reacting) {
+  const f = gridPos(fromNode.col, fromNode.row);
+  const bend = gridPos(fromNode.col, toNode.row);
+  const t = gridPos(toNode.col, toNode.row);
+  const pts = [[f.x, f.y], [bend.x, bend.y], [t.x, t.y]];
+  ctx.save();
+  if (reacting) THEME_STYLE.flowLine(TITLE_ACCENT);
+  ctx.globalAlpha = reacting ? 1 : THEME_STYLE.notifyAlpha;
+  ctx.beginPath();
+  ctx.moveTo(pts[0][0], pts[0][1]);
+  for (let i = 1; i < pts.length; i++) ctx.lineTo(pts[i][0], pts[i][1]);
+  ctx.strokeStyle = TITLE_ACCENT;
+  ctx.lineWidth = 1.1;
+  ctx.setLineDash(THEME_STYLE.notifyDash);
+  ctx.stroke();
+  ctx.restore();
+  ctx.setLineDash([]);
+  if (reacting) drawPulse(pts, fromNode, toNode);
+}
+
+function drawPulse(pts, fromNode, toNode) {
+  if (reduceMotion) return;
   const accent = nodeAccent(toNode);
   const segLens = [];
   let total = 0;
@@ -1359,6 +1419,11 @@ function render() {
   for (const e of edges) {
     drawEdge(nodeMap[e.from], nodeMap[e.to], e.dashed || false, flowingEdges.has(`${e.from}|${e.to}`));
   }
+  for (const l of notifies) {
+    if (nodeMap[l.from] && nodeMap[l.to]) {
+      drawNotifyLink(nodeMap[l.from], nodeMap[l.to], reactingLinks.has(`${l.from}|${l.to}`));
+    }
+  }
 
   // 3 — Buildings (back to front, per-type silhouette)
   for (const node of byDepth) {
@@ -1514,11 +1579,19 @@ window.addEventListener('mouseup', e => {
 // failed PUT just leaves the previous save in place server-side, so the
 // move still holds for the rest of this session even if it isn't persisted.
 function saveLayoutOverride(node) {
-  const entry = { col: node.col, row: node.row };
+  // A view saves the node's place as its own (see viewPlaces), keeping the
+  // place saved at the top level for the views without one.
+  const top = layoutOverrides[node.id] || {};
+  const entry = activeView ? {} : { col: node.col, row: node.row };
+  if (activeView) {
+    viewPlaces()[node.id] = { col: node.col, row: node.row };
+    if (Number.isInteger(top.col) && Number.isInteger(top.row)) Object.assign(entry, { col: top.col, row: top.row });
+  }
   if (node.icon) entry.icon = node.icon; // omitted entirely once reset, so it doesn't linger as a stale key
   if (node.flatIcon) entry.flatIcon = node.flatIcon; // the flat grid's own icon (see GRID.iconField)
   if (node.color) entry.color = node.color; // ditto for a reset color override
-  layoutOverrides[node.id] = entry;
+  if (Object.keys(entry).length) layoutOverrides[node.id] = entry;
+  else delete layoutOverrides[node.id];
   fetch('/api/layout', {
     method: 'PUT',
     headers: { 'Content-Type': 'application/json' },
@@ -1563,6 +1636,9 @@ function selectNode(id) {
     ['Type', `<dd>${node.decorator || node.type}</dd>`],
     ['Layer', node.layer && `<dd>${layerBadgeHtml(node.layer)}</dd>`],
     ['File', node.file && `<dd class="file" title="${node.file}">${node.file}</dd>`],
+    ['Publishes', node.publishes && `<dd>${escapeHtml(node.publishes.join(', '))}</dd>`],
+    ['Reacts to', node.subscribes && `<dd>${escapeHtml(node.subscribes.topics.join(', '))}` +
+      `${node.subscribes.deliver === 'background' ? ' (in the background)' : ''}</dd>`],
   ].filter(([, dd]) => dd);
 
   // One full-width row per action, so the rows line up whatever set of
@@ -1848,6 +1924,7 @@ document.getElementById('inspector-popup-close').addEventListener('click', desel
 // open. `name` is 'activity', 'chat' or null (close both); the header button
 // of the open drawer is marked active.
 function setDrawer(name) {
+  if (mapMode === 'chat' && name !== 'chat') backToTopology();
   for (const key of ['activity', 'chat']) {
     const open = key === name;
     const btn = document.getElementById(`${key}-toggle`);
@@ -1860,7 +1937,9 @@ function setDrawer(name) {
 for (const key of ['activity', 'chat']) {
   document.getElementById(`${key}-toggle`).addEventListener('click', () => {
     const open = document.getElementById(`${key}-drawer`).classList.contains('open');
-    setDrawer(open ? null : key);
+    if (open) setDrawer(null);
+    else if (key === 'chat' && chatFull()) setChatFull(true);
+    else setDrawer(key);
   });
   document.getElementById(`${key}-drawer-close`).addEventListener('click', () => setDrawer(null));
 }
@@ -1920,7 +1999,10 @@ const nodeRun = {};            // node id -> {state: running|done|failed, at, co
 const pendingClicks = {};      // node id -> true while this tab's action awaits its call
 const chatCalls = new Set();   // call_ids started during this tab's chat turn
 let flowingEdges = new Set();  // `${from}|${to}` of edges a call goes through
-let lastDone = null;           // {nodeId, text} of the top-level call that just completed
+let reactingLinks = new Set(); // `${from}|${to}` of notification links a reaction runs on
+const reactions = new Map();   // call_id of a reaction (an event with a cause) -> its link
+const notifiers = new Map();   // notification id -> its publisher, lately seen
+let lastDone = null;           // {nodeId, text, call} of the top-level call that just completed
 
 const reduceMotion = !!(window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches);
 
@@ -1953,6 +2035,8 @@ function initRunEvents() {
 function resetRunState() {
   activeCalls.clear();
   chatCalls.clear();
+  reactions.clear();
+  reactingLinks = new Set();
   for (const id of Object.keys(nodeRun)) {
     if (nodeRun[id].state === 'running') delete nodeRun[id];
   }
@@ -1962,6 +2046,7 @@ function resetRunState() {
 }
 
 function onRunEvent(e) {
+  if (e.cause) onReactionEvent(e);
   const node = nodeMap[e.key];
   if (!node) return; // hidden by [ui.topology], or not a component
   if (e.protocol === 'ServiceProtocol') syncServiceState(node, e);
@@ -2023,7 +2108,7 @@ function finishRun(node, e, started, fromChat) {
   } else if (topLevel) {
     addLog(`${escapeHtml(node.label)} ${verb}${took}`, nodeAccent(node));
     if (pendingClicks[node.id] || fromChat) showToast(node, { failed: false, text: `${verb}${took}`, since, call: e.call_id });
-    const done = { nodeId: node.id, text: `${verb}${took}` };
+    const done = { nodeId: node.id, text: `${verb}${took}`, call: e.call_id };
     lastDone = done;
     setTimeout(() => {
       if (lastDone === done) { lastDone = null; updateHeaderStatus(); }
@@ -2050,7 +2135,8 @@ function markRunSeen(id) {
 // The header's "System Nominal" tells what the project is doing, since
 // toasts can be hidden (under the chat drawer, say). First a call that's
 // running, then a failure not yet looked at (clicking it opens the logs, as
-// its toast's Show logs does), then a call that just completed.
+// its toast's Show logs does), then a call that just completed (clicking it
+// opens its run, as a toast's Show run does).
 
 function updateHeaderStatus() {
   const el = document.getElementById('hdr-status');
@@ -2085,7 +2171,8 @@ function updateHeaderStatus() {
   if (node) el.style.setProperty('--status-accent', nodeAccentCss(node));
   else el.style.removeProperty('--status-accent');
   el.querySelector('.hdr-status-text').textContent = text;
-  el.title = state === 'failed' ? `${text} — show logs` : text;
+  el.dataset.call = state === 'done' ? lastDone.call || '' : '';
+  el.title = state === 'failed' ? `${text} — show logs` : state === 'done' && lastDone.call ? `${text} — show run` : text;
 }
 
 function initHeaderStatus() {
@@ -2093,12 +2180,54 @@ function initHeaderStatus() {
   if (!el) return;
   el.addEventListener('click', () => {
     const id = el.dataset.node;
+    if (el.classList.contains('done') && el.dataset.call) {
+      selectNode(id);
+      showTraceView(el.dataset.call);
+      return;
+    }
     if (!el.classList.contains('failed') || !nodeRun[id]) return;
     const { since, call } = nodeRun[id];
     markRunSeen(id);
     selectNode(id);
     showLogsView(id, since, call);
   });
+}
+
+// A reaction is a call made for a notification: its `cause` is the
+// notification's id, whose publisher the notification stream told us. The
+// two streams aren't ordered with each other, so a reaction whose
+// notification hasn't arrived yet falls back to the subscriber's one link,
+// if it has only one. The link stays lit a moment after the reaction ends.
+const NOTIFIERS_MAX = 500;
+const REACTION_HOLD_MS = 1500;
+
+function rememberNotifier(n) {
+  notifiers.set(n.id, n.publisher || n.key);
+  if (notifiers.size > NOTIFIERS_MAX) notifiers.delete(notifiers.keys().next().value);
+}
+
+function onReactionEvent(e) {
+  if (e.state === 'started') {
+    const from = notifiers.get(e.cause);
+    const into = notifies.filter(l => l.to === e.key);
+    const link = into.find(l => l.from === from) || (into.length === 1 ? into[0] : null);
+    if (!link) return;
+    reactions.set(e.call_id, `${link.from}|${link.to}`);
+  } else {
+    if (!reactions.has(e.call_id)) return;
+    setTimeout(() => {
+      reactions.delete(e.call_id);
+      updateReactingLinks();
+      render();
+    }, REACTION_HOLD_MS);
+    return;
+  }
+  updateReactingLinks();
+  render();
+}
+
+function updateReactingLinks() {
+  reactingLinks = new Set(reactions.values());
 }
 
 // An edge carries a call while a call on one end is running and the other
@@ -2134,7 +2263,8 @@ const failureToasts = {}; // node id -> {el, count}
 
 // `node` is the node the toast is about: its label and accent head the
 // toast, and Show logs opens its logs (left out when it isn't on the
-// topology). `level` is a notification's; `open`, if given, backs an Open
+// topology). With a `call`, Show run opens the whole run it is part of (see
+// "Trace view"). `level` is a notification's; `open`, if given, backs an Open
 // button.
 function showToast(node, { failed, text, since, call, level, open }) {
   const box = document.getElementById('toasts');
@@ -2153,6 +2283,7 @@ function showToast(node, { failed, text, since, call, level, open }) {
   const alarming = failed || level === 'error';
   const stays = alarming || level === 'warning';
   const logs = !!nodeMap[node.id];
+  const run = !!call;
   const el = document.createElement('div');
   el.className = `toast${alarming ? ' failed' : level === 'warning' ? ' warning' : ''}`;
   el.setAttribute('role', stays ? 'alert' : 'status');
@@ -2163,8 +2294,9 @@ function showToast(node, { failed, text, since, call, level, open }) {
     `<span class="toast-count"></span>` +
     `<button class="toast-close" title="Dismiss" aria-label="Dismiss">&times;</button></div>` +
     `<div class="toast-text"></div>` +
-    (open || logs ? '<div class="toast-actions">' +
+    (open || run || logs ? '<div class="toast-actions">' +
       (open ? '<button class="toast-logs toast-open">Open <span>&rarr;</span></button>' : '') +
+      (run ? '<button class="toast-logs toast-show-run">Show run <span>&rarr;</span></button>' : '') +
       (logs ? '<button class="toast-logs toast-show-logs">Show logs <span>&rarr;</span></button>' : '') +
       '</div>' : '');
   el.querySelector('.toast-text').textContent = text;
@@ -2176,6 +2308,14 @@ function showToast(node, { failed, text, since, call, level, open }) {
   if (open) {
     el.querySelector('.toast-open').addEventListener('click', () => {
       open();
+      close();
+    });
+  }
+  if (run) {
+    el.querySelector('.toast-show-run').addEventListener('click', () => {
+      markRunSeen(node.id);
+      if (logs) selectNode(node.id);
+      showTraceView(el.dataset.call);
       close();
     });
   }
@@ -2208,22 +2348,47 @@ function showToast(node, { failed, text, since, call, level, open }) {
 // whoever caused it (see odf.ui.events). A notification with a `summary` is
 // meant for people: every open tab shows it as a toast and a log line, and
 // rings its publisher's tile for a moment. One without is for components
-// only, and isn't shown. Only what is published while the tab is connected
-// arrives; nothing is replayed.
+// only, and isn't shown as a toast. Only what is published while the tab is
+// connected arrives; nothing is replayed. What came before is in the
+// Notifications view (see below).
 
 const nodeNotified = {}; // node id -> performance.now() of its latest notification
 
+// The page's one stream backs both the toasts and, while it's open, the
+// Notifications view. It reconnects on its own and replays nothing, so after
+// a reconnect the open view refetches its first page.
 function initNotifications() {
   if (!window.EventSource) return;
   const source = new EventSource('/api/notifications');
+  let opened = false;
+  source.onopen = () => {
+    if (opened && mapMode === 'notifications') refetchNotesFirstPage();
+    opened = true;
+  };
   source.onmessage = msg => {
     const n = JSON.parse(msg.data);
-    if (n.type === 'notification') onNotification(n);
+    if (n.type !== 'notification') return;
+    rememberNotifier(n);
+    onNotification(n);
+    if (mapMode === 'notifications') onNotesLive(n);
+    onChannelNotification(n);
   };
 }
 
+// The ids of the notifications shown lately, so one that arrives twice (say,
+// over a stream reconnecting) shows once.
+const seenNotifications = new Set();
+const SEEN_NOTIFICATIONS_MAX = 500;
+
 function onNotification(n) {
   if (!n.summary) return;
+  if (n.id) {
+    if (seenNotifications.has(n.id)) return;
+    seenNotifications.add(n.id);
+    if (seenNotifications.size > SEEN_NOTIFICATIONS_MAX) {
+      seenNotifications.delete(seenNotifications.values().next().value);
+    }
+  }
   // The publisher may be hidden by [ui.topology]: its key stands in.
   const node = nodeMap[n.key] || { id: n.key, label: n.key, type: 'component' };
   const color = n.level === 'error' ? ACCENT.alert
@@ -2361,18 +2526,36 @@ async function openInvokeForm(id) {
   }
   if (selectId !== id) return;
 
-  const props = schema.properties || {};
+  const form = buildArgumentsForm(schema, {
+    accent: nodeAccent(node),
+    onSubmit: (form, props, required) => submitArguments(id, form, props, required),
+  });
+  body.appendChild(form);
+  showInspectorPopup(node);
+  form.querySelector('input,textarea,button').focus();
+}
+
+// Draws the form for a schema from GET {href}/parameters: one field per
+// argument, a submit button and a result line. `prefill` replaces a field's
+// default (a JSON field's string value is shown as it is: a record may hold
+// its JSON as text); `hidden` names arguments given already, left out of the
+// form and passed by the caller; `multiline` edits strings in a textarea.
+// `onSubmit(form, props, required)` gets the visible arguments' schema.
+function buildArgumentsForm(schema, { prefill = {}, hidden = {}, label = 'Run', accent = null, multiline = false, onSubmit }) {
+  const props = Object.fromEntries(Object.entries(schema.properties || {}).filter(([name]) => !(name in hidden)));
   const required = new Set(schema.required || []);
   const fields = Object.entries(props).map(([name, prop]) => {
     const kind = invokeFieldKind(prop);
-    const value = prop.default === undefined ? '' : prop.default;
+    const value = name in prefill ? prefill[name] : prop.default === undefined ? '' : prop.default;
     const label = `<span>${escapeHtml(name)}${required.has(name) ? ' <span class="invoke-required">*</span>' : ''}</span>`;
     let input;
     if (kind === 'boolean') {
       input = `<input type="checkbox" name="${escapeHtml(name)}"${value === true ? ' checked' : ''}>`;
     } else if (kind === 'json') {
-      const text = value === '' ? '' : JSON.stringify(value);
+      const text = value === '' || value === null ? '' : typeof value === 'string' ? value : JSON.stringify(value);
       input = `<textarea name="${escapeHtml(name)}" rows="2" placeholder="JSON">${escapeHtml(text)}</textarea>`;
+    } else if (kind === 'string' && multiline) {
+      input = `<textarea name="${escapeHtml(name)}" rows="3">${escapeHtml(value === null ? '' : String(value))}</textarea>`;
     } else {
       input = `<input type="${kind === 'number' ? 'number' : 'text'}"${kind === 'number' ? ' step="any"' : ''} name="${escapeHtml(name)}" value="${escapeHtml(value === null ? '' : String(value))}">`;
     }
@@ -2381,18 +2564,16 @@ async function openInvokeForm(id) {
 
   const form = document.createElement('form');
   form.className = 'invoke-form';
-  form.style.setProperty('--invoke-accent', nodeAccent(node));
+  if (accent) form.style.setProperty('--invoke-accent', accent);
   form.innerHTML =
     fields.join('') +
-    `<button type="submit" class="invoke-run">Run</button>` +
+    `<button type="submit" class="invoke-run">${escapeHtml(label)}</button>` +
     `<pre class="invoke-result" hidden></pre>`;
   form.addEventListener('submit', e => {
     e.preventDefault();
-    submitArguments(id, form, props, required);
+    onSubmit(form, props, required);
   });
-  body.appendChild(form);
-  showInspectorPopup(node);
-  form.querySelector('input,textarea,button').focus();
+  return form;
 }
 
 // Reads the form back into the call's arguments. An empty optional field is
@@ -2649,27 +2830,492 @@ function addLog(msg, color) {
 }
 
 // ── Chat ─────────────────────────────────────────────────────────────────
-// Backs the Chat drawer — hidden unless GET /api/chat/config reports
-// enabled (i.e. Project.start(chat=True) was passed). History lives only in
-// this tab (chatHistory), resent in full with each turn — no server-side
-// session storage.
+// Backs the Chat drawer, shown when GET /api/chat/config reports chat
+// enabled (Project.start(chat=True)) or the project has channels. With its
+// `history` on ([ui] chat-history above 0), conversations with the assistant
+// are kept on the server (odf.ui.chat_history): a turn sends only its text,
+// and the drawer lists them to reopen, from any browser. With it off, a
+// conversation lives only in this tab (chatHistory, or threadNotes for the
+// one held in a thread), resent in full with each turn.
 
 let chatHistory = [];
+const threadNotes = {};       // `${channel}/${thread}` -> [{role, content, ts}], with history off
 let chatBusy = false;
+let chatEnabled = false;
+let chatKept = false;         // conversations kept on the server
+let chatConversations = [];   // the kept assistant conversations, changed last first
 
 async function initChat() {
   try {
     const res = await fetch('/api/chat/config');
-    if (!res.ok) return;
-    const cfg = await res.json();
-    if (cfg.enabled) document.getElementById('chat-toggle').classList.add('visible');
+    if (res.ok) {
+      const cfg = await res.json();
+      chatEnabled = Boolean(cfg.enabled);
+      chatKept = chatEnabled && Boolean(cfg.history);
+    }
   } catch (err) {
     console.error('Failed to load chat config', err);
   }
+  await Promise.all([loadChannels(), loadConversations()]);
+  if (chatEnabled || chatChannels.length) document.getElementById('chat-toggle').classList.add('visible');
+  showChatView(chatHasNav() ? { kind: 'nav' } : { kind: 'assistant', id: null });
 }
 
-function appendChatMessage(role, text) {
+// The list is worth showing once there's more than one place to talk.
+function chatHasNav() {
+  return chatChannels.length > 0 || chatConversations.length > 0;
+}
+
+async function loadConversations() {
+  if (!chatKept) return;
+  try {
+    const res = await fetch('/api/chat/conversations');
+    chatConversations = res.ok ? await res.json() : [];
+  } catch (err) {
+    console.error('Failed to load conversations', err);
+    chatConversations = [];
+  }
+  layoutChat();
+}
+
+// Reopens a kept assistant conversation into #chat-messages; `null` starts
+// a new one.
+async function loadConversation(id) {
   const list = document.getElementById('chat-messages');
+  list.replaceChildren();
+  if (!id) return;
+  try {
+    const res = await fetch(`/api/chat/conversations/${encodeURIComponent(id)}`);
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    const conversation = await res.json();
+    if (chatView.kind !== 'assistant' || chatView.id !== id) return;
+    document.getElementById('chat-title').textContent = conversation.title || 'Conversation';
+    for (const turn of conversation.turns) appendChatMessage(turn.role, turn.content);
+  } catch (err) {
+    appendChatMessage('error', `Couldn't load the conversation: ${err.message}`);
+  }
+}
+
+document.getElementById('chat-delete').addEventListener('click', async () => {
+  const id = chatView.kind === 'assistant' ? chatView.id : null;
+  if (!id || !confirm('Delete this conversation for everyone?')) return;
+  try {
+    const res = await fetch(`/api/chat/conversations/${encodeURIComponent(id)}`, { method: 'DELETE' });
+    if (!res.ok && res.status !== 404) throw new Error(`HTTP ${res.status}`);
+  } catch (err) {
+    appendChatMessage('error', `Couldn't delete the conversation: ${err.message}`);
+    return;
+  }
+  await loadConversations();
+  showChatView(chatHasNav() ? { kind: 'nav' } : { kind: 'assistant', id: null });
+});
+
+// ── Chat channels ────────────────────────────────────────────────────────
+// Repositories declaring a conversation() (odf.ui.conversations) merge by
+// channel into threads: GET /api/channels, /api/channels/{c}/threads and
+// /api/channels/{c}/threads/{t}. With any, the drawer opens on a list of
+// them, the assistant conversation first; without, it opens on the
+// assistant conversation as before. A thread shows messages on their side
+// and cards (records of a repository with no direction) with their actions.
+// Which threads have something unread is this viewer's own, kept in
+// localStorage.
+
+let chatChannels = [];          // [{name, repositories: [{id, kind}]}]
+const channelRepos = new Set(); // keys of the repositories in a channel
+let chatThreads = {};           // channel -> its threads, as last fetched
+let chatView = { kind: 'assistant' }; // or {kind: 'nav'}, or {kind: 'thread', channel, thread}
+let threadLoads = 0;            // the latest thread fetch wins
+let channelRefresh = null;
+const CHAT_SEEN_KEY = 'odf-ui-chat-seen';
+
+async function loadChannels() {
+  try {
+    const res = await fetch('/api/channels');
+    chatChannels = res.ok ? await res.json() : [];
+  } catch (err) {
+    console.error('Failed to load channels', err);
+    chatChannels = [];
+  }
+  channelRepos.clear();
+  for (const channel of chatChannels) {
+    for (const repo of channel.repositories) channelRepos.add(repo.id);
+  }
+  await refreshThreads();
+}
+
+async function refreshThreads() {
+  const fetched = await Promise.all(chatChannels.map(channel =>
+    fetch(`/api/channels/${encodeURIComponent(channel.name)}/threads`)
+      .then(res => (res.ok ? res.json() : []))
+      .catch(() => [])));
+  chatThreads = {};
+  chatChannels.forEach((channel, i) => { chatThreads[channel.name] = fetched[i]; });
+  seedChatSeen();
+  if (chatNavShown()) renderChatNav();
+  updateChatUnread();
+}
+
+function chatSeen() {
+  try { return JSON.parse(localStorage.getItem(CHAT_SEEN_KEY) || '{}'); } catch { return {}; }
+}
+
+// On a viewer's first visit, what's already there counts as read, so the
+// whole history doesn't light up at once.
+function seedChatSeen() {
+  try {
+    if (localStorage.getItem(CHAT_SEEN_KEY) !== null) return;
+    const seen = {};
+    for (const [channel, threads] of Object.entries(chatThreads)) {
+      for (const t of threads) seen[`${channel}/${t.thread}`] = t.time;
+    }
+    localStorage.setItem(CHAT_SEEN_KEY, JSON.stringify(seen));
+  } catch {}
+}
+
+function markThreadSeen(channel, thread, time) {
+  const seen = chatSeen();
+  const id = `${channel}/${thread}`;
+  if ((seen[id] || 0) >= time) return;
+  seen[id] = time;
+  try { localStorage.setItem(CHAT_SEEN_KEY, JSON.stringify(seen)); } catch {}
+}
+
+// A thread is unread when its latest item is newer than this viewer last saw
+// and isn't one of the project's own outgoing messages.
+function threadUnread(channel, t, seen) {
+  return Boolean(t.last) && t.last.direction !== 'out' && t.time > (seen[`${channel}/${t.thread}`] || 0);
+}
+
+function updateChatUnread() {
+  const seen = chatSeen();
+  const any = chatChannels.some(c => (chatThreads[c.name] || []).some(t => threadUnread(c.name, t, seen)));
+  document.getElementById('chat-toggle').classList.toggle('unread', any);
+}
+
+function chatTime(seconds) {
+  const d = new Date(seconds * 1000);
+  const hm = d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+  if (d.toDateString() === new Date().toDateString()) return hm;
+  return `${d.toLocaleDateString([], { day: 'numeric', month: 'short' })} ${hm}`;
+}
+
+function chatEl(tag, className, text) {
+  const el = document.createElement(tag);
+  if (className) el.className = className;
+  if (text !== undefined) el.textContent = text;
+  return el;
+}
+
+// Full screen, the list stays beside the conversation, so the list on its own
+// becomes the first place to talk in it.
+function firstChatView() {
+  if (chatEnabled) return { kind: 'assistant', id: null };
+  for (const channel of chatChannels) {
+    const t = (chatThreads[channel.name] || [])[0];
+    if (t) return { kind: 'thread', channel: channel.name, thread: t.thread };
+  }
+  return { kind: 'nav' };
+}
+
+function chatNavShown() {
+  return chatView.kind === 'nav' || mapMode === 'chat';
+}
+
+// What drawer or full screen changes, leaving the open conversation as it is
+// (an answer still streaming into it included).
+function layoutChat() {
+  const full = mapMode === 'chat';
+  const nav = chatView.kind === 'nav';
+  const split = full && chatHasNav();
+  document.getElementById('chat-drawer').classList.toggle('split', split);
+  document.getElementById('chat-nav').hidden = !(nav || split);
+  document.getElementById('chat-back').hidden = nav || full || !chatHasNav();
+  if (chatNavShown()) renderChatNav();
+}
+
+function showChatView(view) {
+  if (mapMode === 'chat' && view.kind === 'nav') view = firstChatView();
+  chatView = view;
+  const nav = view.kind === 'nav';
+  const thread = view.kind === 'thread';
+  const assistant = view.kind === 'assistant';
+  layoutChat();
+  document.getElementById('chat-thread').hidden = !thread;
+  document.getElementById('chat-messages').hidden = !assistant;
+  document.getElementById('chat-footer').hidden = !((assistant || thread) && chatEnabled);
+  document.getElementById('chat-delete').hidden = !(assistant && chatKept && view.id);
+  document.getElementById('chat-input').placeholder = thread
+    ? 'Ask about this thread, or @ a component…' : 'Ask, or @ a component…';
+  document.getElementById('chat-title').textContent = thread ? view.thread
+    : assistant && chatKept ? (view.id ? 'Conversation' : 'New conversation')
+    : assistant && chatHasNav() ? 'Assistant' : 'Chat';
+  if (assistant && chatKept) loadConversation(view.id);
+  if (thread) {
+    document.getElementById('chat-thread').replaceChildren();
+    loadThread();
+  }
+}
+
+function chatNavItem(name, preview, { unread = false, current = false, time = null, onClick }) {
+  const item = chatEl('button', 'chat-nav-item' + (unread ? ' unread' : '') + (current ? ' current' : ''));
+  if (current) item.setAttribute('aria-current', 'true');
+  const top = chatEl('div', 'chat-nav-top');
+  top.appendChild(chatEl('span', 'chat-nav-name', name));
+  if (time !== null) top.appendChild(chatEl('span', 'chat-nav-time', chatTime(time)));
+  item.appendChild(top);
+  if (preview) item.appendChild(chatEl('div', 'chat-nav-preview', preview));
+  item.addEventListener('click', onClick);
+  return item;
+}
+
+function renderChatNav() {
+  const nav = document.getElementById('chat-nav');
+  nav.replaceChildren();
+  if (chatEnabled) {
+    nav.appendChild(chatEl('div', 'chat-nav-channel', 'Assistant'));
+    const assistant = chatView.kind === 'assistant';
+    nav.appendChild(chatNavItem(chatKept ? 'New conversation' : 'Assistant', 'Ask, or @ a component', {
+      current: assistant && !chatView.id,
+      onClick: () => showChatView({ kind: 'assistant', id: null }),
+    }));
+    for (const conversation of chatConversations) {
+      nav.appendChild(chatNavItem(conversation.title || 'Untitled', '', {
+        current: assistant && chatView.id === conversation.id,
+        time: conversation.updated,
+        onClick: () => showChatView({ kind: 'assistant', id: conversation.id }),
+      }));
+    }
+  }
+  const seen = chatSeen();
+  for (const channel of chatChannels) {
+    nav.appendChild(chatEl('div', 'chat-nav-channel', channel.name));
+    const threads = chatThreads[channel.name] || [];
+    if (!threads.length) nav.appendChild(chatEl('div', 'chat-nav-empty', 'Nothing yet'));
+    for (const t of threads) {
+      nav.appendChild(chatNavItem(t.thread, t.last ? t.last.text : '', {
+        unread: threadUnread(channel.name, t, seen),
+        current: chatView.kind === 'thread' && chatView.channel === channel.name && chatView.thread === t.thread,
+        time: t.time,
+        onClick: () => showChatView({ kind: 'thread', channel: channel.name, thread: t.thread }),
+      }));
+    }
+  }
+}
+
+async function loadThread() {
+  const { channel, thread } = chatView;
+  const load = ++threadLoads;
+  const box = document.getElementById('chat-thread');
+  let items;
+  try {
+    const res = await fetch(`/api/channels/${encodeURIComponent(channel)}/threads/${encodeURIComponent(thread)}`);
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    items = await res.json();
+  } catch (err) {
+    if (load === threadLoads) box.replaceChildren(chatEl('div', 'chat-msg error', `Couldn't load the thread: ${err.message}`));
+    return;
+  }
+  // With history on the server merges the thread's notes in; with it off
+  // they're this tab's.
+  if (!chatKept) {
+    const notes = (threadNotes[`${channel}/${thread}`] || [])
+      .map(t => ({ kind: 'note', role: t.role, text: t.content, time: t.ts }));
+    items = [...items, ...notes].sort((a, b) => a.time - b.time);
+  }
+  const render = items.some(i => i.kind === 'card' && i.markdown)
+    ? await loadMarkdownRenderer().catch(() => null) : null;
+  if (load !== threadLoads || chatView.kind !== 'thread') return;
+  renderThread(box, items, render);
+  if (items.length) markThreadSeen(channel, thread, items[items.length - 1].time);
+  updateChatUnread();
+  if (mapMode === 'chat') renderChatNav(); // its unread dot, now seen
+}
+
+// A card being acted on keeps its element (and the form in it) across a
+// refresh, so a notification arriving mid-edit doesn't wipe the form.
+function renderThread(box, items, render) {
+  const first = !box.children.length;
+  const atBottom = box.scrollHeight - box.scrollTop - box.clientHeight < 40;
+  const editing = new Map([...box.querySelectorAll('.chat-card.editing')].map(el => [el.dataset.id, el]));
+  box.replaceChildren();
+  if (!items.length) box.appendChild(chatEl('div', 'chat-nav-empty', 'Nothing in this thread yet'));
+  for (const item of items) {
+    if (item.kind === 'card') {
+      const id = `${item.repository}:${item.key}`;
+      box.appendChild(editing.get(id) || chatCard(item, render));
+    } else if (item.kind === 'note') {
+      box.appendChild(chatEl('div', `chat-msg note ${item.role}`, item.text));
+    } else {
+      box.appendChild(chatThreadMessage(item));
+    }
+  }
+  if (first || atBottom) box.scrollTop = box.scrollHeight;
+}
+
+function chatThreadMessage(item) {
+  const msg = chatEl('div', 'chat-msg ' + (item.direction === 'out' ? 'out' : 'in'));
+  const meta = [item.sender, chatTime(item.time)].filter(Boolean).join(' · ');
+  msg.appendChild(chatEl('div', 'chat-msg-meta', meta));
+  msg.appendChild(chatEl('div', 'chat-msg-text', item.text));
+  return msg;
+}
+
+function chatCard(item, render) {
+  const card = chatEl('div', 'chat-card');
+  card.dataset.id = `${item.repository}:${item.key}`;
+  card.appendChild(chatEl('div', 'chat-msg-meta', chatTime(item.time)));
+  const body = chatEl('div', 'chat-card-body');
+  if (item.markdown && render) {
+    body.classList.add('doc-markdown');
+    body.innerHTML = render(item.text);
+  } else {
+    body.textContent = item.text;
+  }
+  card.appendChild(body);
+  if (item.actions && item.actions.length) {
+    const bar = chatEl('div', 'chat-card-actions');
+    for (const action of item.actions) {
+      const btn = chatEl('button', 'data-btn', action.label);
+      btn.type = 'button';
+      btn.title = action.description;
+      btn.addEventListener('click', () => toggleCardAction(card, btn, action));
+      bar.appendChild(btn);
+    }
+    card.appendChild(bar);
+  }
+  return card;
+}
+
+// A card's action opens its form inside the card: the record's argument
+// given already and hidden, the arguments named like the record's fields
+// filled from it, for a person to change before it runs. While a form is
+// open the card is `.editing`, so a refresh keeps it. Clicking the action
+// again closes it.
+async function toggleCardAction(card, btn, action) {
+  const open = card.querySelector('.invoke-form');
+  const wasThis = btn.classList.contains('active');
+  if (open) open.remove();
+  card.querySelectorAll('.chat-card-actions .data-btn').forEach(b => b.classList.remove('active'));
+  card.classList.remove('editing');
+  if (wasThis) return;
+
+  let schema;
+  try {
+    const res = await fetch(`${action.href}/parameters`);
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    schema = await res.json();
+  } catch (err) {
+    addLog(`${action.label} parameters failed — ${err.message}`, ACCENT.alert);
+    return;
+  }
+  const hidden = { [action.param]: action.value };
+  const form = buildArgumentsForm(schema, {
+    prefill: action.prefill,
+    hidden,
+    label: action.label,
+    multiline: true,
+    onSubmit: (form, props, required) => runCardAction(card, form, props, required, action, hidden),
+  });
+  btn.classList.add('active');
+  card.classList.add('editing');
+  card.appendChild(form);
+  form.querySelector('input,textarea,button').focus();
+}
+
+async function runCardAction(card, form, props, required, action, hidden) {
+  const btn = form.querySelector('.invoke-run');
+  const out = form.querySelector('.invoke-result');
+  btn.disabled = true;
+  out.classList.remove('error');
+  try {
+    const args = { ...readInvokeForm(form, props, required), ...hidden };
+    const res = await fetch(`${action.href}/${action.verb}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(args),
+    });
+    const body = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error(invokeErrorMessage(body.detail, res.status));
+  } catch (err) {
+    out.textContent = err.message;
+    out.classList.add('error');
+    out.hidden = false;
+    btn.disabled = false;
+    return;
+  }
+  // Done: the card is redrawn from the record as it is now.
+  card.classList.remove('editing');
+  if (chatView.kind === 'thread') loadThread();
+}
+
+// A notification about a record of a repository in a channel (a message
+// taken in, a draft confirmed) refreshes the threads, and the open one.
+function onChannelNotification(n) {
+  if (!n.subject || !channelRepos.has(n.subject)) return;
+  clearTimeout(channelRefresh);
+  channelRefresh = setTimeout(() => {
+    refreshThreads();
+    if (chatView.kind === 'thread') loadThread();
+  }, 150);
+}
+
+document.getElementById('chat-back').addEventListener('click', () => showChatView({ kind: 'nav' }));
+
+// ── Full-screen chat ─────────────────────────────────────────────────────
+// Expand turns the drawer into a view of the map panel, as big as the
+// Notifications view, with the list of conversations beside the open one.
+// It's the 'chat' map mode, so leaving it as any view is left (Esc, another
+// view, a sidebar click) shrinks the chat back to its drawer, still open.
+// Whether the chat opens full screen is this viewer's own, kept in
+// localStorage; only Expand and Collapse change it.
+
+const CHAT_FULL_KEY = 'odf-ui-chat-full';
+
+function chatFull() {
+  try { return localStorage.getItem(CHAT_FULL_KEY) === '1'; } catch { return false; }
+}
+
+function rememberChatFull(on) {
+  try { localStorage.setItem(CHAT_FULL_KEY, on ? '1' : '0'); } catch {}
+}
+
+// Collapsing is leaving the view: setMapMode() lays the drawer out again.
+function setChatFull(on) {
+  if (!on) {
+    backToTopology();
+    return;
+  }
+  setDrawer('chat');
+  setMapMode('chat');
+  document.getElementById('map-panel-title').textContent = 'chat';
+  if (chatView.kind === 'nav') showChatView(chatView);
+  else layoutChat();
+}
+
+// The drawer is already full height, so full screen only widens it: arrows
+// out to the sides, and back in.
+const CHAT_EXPAND_ICONS = {
+  expand: '<svg viewBox="0 0 16 16"><path d="M8 3v10M6 8H2.5M4.5 6 2.5 8l2 2M10 8h3.5M11.5 6l2 2-2 2"/></svg>',
+  collapse: '<svg viewBox="0 0 16 16"><path d="M8 3v10M2 8h4M4 6l2 2-2 2M14 8h-4M12 6l-2 2 2 2"/></svg>',
+};
+
+function updateChatExpand() {
+  const btn = document.getElementById('chat-expand');
+  const full = mapMode === 'chat';
+  btn.innerHTML = full ? CHAT_EXPAND_ICONS.collapse : CHAT_EXPAND_ICONS.expand;
+  btn.title = full ? 'Collapse: back to the drawer' : 'Expand: show the chat full screen';
+  btn.setAttribute('aria-label', full ? 'Collapse' : 'Expand');
+  btn.setAttribute('aria-pressed', String(full));
+  btn.classList.toggle('active', full);
+}
+
+document.getElementById('chat-expand').addEventListener('click', () => {
+  const on = mapMode !== 'chat';
+  rememberChatFull(on);
+  setChatFull(on);
+});
+
+function appendChatMessage(role, text, list = document.getElementById('chat-messages')) {
   const div = document.createElement('div');
   div.className = 'chat-msg ' + role;
   div.textContent = text;
@@ -2678,27 +3324,62 @@ function appendChatMessage(role, text) {
   return div;
 }
 
+// A conversation as the model is sent it: each question with its answer, and
+// the new question last. A question whose turn failed stays on screen but
+// isn't sent again, or the model answers it instead of the new one (the
+// server does the same with kept conversations, chat_history.answered).
+function answeredTurns(held) {
+  return held
+    .filter((t, i) => t.role !== 'user' || i === held.length - 1 || held[i + 1].role === 'assistant')
+    .map(({ role, content }) => ({ role, content }));
+}
+
+// What a turn sends: with history on, only its text, and the server keeps
+// the conversation (an assistant one by id, or the one in a thread); with it
+// off, the whole conversation this tab holds. In a thread the turn is a note
+// and the server adds the thread as its context.
+function chatTurnBody(view, text) {
+  const thread = view.kind === 'thread' ? { channel: view.channel, thread: view.thread } : null;
+  if (chatKept) {
+    return thread ? { thread, text } : { conversation: view.id || undefined, text };
+  }
+  const held = thread ? (threadNotes[`${thread.channel}/${thread.thread}`] ||= []) : chatHistory;
+  held.push({ role: 'user', content: text, ts: Date.now() / 1000 });
+  const body = { messages: answeredTurns(held) };
+  if (thread) body.thread = thread;
+  return { ...body, held };
+}
+
 async function sendChatMessage() {
   if (chatBusy) return;
   const input = document.getElementById('chat-input');
   const text = input.value.trim();
   if (!text) return;
+  const view = chatView;
+  const inThread = view.kind === 'thread';
+  if (view.kind !== 'assistant' && !inThread) return;
   input.value = '';
-  chatHistory.push({ role: 'user', content: text });
-  appendChatMessage('user', text);
+  const list = document.getElementById(inThread ? 'chat-thread' : 'chat-messages');
+  const role = r => (inThread ? `note ${r}` : r);
+  // Events from a turn the person has moved away from aren't drawn.
+  const here = () => chatView === view;
+  const { held, ...body } = chatTurnBody(view, text);
+  appendChatMessage(role('user'), text, list);
 
   chatBusy = true;
-  const assistantDiv = appendChatMessage('assistant', '');
+  const assistantDiv = appendChatMessage(role('assistant'), '', list);
   let assistantContent = '';
-  const list = document.getElementById('chat-messages');
 
   try {
     const res = await fetch('/api/chat', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ messages: chatHistory }),
+      body: JSON.stringify(body),
     });
-    if (!res.ok || !res.body) throw new Error(`HTTP ${res.status}`);
+    if (!res.ok || !res.body) {
+      const detail = await res.json().then(b => b.detail).catch(() => null);
+      throw new Error(detail || `HTTP ${res.status}`);
+    }
 
     const reader = res.body.getReader();
     const decoder = new TextDecoder();
@@ -2712,28 +3393,36 @@ async function sendChatMessage() {
       for (const line of lines) {
         if (!line) continue;
         const event = JSON.parse(line);
-        if (event.type === 'token') {
+        if (event.type === 'conversation') {
+          // A new kept conversation: this view is it from now on.
+          view.id = event.id;
+          if (here()) document.getElementById('chat-delete').hidden = false;
+        } else if (event.type === 'token') {
           assistantContent += event.content;
           assistantDiv.textContent = assistantContent;
-          list.scrollTop = list.scrollHeight;
+          if (here()) list.scrollTop = list.scrollHeight;
+        } else if (!here()) {
+          continue;
         } else if (event.type === 'tool_call') {
-          appendChatMessage('tool', `→ ${event.name}(${JSON.stringify(event.arguments)})`);
+          appendChatMessage(role('tool'), `→ ${event.name}(${JSON.stringify(event.arguments)})`, list);
         } else if (event.type === 'tool_result') {
-          appendChatMessage('tool', `← ${event.name}: ${event.result}`);
+          appendChatMessage(role('tool'), `← ${event.name}: ${event.result}`, list);
         } else if (event.type === 'error') {
-          appendChatMessage('error', `Chat error: ${event.message} — is \`ollama serve\` running?`);
+          appendChatMessage('error', `Chat error: ${event.message} — is \`ollama serve\` running?`, list);
         }
       }
     }
   } catch (err) {
-    appendChatMessage('error', `Chat error: ${err.message}`);
+    if (here()) appendChatMessage('error', `Chat error: ${err.message}`, list);
   } finally {
-    if (assistantContent) {
-      chatHistory.push({ role: 'assistant', content: assistantContent });
-    } else {
-      assistantDiv.remove();
+    if (held && assistantContent) {
+      held.push({ role: 'assistant', content: assistantContent, ts: Date.now() / 1000 });
     }
+    if (!assistantContent) assistantDiv.remove();
     chatBusy = false;
+    if (chatKept && !inThread) loadConversations();
+    // Redrawn with the turn as notes, in case the thread refreshed mid-answer.
+    if (inThread && here()) loadThread();
   }
 }
 
@@ -2741,6 +3430,8 @@ async function sendChatMessage() {
 // Suggests component keys from the topology (`nodes`/`nodeMap`, already
 // fetched for the graph view) while typing an `@<namespace>.<name>` mention in
 // chat-input. Typing just the name or the class name finds the key too.
+// `nodes` holds only what the active view shows, so the suggestions follow
+// the view; a hidden component's key typed in full still reaches the chat.
 
 let mentionMatches = [];
 let mentionActive = -1;
@@ -2856,16 +3547,33 @@ function tickClock() {
 
 // ── Stats ─────────────────────────────────────────────────────────────────
 
+// Lists, under the topology, only the types it shows.
+function renderLegend() {
+  const shown = new Set(nodes.map(n => n.type));
+  const legend = document.getElementById('type-legend');
+  legend.style.display = shown.size ? '' : 'none'; // no empty panel over an empty topology
+  legend.innerHTML = TYPE_LEGEND
+    .filter(([type]) => shown.has(type))
+    .map(([type, title]) =>
+      `<div class="tl-item" style="color:var(--accent-${type})" title="${title}"><span class="tl-pip"></span>${TYPE_LABEL[type]}</div>`)
+    .join('');
+}
+
+// Runs once per page (switching views reloads it), so a type the topology
+// doesn't show has its count removed, not hidden: the last count left keeps
+// the theme's :last-child styling.
 function renderStats(data) {
   const types = data.stats.types || {};
+  for (const type of ['service', 'task', 'pipeline', 'agent', 'function']) {
+    if (!types[type]) document.getElementById(`stat-${type}s`)?.closest('.hdr-stat')?.remove();
+  }
   document.getElementById('stat-project').textContent   = data.project;
   document.getElementById('stat-objects').textContent   = String(data.stats.objects);
   document.getElementById('stat-links').textContent     = String(data.stats.links);
-  document.getElementById('stat-services').textContent  = String(types.service || 0);
-  document.getElementById('stat-tasks').textContent     = String(types.task || 0);
-  document.getElementById('stat-pipelines').textContent = String(types.pipeline || 0);
-  document.getElementById('stat-agents').textContent    = String(types.agent || 0);
-  document.getElementById('stat-functions').textContent = String(types.function || 0);
+  for (const type of ['service', 'task', 'pipeline', 'agent', 'function']) {
+    const el = document.getElementById(`stat-${type}s`);
+    if (el) el.textContent = String(types[type]);
+  }
   document.getElementById('hdr-subtitle').textContent   = `Topology · ${data.project}`;
   document.getElementById('node-count').textContent     = String(data.stats.objects).padStart(2, '0');
   document.title = `${BRAND} — ${data.project}`;
@@ -2878,7 +3586,7 @@ function renderStats(data) {
 // selection follows the active mode (see selectFromSidebar above), so this
 // is the single place that knows how to enter/leave each mode.
 
-let mapMode = 'topology'; // 'topology' | 'data' | 'stream' | 'media' | 'image' | 'document' | 'timeseries' | 'logs' | 'geo' | 'details' | 'chart'
+let mapMode = 'topology'; // 'topology' | 'data' | 'stream' | 'media' | 'image' | 'document' | 'timeseries' | 'logs' | 'geo' | 'details' | 'chart' | 'trace' | 'notifications' | 'chat'
 let audioStreamActive = false; // guards the streaming-audio poll-and-chain loop, see playAudioStream()
 
 function setMapMode(mode) {
@@ -2886,6 +3594,11 @@ function setMapMode(mode) {
     clearInterval(logsPollTimer);
     logsPollTimer = null;
     activeLogComponentId = null;
+  }
+  if (mapMode === 'trace' && mode !== 'trace') {
+    clearInterval(tracePollTimer);
+    tracePollTimer = null;
+    traceCall = null;
   }
   if (mapMode === 'stream' && mode !== 'stream') {
     audioStreamActive = false;
@@ -2911,8 +3624,14 @@ function setMapMode(mode) {
   if (replayMode && mode !== mapMode) teardownReplay();
   if (mode === 'topology') activeRepoId = null;
   if (mode !== 'topology') closeStylePicker(); // its anchor (the inspector popup) is hidden outside topology
+  const leftChat = mapMode === 'chat' && mode !== 'chat';
   mapMode = mode;
   document.getElementById('map').className = 'panel mode-' + mode;
+  updateChatExpand();
+  if (leftChat) layoutChat();
+  const notesBtn = document.getElementById('notifications-toggle');
+  notesBtn.classList.toggle('active', mode === 'notifications');
+  notesBtn.setAttribute('aria-pressed', String(mode === 'notifications'));
   document.getElementById('map-panel-hdr-extra').innerHTML = '';
 }
 
@@ -3464,6 +4183,8 @@ window.addEventListener('keydown', e => {
     return;
   }
   if (e.key !== 'Escape') return;
+  // Esc while typing in the chat (a question, a card's form) isn't leaving it.
+  if (e.defaultPrevented || (mapMode === 'chat' && e.target.closest('#chat-drawer input, #chat-drawer textarea, #chat-drawer select'))) return;
   if (mapMode !== 'topology') backToTopology();
   else if (selectId) deselectNode();
 });
@@ -6257,13 +6978,16 @@ const LOG_LEVEL_COLOR = {
 let activeLogComponentId = null;
 let logsPollTimer = null;
 // The run a toast opened the logs for is marked, and its first line scrolled
-// to once: the lines from its call's `started` record to its `completed` or
-// `failed` one, which takes in what the component logged meanwhile (only the
-// call's own records carry its id). Once those have been tailed away, the
-// lines from its start time (epoch seconds) on.
+// to once: the call's own records (its `call`) and every line written while
+// it ran (its `parent`), so a run overlapping another stays apart from it.
+// Once the run has been tailed away, the view shows that run's records alone,
+// read once from GET .../logs?call= (`context.logs()`). Where that can't be
+// read (the `text` log format), the lines from its start time on are marked.
 let logsSince = null;
 let logsCall = null;
 let logsScrollToSince = false;
+// The run's own records, once fetched: an array, or false if they can't be read.
+let logsRunRecords = null;
 
 // `since`, optional, is a run's start as epoch seconds (an event's `ts`), and
 // `call` its `call_id`.
@@ -6271,13 +6995,19 @@ async function showLogsView(id, since, call) {
   activeLogComponentId = id;
   logsSince = since || null;
   logsCall = call || null;
-  logsScrollToSince = !!logsSince;
-  const node = nodeMap[id];
+  logsRunRecords = null;
+  logsScrollToSince = !!(logsSince || logsCall);
   setMapMode('logs');
-  document.getElementById('map-panel-title').textContent = `${node.label} · logs`;
+  setLogsTitle(false);
   await refreshLogs();
   clearInterval(logsPollTimer);
   logsPollTimer = setInterval(refreshLogs, 2000);
+}
+
+function setLogsTitle(runOnly) {
+  const node = nodeMap[activeLogComponentId];
+  document.getElementById('map-panel-title').textContent =
+    `${node.label} · logs${runOnly ? ' · one run' : ''}`;
 }
 
 async function refreshLogs() {
@@ -6291,28 +7021,63 @@ async function refreshLogs() {
     body.innerHTML = '<span class="detail-empty">// failed to load logs</span>';
     return;
   }
-  renderLogs(entries);
+  if (logsCall && !entries.some(inRun)) {
+    const run = await runRecords();
+    if (run && run.length) {
+      setLogsTitle(true);
+      renderLogs(run, true);
+      return;
+    }
+  }
+  setLogsTitle(false);
+  renderLogs(entries, false);
 }
 
-function renderLogs(entries) {
+// Whether log record `e` belongs to the run `logsCall` names.
+function inRun(e) {
+  return e.call === logsCall || e.parent === logsCall;
+}
+
+// The run's records from every file, oldest first; fetched once per run.
+async function runRecords() {
+  if (logsRunRecords === null) {
+    const call = logsCall;
+    try {
+      const res = await fetch(`${apiPath(activeLogComponentId)}/logs?call=${encodeURIComponent(call)}`);
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      const records = await res.json();
+      records.sort((a, b) => Date.parse(a.ts) - Date.parse(b.ts));
+      if (logsCall === call) logsRunRecords = records;
+    } catch (err) {
+      if (logsCall === call) logsRunRecords = false;
+    }
+  }
+  return logsRunRecords || null;
+}
+
+// `runOnly`: `entries` are one run's records, from any component's file, so
+// each line written by another component names it.
+function renderLogs(entries, runOnly) {
   const body = document.getElementById('map-panel-body');
   if (!entries.length) {
     body.innerHTML = '<span class="detail-empty">// no logs yet</span>';
     return;
   }
   const wasAtBottom = body.scrollTop + body.clientHeight >= body.scrollHeight - 4;
-  const run = runSpan(entries);
+  const byCall = logsCall && !runOnly && entries.some(inRun);
   let html = '<div class="map-logs-lines">';
-  entries.forEach((e, i) => {
+  entries.forEach(e => {
     const color = LOG_LEVEL_COLOR[e.level] || 'var(--text-muted)';
     // A record's ts is ISO 8601 with milliseconds and the UTC offset.
     const at = e.ts ? Date.parse(e.ts) / 1000 : NaN;
-    const match = run ? i >= run.from && i <= run.to : logsSince && at >= logsSince;
+    const match = runOnly || (byCall ? inRun(e) : logsSince && at >= logsSince);
     const ts = Number.isNaN(at) ? e.ts : logTimestamp(at);
+    const other = runOnly && e.key && e.key !== activeLogComponentId;
+    const who = other ? `${(nodeMap[e.key] || { label: e.key }).label} · ` : '';
     html += `<div class="log-line${match ? ' run-match' : ''}">` +
       `<span class="dot" style="background:${color}"></span>` +
       (ts ? `<span class="ts">${escapeHtml(ts)}</span>` : '') +
-      `<span>${escapeHtml(e.message)}</span></div>`;
+      `<span>${escapeHtml(who + e.message)}</span></div>`;
   });
   html += '</div>';
   body.innerHTML = html;
@@ -6325,20 +7090,6 @@ function renderLogs(entries) {
   }
 }
 
-// Indexes of the first and last of `entries` belonging to the run `logsCall`
-// names: its `started` record, up to its `completed`/`failed` one (or the
-// last line, if that isn't logged yet). Null if its start isn't among them.
-function runSpan(entries) {
-  if (!logsCall) return null;
-  const from = entries.findIndex(e => e.call === logsCall && e.state === 'started');
-  if (from < 0) return null;
-  let to = entries.length - 1;
-  for (let i = from + 1; i < entries.length; i++) {
-    if (entries[i].call === logsCall && entries[i].state !== 'started') { to = i; break; }
-  }
-  return { from, to };
-}
-
 // 'YYYY-MM-DD HH:MM:SS' in local time, as a log line shows it.
 function logTimestamp(epochSeconds) {
   const d = new Date(epochSeconds * 1000);
@@ -6346,6 +7097,372 @@ function logTimestamp(epochSeconds) {
   return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())} ` +
     `${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`;
 }
+
+// ── Trace view ───────────────────────────────────────────────────────────
+// Backs "Show run", on a toast and on the header status once a call is done.
+// Reads GET /api/trace/{call_id}, the whole story the call is part of
+// (context.trace(root=True)): from the call it started from, every call made
+// inside it, the log lines each wrote and the notifications each published,
+// and under each notification the calls its subscribers made. So a reaction
+// reads in the same tree as what it reacted to. The call the user came from is
+// marked. Polls while open, as reactions in the background may still be coming.
+
+let traceCall = null;
+let tracePollTimer = null;
+let traceShown = null; // the JSON last drawn, so an unchanged poll doesn't redraw
+
+async function showTraceView(call) {
+  traceCall = call;
+  traceShown = null;
+  setMapMode('trace');
+  document.getElementById('map-panel-title').textContent = 'run';
+  await refreshTrace();
+  clearInterval(tracePollTimer);
+  tracePollTimer = setInterval(refreshTrace, 2000);
+}
+
+async function refreshTrace() {
+  const call = traceCall;
+  const body = document.getElementById('map-panel-body');
+  let res;
+  try {
+    res = await fetch(`/api/trace/${encodeURIComponent(call)}`);
+  } catch (err) {
+    if (traceCall === call) body.innerHTML = '<span class="detail-empty">// failed to load the run</span>';
+    return;
+  }
+  if (traceCall !== call) return;
+  if (!res.ok) {
+    // 404: not written yet, or rotated away; 409: logs that can't be read back.
+    const why = res.status === 404 ? 'this run isn\'t in the logs (yet)'
+      : res.status === 409 ? 'runs need file logging in the json format' : 'failed to load the run';
+    body.innerHTML = `<span class="detail-empty">// ${why}</span>`;
+    traceShown = null;
+    return;
+  }
+  const text = await res.text();
+  if (traceCall !== call || text === traceShown) return;
+  const firstDraw = traceShown === null;
+  traceShown = text;
+  const root = JSON.parse(text);
+  const node = nodeMap[root.key];
+  document.getElementById('map-panel-title').textContent = `${node ? node.label : root.key} · run`;
+  body.innerHTML = `<div class="map-trace">${traceCallHtml(root)}</div>`;
+  const asked = firstDraw && body.querySelector('.trace-call.asked');
+  if (asked) asked.scrollIntoView({ block: 'center' });
+}
+
+// One call: its head, then what happened inside it, in the order it happened.
+function traceCallHtml(c) {
+  const node = nodeMap[c.key];
+  const label = node ? node.label : c.key;
+  const accent = node ? nodeAccentCss(node) : 'var(--text-dim)';
+  const took = c.state === 'running' ? 'running'
+    : c.state === 'failed' ? 'failed' : c.elapsed_ms == null ? c.state : formatElapsed(c.elapsed_ms);
+  const at = c.started ? logTimestamp(Date.parse(c.started) / 1000) : '';
+  const items = [
+    ...c.logs.map(l => ({ ts: l.ts, html: traceLogHtml(l) })),
+    ...c.notifications.map(n => ({ ts: n.ts, html: traceNotificationHtml(n) })),
+    ...c.children.map(k => ({ ts: k.started || k.ended, html: traceCallHtml(k) })),
+  ].sort((a, b) => (Date.parse(a.ts) || 0) - (Date.parse(b.ts) || 0));
+  return `<div class="trace-call ${escapeHtml(c.state)}${c.call === traceCall ? ' asked' : ''}">` +
+    `<div class="trace-head${node ? ' linked' : ''}" data-key="${escapeHtml(c.key)}" data-call="${escapeHtml(c.call)}"` +
+    ` data-since="${c.started ? Date.parse(c.started) / 1000 : ''}"${node ? ' title="Show this call\'s logs"' : ''}>` +
+    `<span class="dot" style="background:${accent}"></span>` +
+    `<span class="trace-key">${escapeHtml(label)}</span>` +
+    `<span class="trace-method">${escapeHtml(methodLabel(c.method))}</span>` +
+    `<span class="trace-took">${escapeHtml(took)}</span>` +
+    (at ? `<span class="ts">${escapeHtml(at)}</span>` : '') + '</div>' +
+    (c.error ? `<div class="trace-error">${escapeHtml(c.error)}</div>` : '') +
+    (items.length ? `<div class="trace-body">${items.map(i => i.html).join('')}</div>` : '') +
+    '</div>';
+}
+
+function traceLogHtml(l) {
+  const color = LOG_LEVEL_COLOR[l.level] || 'var(--text-muted)';
+  const at = l.ts ? logTimestamp(Date.parse(l.ts) / 1000) : '';
+  return `<div class="log-line"><span class="dot" style="background:${color}"></span>` +
+    (at ? `<span class="ts">${escapeHtml(at)}</span>` : '') +
+    `<span>${escapeHtml(l.message || '')}</span></div>`;
+}
+
+// A notification, and under it the calls its subscribers made.
+function traceNotificationHtml(n) {
+  const color = n.level === 'error' ? 'var(--accent-alert)'
+    : n.level === 'warning' ? 'var(--accent-task)' : 'var(--title-accent)';
+  // The summary under the topic; `message` repeats the topic, so it's only
+  // the fallback for a trace without summaries.
+  const text = n.summary || (n.message && n.message !== n.topic ? n.message : '');
+  const triggered = n.triggered || [];
+  return '<div class="trace-note">' +
+    `<div class="trace-note-head"><span class="trace-topic" style="color:${color}">&#9670; ${escapeHtml(n.topic || '')}</span>` +
+    (text ? `<span>${escapeHtml(text)}</span>` : '') + '</div>' +
+    (triggered.length ? `<div class="trace-body">${triggered.map(traceCallHtml).join('')}</div>` : '') +
+    '</div>';
+}
+
+document.getElementById('map-panel-body').addEventListener('click', e => {
+  const head = mapMode === 'trace' && e.target.closest('.trace-head.linked');
+  if (!head) return;
+  selectNode(head.dataset.key);
+  showLogsView(head.dataset.key, Number(head.dataset.since) || null, head.dataset.call);
+});
+
+// ── Notifications view ───────────────────────────────────────────────────
+// Backs the header's Notifications button: every notification from every
+// component, newest first, kept across restarts. Reads
+// GET /api/notifications/history (context.notification_history()) a page at
+// a time, and adds what the page's notification stream brings while it's
+// open. Each row offers the toast's actions, where they lead somewhere: Open
+// when its subject is a node with a data view, Show logs when its publisher
+// is a node, Show run when it was published inside a call.
+
+const NOTES_PAGE = 100;
+let notesRows = [];            // newest first, each with `at` (epoch ms)
+let notesOldestCursor = null;  // the oldest *fetched* row's; live rows have none
+let notesMore = false;         // whether Older may find more
+let notesFetch = 0;            // bumped per fetch, so a stale answer is dropped
+let notesError = null;
+const notesFilter = { topic: '', publisher: '', level: '', all: false };
+const notesPublishers = new Set();
+const notesTopics = new Set();
+const NOTE_LEVELS = ['info', 'success', 'warning', 'error'];
+
+function noteLevelColor(level) {
+  return level === 'error' ? 'var(--accent-alert)'
+    : level === 'warning' ? 'var(--accent-task)'
+    : level === 'success' ? 'var(--title-accent)' : 'var(--text-muted)';
+}
+
+// A history row's ts is ISO 8601, a streamed one's epoch seconds.
+function noteRow(n) {
+  const at = typeof n.ts === 'number' ? n.ts * 1000 : Date.parse(n.ts);
+  return { ...n, at, cursor: n.cursor || null };
+}
+
+// The JS twin of opendataframework.notifications._matches: a filter is a
+// topic, or `prefix.*` for every topic under it.
+function noteTopicMatches(pattern, topic) {
+  if (!pattern) return true;
+  return pattern.endsWith('.*') ? topic.startsWith(pattern.slice(0, -1)) : pattern === topic;
+}
+
+function notePasses(n) {
+  return (notesFilter.all || !!n.summary) &&
+    noteTopicMatches(notesFilter.topic, n.topic) &&
+    (!notesFilter.publisher || n.publisher === notesFilter.publisher) &&
+    (!notesFilter.level || n.level === notesFilter.level);
+}
+
+function notesQuery(before) {
+  const q = new URLSearchParams({ limit: String(NOTES_PAGE) });
+  if (notesFilter.topic) q.set('topic', notesFilter.topic);
+  if (notesFilter.publisher) q.set('key', notesFilter.publisher);
+  if (notesFilter.level) q.set('level', notesFilter.level);
+  if (notesFilter.all) q.set('all', '1');
+  if (before) q.set('before', before);
+  return `/api/notifications/history?${q}`;
+}
+
+// One page: rows, or throws an Error whose message is shown.
+async function fetchNotesPage(before) {
+  const res = await fetch(notesQuery(before));
+  if (res.status === 409) throw new Error('notification history needs file logging');
+  if (!res.ok) {
+    let detail = `HTTP ${res.status}`;
+    try { detail = (await res.json()).detail || detail; } catch (err) { /* not JSON */ }
+    throw new Error(detail);
+  }
+  return (await res.json()).map(noteRow);
+}
+
+function showNotificationsView() {
+  setMapMode('notifications');
+  document.getElementById('map-panel-title').textContent = 'notifications';
+  const extra = document.getElementById('map-panel-hdr-extra');
+  extra.innerHTML = `<button id="notes-all" class="data-btn${notesFilter.all ? ' primary' : ''}" ` +
+    'title="Also show the notifications without a summary, meant for components">All topics</button>';
+  document.getElementById('notes-all').addEventListener('click', e => {
+    notesFilter.all = !notesFilter.all;
+    e.currentTarget.classList.toggle('primary', notesFilter.all);
+    reloadNotes();
+  });
+  document.getElementById('map-panel-body').innerHTML =
+    '<table class="data-table notes-table"><thead><tr>' +
+    '<th>When</th><th>Publisher</th><th>Level</th><th>Topic</th><th>Summary</th><th></th>' +
+    '</tr><tr class="filter-row"><th></th>' +
+    '<th><select id="notes-publisher" class="view-mode-select" title="Publisher"></select></th>' +
+    '<th><select id="notes-level" class="view-mode-select" title="Level"><option value="">all</option>' +
+    NOTE_LEVELS.map(l => `<option value="${l}"${notesFilter.level === l ? ' selected' : ''}>${l}</option>`).join('') +
+    '</select></th>' +
+    `<th><input id="notes-topic" class="col-filter" list="notes-topics" placeholder="topic or prefix.*" value="${escapeHtml(notesFilter.topic)}">` +
+    '<datalist id="notes-topics"></datalist></th><th></th><th></th></tr></thead>' +
+    '<tbody id="notes-rows"></tbody></table>' +
+    '<button id="notes-older" class="data-btn block" hidden>Older</button>';
+  renderNotesPublishers();
+  document.getElementById('notes-publisher').addEventListener('change', e => {
+    notesFilter.publisher = e.target.value;
+    reloadNotes();
+  });
+  document.getElementById('notes-level').addEventListener('change', e => {
+    notesFilter.level = e.target.value;
+    reloadNotes();
+  });
+  document.getElementById('notes-topic').addEventListener('change', e => {
+    notesFilter.topic = e.target.value.trim();
+    reloadNotes();
+  });
+  document.getElementById('notes-older').addEventListener('click', olderNotes);
+  reloadNotes();
+}
+
+async function reloadNotes() {
+  const fetchId = ++notesFetch;
+  notesRows = [];
+  notesOldestCursor = null;
+  notesMore = false;
+  notesError = null;
+  renderNotes();
+  try {
+    const rows = await fetchNotesPage(null);
+    if (fetchId !== notesFetch || mapMode !== 'notifications') return;
+    mergeNotes(rows);
+    notesMore = rows.length === NOTES_PAGE;
+  } catch (err) {
+    if (fetchId !== notesFetch) return;
+    notesError = err.message;
+  }
+  renderNotes();
+}
+
+async function olderNotes() {
+  // Nothing fetched yet (only live rows): the first page, merged by id.
+  if (!notesOldestCursor) return refetchNotesFirstPage();
+  const fetchId = ++notesFetch;
+  try {
+    const rows = await fetchNotesPage(notesOldestCursor);
+    if (fetchId !== notesFetch || mapMode !== 'notifications') return;
+    mergeNotes(rows);
+    notesMore = rows.length === NOTES_PAGE;
+  } catch (err) {
+    if (fetchId !== notesFetch) return;
+    notesError = err.message;
+  }
+  renderNotes();
+}
+
+// After a reconnect, or Older with nothing fetched: the first page, merged by
+// id. A page that doesn't reach the rows already loaded replaces them, so
+// Older pages on from it with no hole.
+async function refetchNotesFirstPage() {
+  const fetchId = ++notesFetch;
+  let rows;
+  try {
+    rows = await fetchNotesPage(null);
+  } catch (err) {
+    if (fetchId === notesFetch) { notesError = err.message; renderNotes(); }
+    return;
+  }
+  if (fetchId !== notesFetch || mapMode !== 'notifications') return;
+  const known = new Set(notesRows.map(r => r.id));
+  const reaches = rows.length < NOTES_PAGE || rows.some(r => known.has(r.id));
+  if (!reaches) notesRows = [];
+  notesError = null;
+  mergeNotes(rows);
+  if (!reaches || !notesMore) notesMore = rows.length === NOTES_PAGE;
+  renderNotes();
+}
+
+// Adds fetched rows, newest first, by id; the oldest fetched cursor moves back.
+function mergeNotes(rows) {
+  const byId = new Map(notesRows.map(r => [r.id, r]));
+  for (const r of rows) {
+    byId.set(r.id, r);
+    notesPublishers.add(r.publisher);
+    notesTopics.add(r.topic);
+  }
+  notesRows = [...byId.values()].sort((a, b) => b.at - a.at);
+  const fetched = notesRows.filter(r => r.cursor);
+  notesOldestCursor = fetched.length ? fetched[fetched.length - 1].cursor : null;
+}
+
+function onNotesLive(n) {
+  notesPublishers.add(n.publisher);
+  notesTopics.add(n.topic);
+  renderNotesPublishers();
+  if (!notePasses(n) || notesRows.some(r => r.id === n.id)) return;
+  notesRows.unshift(noteRow(n));
+  renderNotes();
+}
+
+// The publisher filter lists the publishers seen, so its value is always one
+// the rows carry.
+function renderNotesPublishers() {
+  const select = document.getElementById('notes-publisher');
+  if (!select) return;
+  const keys = [...notesPublishers].sort();
+  const html = '<option value="">all</option>' + keys.map(k =>
+    `<option value="${escapeHtml(k)}"${notesFilter.publisher === k ? ' selected' : ''}>` +
+    `${escapeHtml((nodeMap[k] || { label: k }).label)}</option>`).join('');
+  if (select.dataset.keys !== keys.join('\n')) {
+    select.innerHTML = html;
+    select.dataset.keys = keys.join('\n');
+  }
+  const topics = document.getElementById('notes-topics');
+  if (topics) topics.innerHTML = [...notesTopics].sort().map(t => `<option value="${escapeHtml(t)}">`).join('');
+}
+
+function renderNotes() {
+  const tbody = document.getElementById('notes-rows');
+  if (!tbody) return;
+  renderNotesPublishers();
+  let html = '';
+  if (notesError) {
+    html = `<tr class="empty-row"><td colspan="6">// ${escapeHtml(notesError)}</td></tr>`;
+  } else if (!notesRows.length) {
+    html = '<tr class="empty-row"><td colspan="6">// no notifications yet</td></tr>';
+  }
+  for (const n of notesError ? [] : notesRows) {
+    const node = nodeMap[n.publisher];
+    const opens = n.subject && repoSchemas[n.subject] && repoSchemas[n.subject].view && nodeMap[n.subject];
+    html += `<tr data-id="${escapeHtml(n.id)}">` +
+      `<td class="ts">${escapeHtml(Number.isNaN(n.at) ? String(n.ts) : logTimestamp(n.at / 1000))}</td>` +
+      `<td style="color:${node ? nodeAccentCss(node) : 'var(--text-muted)'}">${escapeHtml(node ? node.label : n.key)}</td>` +
+      `<td style="color:${noteLevelColor(n.level)}">${escapeHtml(n.level)}</td>` +
+      `<td>${escapeHtml(n.topic)}</td>` +
+      `<td>${n.summary ? escapeHtml(n.summary) : '<span class="detail-empty">—</span>'}</td>` +
+      '<td class="actions">' +
+      (opens ? '<button class="data-btn" data-act="open">Open</button>' : '') +
+      (n.parent ? '<button class="data-btn" data-act="run">Show run</button>' : '') +
+      (node ? '<button class="data-btn" data-act="logs">Show logs</button>' : '') +
+      '</td></tr>';
+  }
+  tbody.innerHTML = html;
+  document.getElementById('notes-older').hidden = !!notesError || !notesMore;
+}
+
+document.getElementById('map-panel-body').addEventListener('click', e => {
+  const btn = mapMode === 'notifications' && e.target.closest('button[data-act]');
+  if (!btn) return;
+  const n = notesRows.find(r => r.id === btn.closest('tr').dataset.id);
+  if (!n) return;
+  if (btn.dataset.act === 'open') {
+    selectNode(n.subject);
+    showDataView(n.subject);
+  } else if (btn.dataset.act === 'run') {
+    if (nodeMap[n.publisher]) selectNode(n.publisher);
+    showTraceView(n.parent);
+  } else {
+    markRunSeen(n.publisher);
+    selectNode(n.publisher);
+    showLogsView(n.publisher, n.at / 1000, n.parent);
+  }
+});
+
+document.getElementById('notifications-toggle').addEventListener('click', () => {
+  if (mapMode === 'notifications') backToTopology();
+  else showNotificationsView();
+});
 
 // ── Details view ─────────────────────────────────────────────────────────
 // Backs the "Details" action, present on nodes whose node.details flag came
@@ -6441,6 +7558,7 @@ async function loadUiExtensions() {
   }
   annotationsEnabled = Boolean(ext.annotations);
   notebooksEnabled = Boolean(ext.notebooks);
+  initViewSwitcher(ext.views || [], ext.defaultView || null);
 
   // An unknown grid name falls back to the isometric one, as a stale icon
   // key falls back to the type default.
@@ -6477,12 +7595,42 @@ async function loadUiExtensions() {
   }
 }
 
+// Picks the view this page shows: the URL's ?view= when it names one, else
+// the one last picked in this browser, else the default. With two or more
+// views the header's switcher lists them; picking one reloads the page at
+// its ?view=, so everything below init() starts again on its topology.
+const VIEW_STORAGE_KEY = 'odf-view';
+
+function initViewSwitcher(views, defaultView) {
+  if (!views.length) return;
+  const known = new Set(views.map(v => v.name));
+  let remembered = null;
+  try { remembered = localStorage.getItem(VIEW_STORAGE_KEY); } catch {}
+  const asked = new URLSearchParams(location.search).get('view');
+  activeView = [asked, remembered, defaultView, views[0].name].find(v => v && known.has(v));
+  try { localStorage.setItem(VIEW_STORAGE_KEY, activeView); } catch {}
+  if (views.length < 2) return;
+  const select = document.getElementById('view-switcher');
+  select.innerHTML = views
+    .map(v => `<option value="${escapeHtml(v.name)}">${escapeHtml(v.label)}</option>`)
+    .join('');
+  select.value = activeView;
+  select.hidden = false;
+  select.addEventListener('change', () => {
+    try { localStorage.setItem(VIEW_STORAGE_KEY, select.value); } catch {}
+    const url = new URL(location.href);
+    url.searchParams.set('view', select.value);
+    location.assign(url);
+  });
+}
+
 async function init() {
   await loadUiExtensions();
 
   let data = { project: 'ODF Project', nodes: [], edges: [], stats: { objects: 0, links: 0, types: {} } };
   try {
-    const res = await fetch('/api/topology');
+    const query = activeView ? `?view=${encodeURIComponent(activeView)}` : '';
+    const res = await fetch(`/api/topology${query}`);
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
     data = await res.json();
   } catch (err) {
@@ -6507,10 +7655,16 @@ async function init() {
     console.error('Failed to load saved layout', err);
   }
 
-  if (layoutOverrides._grid) gridExpand = { ...gridExpand, ...layoutOverrides._grid };
+  // A view's own grid size, else the one saved before views.
+  const savedGrid = viewPlaces()._grid || layoutOverrides._grid;
+  if (savedGrid) gridExpand = { ...gridExpand, ...savedGrid };
 
   nodes = data.nodes;
   edges = data.edges;
+  notifies = data.notifies || [];
+  // Publishers declared, so the Notifications view's filter lists them
+  // before they have published.
+  for (const p of data.publishers || []) notesPublishers.add(p.key);
   nodeMap = Object.fromEntries(nodes.map(n => [n.id, n]));
   for (const [id, schema] of Object.entries(repoSchemas)) {
     if (nodeMap[id]) nodeMap[id].streaming = schema.streaming;
@@ -6524,6 +7678,7 @@ async function init() {
   byDepth = [...nodes];
   computeGridBounds();
   renderStats(data);
+  renderLegend();
 
   buildSidebar();
   initTheme();

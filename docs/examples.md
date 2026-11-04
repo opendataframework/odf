@@ -3,6 +3,7 @@
 Small, focused `odf` projects demonstrating the CLI/MCP/UI-server surface
 that sits on top of
 [`opendataframework`](https://opendataframework.github.io/opendataframework/).
+For a whole application using most of it at once, see the [Demo](demo.md).
 These depend on `opendataframework` as a real package dependency, so this
 directory doubles as an integration check that the split works for
 external consumers.
@@ -35,6 +36,7 @@ external consumers.
 | 24 | [`24-custom-theme`](https://github.com/opendataframework/odf/tree/main/examples/24-custom-theme) | A project serving its own UI theme from `./themes/glitch/` (`[ui] theme` as a path): dark solids with bright edges and a thin cyan and magenta chromatic-split fringe on the chrome and on lit icons, with purple stacked layers as its favicon and header mark. | [UI](ui.md#custom-themes) |
 | 25 | [`25-flat-grid`](https://github.com/opendataframework/odf/tree/main/examples/25-flat-grid) | `[ui] grid = "flat"`: a parcel depot with one node of each kind, drawn as a top-down schematic where each node shows its type's glyph, plus a committed `layout.json` giving `Couriers` a `user` glyph (`flatIcon`) and a blue color. | [UI](ui.md#flat-grid) |
 | 26 | [`26-notifications`](https://github.com/opendataframework/odf/tree/main/examples/26-notifications) | Notifications shown in the UI: a café counter publishing each order as `info`, low stock as `warning` and an empty pantry as `error`, each a notice in every open tab with **Open** and **Show logs**, plus a `success` from a `Restock` task and a summary-less ticket only a `Kitchen` component receives. | [UI](ui.md#run-activity) |
+| 27 | [`27-channels`](https://github.com/opendataframework/odf/tree/main/examples/27-channels) | A help desk's conversations in the chat drawer: `Messages` and `Tickets` declare a `conversation()` in one `support` channel, one thread per customer, each ticket a card whose action, `send_reply`, takes `Annotated[int, Record(Tickets)]` and starts from the ticket's reply. `main.py` reads the channel and sends a reply over MCP. | [Chat](chat.md#channels), [MCP](mcp.md#tools) |
 
 Examples 2–5 and 22 mirror `odf init --template <name>`'s scaffolded layouts —
 each is runnable both as a plain script (`python main.py`) and via

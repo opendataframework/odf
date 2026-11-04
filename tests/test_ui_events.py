@@ -3,6 +3,7 @@ import json
 import threading
 
 import pytest
+from opendataframework.component import Component
 from opendataframework.context import Context
 from opendataframework.function import Function
 from opendataframework.namespace import Namespace
@@ -79,6 +80,7 @@ def test_serialize_names_the_protocol_and_keeps_the_call_fields():
         "state": "started",
         "call_id": started["call_id"],
         "parent": None,
+        "cause": None,
         "ts": started["ts"],
         "elapsed_ms": None,
         "error": None,
@@ -206,8 +208,9 @@ class _Ticket:
 
 
 def _publisher(NS):
-    from opendataframework.notifications import Notifications
+    from opendataframework.notifications import Notifications, Publisher
 
+    @Publisher("orders.received")
     @NS
     @Task
     class TakeOrder:
@@ -239,7 +242,9 @@ def test_serialize_notification_makes_payload_and_record_json_ready():
     item = events.serialize_notification(seen[0])
     assert item == {
         "type": "notification",
+        "id": seen[0].id,
         "key": ctx.key(TakeOrder),
+        "publisher": ctx.key(TakeOrder),
         "topic": "orders.received",
         "summary": "Le Petit: 2 baguettes",
         "level": "warning",
@@ -251,6 +256,32 @@ def test_serialize_notification_makes_payload_and_record_json_ready():
     }
     assert item["parent"] is not None  # published inside execute()
     json.dumps(item)
+
+
+def test_serialize_names_the_notification_a_reaction_was_caused_by():
+    NS = make_ns()
+    TakeOrder = _publisher(NS)
+
+    from opendataframework.notifications import Notification, Subscriber
+
+    @Subscriber("orders.received")
+    @NS
+    @Component
+    class Kitchen:
+        def on_notification(self, notification: Notification) -> None: ...
+
+    seen, published = [], []
+    with Context(namespaces={NS}) as ctx:
+        ctx.notifications.subscribe(published.append)
+        ctx.events.subscribe(seen.append)
+        ctx.execute(ctx.key(TakeOrder))
+
+    reaction = next(events.serialize(e) for e in seen if e.key == ctx.key(Kitchen))
+    assert reaction["method"] == "on_notification"
+    assert reaction["cause"] == published[0].id
+    assert reaction["parent"] is None
+    top = next(events.serialize(e) for e in seen if e.key == ctx.key(TakeOrder))
+    assert top["cause"] is None
 
 
 def test_notification_hub_delivers_only_what_is_published_while_connected():
@@ -305,3 +336,35 @@ def test_notification_hub_stop_unsubscribes_and_ends_clients():
         items = _collect(hub, run)
 
     assert items == [None]
+
+
+def test_serialize_notification_normalizes_the_publisher_of_an_unbound_key():
+    seen = []
+    with Context() as ctx:
+        ctx.notifications.subscribe(seen.append)
+        ctx.notifications.publish("hooks.in", {}, key="WebHooks")
+
+    item = events.serialize_notification(seen[0])
+    assert item["key"] == "WebHooks"
+    assert item["publisher"] == "web-hooks"
+
+
+# --- notification history -----------------------------------------------------
+
+
+def test_notification_history_adds_the_publisher_and_clamps_the_limit(tmp_path):
+    NS = make_ns()
+    TakeOrder = _publisher(NS)
+
+    with Context(namespaces={NS}, log_dir=tmp_path) as ctx:
+        ctx.execute(ctx.key(TakeOrder))
+        ctx.notifications.publish("hooks.in", {}, summary="hook", key="WebHooks")
+        ctx.notifications.publish("hooks.quiet", {}, key="WebHooks")
+        rows = events.notification_history(ctx, limit=0)
+        everything = events.notification_history(ctx, summary_only=False, limit=5000)
+
+    assert [r["topic"] for r in rows] == ["hooks.in"]
+    assert rows[0]["publisher"] == "web-hooks"
+    assert [r["topic"] for r in everything] == ["hooks.quiet", "hooks.in", "orders.received"]
+    assert everything[2]["publisher"] == ctx.key(TakeOrder)
+    assert everything[2]["summary"] == "Le Petit: 2 baguettes"

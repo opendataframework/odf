@@ -4,30 +4,33 @@ from collections.abc import Callable
 from datetime import datetime, timedelta
 from typing import Annotated
 
-from opendataframework import Logger, Notifications, Task
+from opendataframework import Logger, Notifications, Publisher, Task
 
+from app import layers
 from app.clients import Clock, Messenger, Pos
-from app.ingest import import_sheets, ingest_message, ingest_sale, sale_lines
+from app.ingest import ingest_message, ingest_sale, sale_lines, sync_sheets
 from app.repositories import CafeSales
 
 
+@layers.Integrations
 @Task
 class ImportSheets:
     """Imports the shared drive's sheets, without announcing it."""
 
-    def __init__(self, import_all: Annotated[Callable[..., dict], import_sheets]) -> None:
-        """Store ``import_sheets``.
+    def __init__(self, sync: Annotated[Callable[..., dict], sync_sheets]) -> None:
+        """Store ``sync_sheets``.
 
         Args:
-            import_all: ``import_sheets``.
+            sync: ``sync_sheets``.
         """
-        self.import_all = import_all
+        self.sync = sync
 
     def execute(self) -> dict:
         """Import the sheets; return how many rows each had."""
-        return self.import_all(announce=False)
+        return self.sync(announce=False)
 
 
+@layers.Integrations
 @Task
 class ImportPosHistory:
     """Takes in every past café order from the POS API, in bulk, without announcing each."""
@@ -57,6 +60,7 @@ class ImportPosHistory:
         return after
 
 
+@layers.Integrations
 @Task
 class ImportMessengerHistory:
     """Takes in the restaurants' past chat messages, without announcing them."""
@@ -88,6 +92,8 @@ class ImportMessengerHistory:
         return new
 
 
+@layers.Integrations
+@Publisher("pos.reconciled")
 @Task
 class ReconcilePos:
     """Catches café orders whose webhook never arrived, by reading the POS's last two days.

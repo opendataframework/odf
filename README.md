@@ -57,3 +57,7 @@ server.wait()  # blocks until Ctrl+C/SIGTERM
 
 See the [documentation](https://opendataframework.github.io/odf/) for each, and
 [`examples/`](https://github.com/opendataframework/odf/tree/main/examples) for 26 small projects, one concept each.
+[`demo/bakery`](https://github.com/opendataframework/odf/tree/main/demo/bakery)
+is a whole application: a bakery's café POS, messenger, email and
+spreadsheets joined up by an `odf` project, with agents that draft and
+people who confirm, running with `docker compose up`.

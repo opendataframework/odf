@@ -88,3 +88,9 @@ server.wait()  # blocks until Ctrl+C/SIGTERM
 
 See [Examples](examples.md) for 26 small projects, one concept each,
 including the five that mirror `odf init --template` layouts.
+
+## Demo
+
+See [Demo](demo.md) for a whole application: a bakery whose café POS,
+messenger, email and spreadsheets are joined up by an `odf` project, with
+agents that draft and people who confirm.

@@ -1,6 +1,6 @@
 """Clients for the bakery's existing tools: their APIs, their webhook signatures, the shared drive.
 
-Each is an ``@Api @Component`` holding one tool's address and credentials, so
+Each is an ``@Integrations @Component`` holding one tool's address and credentials, so
 the rest of the project never handles a token or a URL itself.
 """
 
@@ -18,8 +18,9 @@ from email.utils import format_datetime, formataddr, make_msgid
 from pathlib import Path
 from urllib.parse import urlencode
 
-from opendataframework import Api, Component, Config
+from opendataframework import Component, Config
 
+from app import layers
 from app.settings import setting
 
 
@@ -38,7 +39,7 @@ def _hmac(secret: str, body: bytes) -> str:
     return hmac.new(secret.encode(), body, hashlib.sha256).hexdigest()
 
 
-@Api
+@layers.Integrations
 @Component
 class Clock:
     """The demo clock: simulated time from the world service, or real time without one."""
@@ -66,7 +67,7 @@ class Clock:
         return {"now": self.now().strftime("%A %d %B, %H:%M"), "source": self.url or "real time"}
 
 
-@Api
+@layers.Integrations
 @Component
 class Pos:
     """The café POS: its order API, and the signature on its webhooks."""
@@ -114,7 +115,7 @@ class Pos:
                 return
 
 
-@Api
+@layers.Integrations
 @Component
 class Messenger:
     """The business messenger: its webhook signature, its history, and sending replies."""
@@ -182,12 +183,20 @@ class Messenger:
         return answer["messages"][0]["id"]
 
 
-@Api
+@layers.Integrations
 @Component
 class Drive:
     """The shared drive's folder, where the bakery keeps its spreadsheets as CSV."""
 
-    SHEETS = ("products.csv", "restaurants.csv", "standing_orders.csv", "contracts.csv")
+    SHEETS = (
+        "products.csv",
+        "restaurants.csv",
+        "standing_orders.csv",
+        "contracts.csv",
+        "ingredients.csv",
+        "recipes.csv",
+        "allergens.csv",
+    )
 
     def __init__(self, config: Config) -> None:
         """Read ``[component.drive] path`` (``SHARED_DRIVE`` overrides).
@@ -210,7 +219,7 @@ class Drive:
         return {s: (self.path / s).stat().st_mtime for s in self.SHEETS if (self.path / s).exists()}
 
 
-@Api
+@layers.Integrations
 @Component
 class Weather:
     """The weather forecast, from an Open-Meteo-style API (the world serves one, offline)."""
@@ -258,7 +267,7 @@ class Weather:
         return {"source": self.url or "none", "location": f"{self.lat}, {self.lon}"}
 
 
-@Api
+@layers.Integrations
 @Component
 class Mail:
     """Sending email from the bakery's address, over SMTP."""

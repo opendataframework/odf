@@ -30,6 +30,23 @@ the grid are saved to `layout.json` in the working directory, or the file named
 by `[project] layout-file`. Commit it to share a layout. Icons are stored by key,
 so a node whose icon key no longer exists falls back to its type's default.
 
+### Notification links
+
+A dotted link in the title accent runs from each
+[`@Publisher`](https://opendataframework.github.io/opendataframework/notifications/)
+to each `@Subscriber` its declared topics could reach (`orders.*` reaches a
+subscriber of `orders.received`, and the other way round). It comes from
+what they declare, not from what's been published, so it shows from the
+start. It bends at the other corner from a dependency's wire, so the two stay
+apart where both link the same nodes. While a subscriber reacts to one of the
+publisher's notifications, its link is lit and carries a pulse, for a moment
+after the reaction ends too.
+
+The inspector lists a publisher's topics under **Publishes**, and a
+subscriber's under **Reacts to**, marked when it reacts in the background.
+`[ui.topology] connections = false` hides these links with the rest, and a
+link to a hidden component isn't drawn.
+
 ### Flat grid
 
 `[ui] grid = "flat"` draws the topology as a flat, top-down schematic instead of
@@ -66,10 +83,12 @@ steps, or a service's `run()` loop.
   keeps failing), which stays until you select the node.
 - A failure also pops a notice in the top-right corner, with the error and a
   **Show logs** button that opens the node's logs at the run, highlighting its
-  lines: from the call's `started` record to its `completed` or `failed` one,
-  found by its call id, with whatever the component logged in between (or,
-  once those records are no longer among the last lines, everything from the
-  run's start on). It stays until closed. A step's failure is reported by its pipeline
+  lines: the call's `started` and `completed` or `failed` records, found by
+  its call id, and every line written while it ran (whose `parent` is that
+  id), so a run that overlapped another is told apart from it. Once those
+  lines are no longer among the last ones, the view shows that run's records
+  alone, read back from every log file (or, with the `text` log format, marks
+  everything from the run's start on). It stays until closed. A step's failure is reported by its pipeline
   when the pipeline fails too. A success pops a notice only for an action you
   started in that tab, from its buttons or its chat, and closes by itself.
 - The header status, **System Nominal** when idle, tells the same story where
@@ -77,7 +96,21 @@ steps, or a service's `run()` loop.
   the call that's running (`Loader executing`, with `+2` when others run
   alongside it), a failure until the node is selected (click it to open the
   node's logs at the run), and a completed call for a few seconds
-  (`Loader executed in 1.2 s`).
+  (`Loader executed in 1.2 s`; click it to open its run, as **Show run**
+  does).
+- **Show run**, on a notice, opens the whole run the call is part of as a
+  tree. It starts at the call the run started from: up through the calls it
+  was made inside, and across a reaction to the call that published what it
+  reacted to. It never starts at a service's `run()` or a repository's
+  `stream()`, which last as long as the component does, so the tree starts at
+  the call for one inbound item. Under each call are, in the order they
+  happened, the lines it logged, the calls it made, and the notifications it
+  published. Under each notification are the calls its subscribers made, so
+  a reaction reads in the same tree as what it reacted to. The call the
+  notice was about is marked, and clicking a call opens its logs at that
+  call. The view refreshes while it's open, so reactions still running in the
+  background appear as they finish. It needs file logging in the `json`
+  format, as **Show logs** does to read a run back.
 - A service's **Start**/**Stop** button follows the service, so it's correct
   after a start or stop over MCP or chat too.
 - A [notification](https://opendataframework.github.io/opendataframework/notifications/)
@@ -90,14 +123,36 @@ steps, or a service's `run()` loop.
     - **Open** goes to the data view of its `subject`, when that's a
       repository on the topology.
     - **Show logs** opens the publisher's logs. A notification published
-      during a call highlights that call's lines (its `parent`).
+      during a call highlights that call's lines (its `parent`), the same
+      way a failure's notice does.
+    - **Show run** opens the run it was published in, from the call that
+      run started from, with what its subscribers did under it.
+    - A notification that reaches a tab twice is shown once, by its `id`.
     - A notification without a `summary` is for other components only, and
       isn't shown.
-    - Only what is published while a tab is open reaches it. Nothing
-      published before, or while the page reloads, is replayed.
+    - Only what is published while a tab is open pops a notice. Nothing
+      published before, or while the page reloads, is replayed as one: that
+      is what the Notifications view is for.
     - A summary reaches everyone who has the UI open, and so does a payload
       over `GET /api/notifications`. Leave out of both whatever they
       shouldn't see.
+
+- The bell in the header opens **Notifications**: every notification from
+  every component, newest first, read back from the project's notification
+  history, so it outlasts reloads and restarts. Each row shows when, the
+  publisher, the level, the topic and the summary, with the notice's
+  **Open**, **Show logs** and **Show run** where they lead somewhere (Show
+  logs only for a publisher on the topology, Open only for a subject that
+  is). Filter it by publisher (every declared `@Publisher`, and any other
+  key a notification came from), level, or topic (exact, or `orders.*` for
+  every topic under `orders`). **All topics** adds the notifications without
+  a summary, meant for components. Notifications published while it's open
+  join it at the top, and **Older** pages back. It needs file logging, in
+  either format. The history keeps each notification's summary, topic,
+  level and subject, not its payload, and is as long as
+  `[project.logging] history-max-bytes` and `history-backups` let it be
+  (rotation is off unless one of the `max-bytes` keys is set; see the
+  [Logger](https://opendataframework.github.io/opendataframework/logger/)).
 
 With the system's reduced-motion setting on, nothing moves: edges in use are
 drawn brighter instead of carrying a pulse, and a running node's ring holds
@@ -111,7 +166,7 @@ them. The `[ui.topology]` table in config narrows that:
 
 ```toml
 [ui.topology]
-connections = false                  # default true: draw links between components
+connections = false                  # default true: draw links between components, notification links too
 config = false                       # default true: show the Config node
 repositories = ["readings"]          # only these repositories
 tasks = ["seed-readings"]            # only these tasks
@@ -138,6 +193,56 @@ changes. Unknown keys and values of the wrong type raise a `ValueError` when
 the UI starts, and a listed name that matches no component produces a warning.
 See
 [`examples/04-data-engineering`](https://github.com/opendataframework/odf/tree/main/examples/04-data-engineering).
+
+The type legend under the topology lists only the types it shows, and the
+header counts only the services, tasks, pipelines, agents and functions it
+has: a type with none shown has no count. Project, Objects and Links always
+show.
+
+### Views
+
+A project whose topology serves more than one kind of reader can declare
+views instead, each its own way of looking at the project: the bakery's
+manager sees the bakery's data, the agents and what they act on, and a
+developer sees the system's wiring as well. Each view is a table under
+`[ui.views]`, and each part of the UI it shapes is a table under the view:
+
+```toml
+[ui.views.manager]
+label = "Bakery"        # the switcher's text; defaults to the name
+default = true          # shown first; else the first view declared is
+
+[ui.views.manager.topology]   # the keys [ui.topology] takes
+components = []
+services = []
+tasks = []
+
+[ui.views.system]
+label = "System"        # no topology table: shows everything
+```
+
+- With two or more views, a switcher in the header lists them. Picking one
+  reloads the page at `?view=<name>`, so a link can open a view. A page
+  opened without `?view=` shows the view last picked in that browser, else
+  the default.
+- A view's `topology` table takes the keys `[ui.topology]` takes (see
+  [above](#choosing-what-the-topology-shows)). Declaring `[ui.topology]` as
+  well raises a `ValueError`, as does an unknown key, a `label` that isn't
+  text, a `default` that isn't `true` or `false`, or more than one default.
+- Each view keeps its own places: a node moved in a view is saved for that
+  view, under `_views.<name>` in `layout.json`, along with the grid's size.
+  A node a view has no place for keeps its place from the top level, where
+  places were saved before there were views, so a new view starts from the
+  layout already there. Icons, colors and layer colors are the same in
+  every view.
+- The chat's `@` suggestions list only what the view shows. A hidden
+  component's key typed in full still addresses it.
+- A view changes what the UI shows, not what anyone can do: MCP, chat and
+  the HTTP API reach every component in every view. Leave access to the
+  proxy in front (see [Deploying](#deploying)).
+
+See [`demo/bakery`](demo.md), whose `manager` and `system` views are
+described in its README.
 
 ## Data views
 
@@ -381,10 +486,13 @@ Every key `odf` reads from `config.toml`:
 | `[ui] favicon`, `[ui] logo` | built-in | Image files replacing the favicon (also the header logo) and the header logo alone |
 | `[ui] brand` | `"ODF"` | Brand label in the header |
 | `[ui] annotations` | `true` | Allow labelling data in the views |
+| `[ui] chat-history` | `200` | How many of each chat conversation's latest turns are kept; `0` keeps conversations in their browser tab only (see [Chat](chat.md#history)). Anything but a whole number of at least 0 raises a `ValueError` |
 | `[ui] notebooks` | `true` if `notebook` is installed | Edit notebooks in the document view with Jupyter (see [Notebooks](#notebooks)); `true` without `notebook` installed raises an `ImportError` |
 | `[ui.topology]` | show everything | What the topology shows (see [above](#choosing-what-the-topology-shows)) |
+| `[ui.views.<name>]` | no views | A named view, with `label`, `default` and a `topology` table taking `[ui.topology]`'s keys (see [Views](#views)); not together with `[ui.topology]` |
 | `[project] layout-file` | `"layout.json"` | Where node positions, icons and colors are saved |
 | `[project] annotations-file` | `"annotations.json"` | Where labels and classes are saved |
+| `[project] chat-file` | `"chat.json"` | Where the chat's conversations are kept, with chat on (see [Chat](chat.md#history)) |
 | `[project.chat]` | — | Chat model and Ollama host (see [Chat](chat.md#configuration)) |
 
 ## Deploying
@@ -589,7 +697,8 @@ registered name:
 
 | Route | For |
 |---|---|
-| `GET /api/{collection}/{name}/logs` | any component (`components`, `repositories`, `services`, `tasks`, `pipelines`, `agents`, `functions`) |
+| `GET /api/topology` | the topology's nodes, links and stats; with [views](#views), `?view=<name>` picks one (the default without it), and an unknown one is a `404` |
+| `GET /api/{collection}/{name}/logs` | any component (`components`, `repositories`, `services`, `tasks`, `pipelines`, `agents`, `functions`): its last log records, or with `?call=<call_id>` one call's records (see below) |
 | `GET /api/{collection}/{name}/details`, `.../chart` | a component implementing `details()` / `chart()` |
 | `POST /api/services/{name}/start`, `.../stop` | a `@Service` |
 | `POST /api/tasks/{name}/execute`, `/api/pipelines/{name}/execute` | a `@Task` / `@Pipeline` |
@@ -599,8 +708,16 @@ registered name:
 | `PUT /api/repositories/{name}/records/{key}/media` | replacing a document file through `save()` (see [Notebooks](#notebooks)) |
 | `POST /api/notebooks/session` | starting Jupyter for notebook editing; returns the `url` it is served at through the UI (`/proxy/jupyter/`) |
 | `/proxy/jupyter/...` | Jupyter itself, HTTP and WebSockets, while notebook editing is on |
+| `GET /api/trace/{call_id}` | the whole run a call is part of, as a tree (see below) |
 | `GET /api/events` | every protocol call the project makes, as server-sent events (see below) |
 | `GET /api/notifications` | every notification the project's components publish, as server-sent events (see below) |
+| `GET /api/notifications/history` | the notifications published so far, newest first, a page at a time (see below) |
+| `GET /api/chat/conversations` | the assistant conversations kept, the one changed last first; `404` with history off (see [Chat](chat.md#history)) |
+| `GET /api/chat/conversations/{id}`, `DELETE ...` | one conversation with its turns; deleting it |
+| `POST /api/chat` | one turn, streamed as newline-delimited JSON: `{text, conversation?}`, `{text, thread}` or `{messages, thread?}` (see [Chat](chat.md#history)) |
+| `GET /api/channels` | every channel and the repositories in it (see [Chat](chat.md#channels)) |
+| `GET /api/channels/{channel}/threads` | a channel's threads, the one with the latest item first, each with its last item and a count |
+| `GET /api/channels/{channel}/threads/{thread}` | a thread's latest items, oldest first (`?limit=`, default 200): messages, cards with their actions, and the notes of the assistant asked in it |
 
 The collection comes from the execution type, not the key's namespace: a `@Task`
 registered as `loader` is `/api/tasks/loader`, whatever its key. An action that
@@ -613,13 +730,15 @@ moment the client connects:
 
 ```json
 {"type": "call", "key": "task.load-job", "protocol": "TaskProtocol", "method": "execute",
- "state": "completed", "call_id": "…", "parent": "…", "ts": 1792776224.61,
+ "state": "completed", "call_id": "…", "parent": "…", "cause": null, "ts": 1792776224.61,
  "elapsed_ms": 203.7, "error": null}
 ```
 
 `state` is `started`, `completed` or `failed`. A call's `started` and its
 `completed`/`failed` share a `call_id`, and `parent` is the `call_id` of the
-call it was made from (`null` for a top-level call). A client that falls more
+call it was made from (`null` for a top-level call). A top-level call made in
+reaction to a notification (a `@Subscriber`'s `on_notification()`, say) has
+that notification's `id` as its `cause`; every other call has `null`. A client that falls more
 than 1000 events behind gets `{"type": "reset"}` in place of what it missed.
 
 `GET /api/notifications` streams `opendataframework`'s
@@ -628,14 +747,82 @@ the same way, one `data:` line of JSON per notification published, with or
 without a `summary`, from the moment the client connects:
 
 ```json
-{"type": "notification", "key": "service.messenger-inbox", "topic": "messages.received",
+{"type": "notification", "id": "…", "key": "service.messenger-inbox",
+ "publisher": "service.messenger-inbox", "topic": "messages.received",
  "summary": "Le Petit: 2 extra baguettes tomorrow", "level": "info",
  "subject": "repository.messages", "record": 42, "parent": "…", "ts": 1792776224.61,
  "payload": {"restaurant": "Le Petit", "text": "2 extra baguettes tomorrow"}}
 ```
 
-`parent` is the `call_id` of the call it was published during (`null` outside
-one), matching the `call_id`s on `GET /api/events`. `payload` and `record` are
-sent as JSON: a mapping as an object, a set as a list, and anything else JSON
-can't hold as its text. The two streams never carry each other's items, and
-a client that falls behind gets the same `{"type": "reset"}`.
+`id` is unique per publish, and is the `cause` of the calls it triggers on
+`GET /api/events`. `key` is the publisher's key as it was published, and
+`publisher` the same key normalised as key lookups compare keys
+(`opendataframework`'s `normalize_key()`): what a component publishes is
+its `<namespace>.<name>` either way, but the unbound
+`context.notifications.publish(key=...)` may use any key. `parent` is the `call_id` of the call it was published
+during (`null` outside one), matching the `call_id`s on `GET /api/events`.
+`payload` and `record` are sent as JSON: a mapping as an object, a set or a
+tuple as a list, and anything else JSON can't hold as its text. The two
+streams never carry each other's items, and a client that falls behind gets
+the same `{"type": "reset"}`.
+
+`GET /api/notifications/history` returns the notifications published so far,
+newest first, from `opendataframework`'s `context.notification_history()`:
+from a history file of their own, so it outlasts restarts. Each row is:
+
+```json
+{"id": "…", "key": "service.messenger-inbox", "publisher": "service.messenger-inbox",
+ "topic": "messages.received", "level": "info", "summary": "Le Petit: 2 extra baguettes tomorrow",
+ "message": "notified messages.received: Le Petit: 2 extra baguettes tomorrow",
+ "subject": "repository.messages", "record": 42, "parent": "…",
+ "ts": "2026-11-02T21:04:11.125+00:00", "cursor": "…"}
+```
+
+There's no `payload`: the history doesn't keep it. Its query parameters:
+
+| Parameter | Default | Meaning |
+|---|---|---|
+| `topic` | every topic | a topic, or `prefix.*` for every topic under it; repeat it for several |
+| `key` | every publisher | only this publisher's, compared normalised, as `publisher` is |
+| `level` | every level | `info`, `success`, `warning` or `error`; repeat it for several |
+| `all` | off | `1` adds the notifications without a `summary` |
+| `before` | the newest | a row's `cursor`: the rows strictly older than it, so paging with the last row's has no repeats and no gaps |
+| `limit` | 100 | how many rows, clamped to 1–1000 |
+
+It answers `400` for a bad `topic`, `level` or `before`, and `409` with file
+logging off. History starts with `opendataframework` 0.6.0: notifications
+logged before are in their components' logs only.
+
+`GET /api/{collection}/{name}/logs` returns the component's last 300 log
+records, oldest first. With `?call=<call_id>`, it returns that one call's
+records instead, from every component's log file however long ago
+(`opendataframework`'s `context.logs()`): the call's own `started` and
+`completed`/`failed` records, what was logged while it ran, the
+notifications it published, and the start and end of the calls it made. It
+answers `409` when those can't be read: with file logging off, or the `text`
+log format.
+
+`GET /api/trace/{call_id}` returns the run a call is part of, from the
+logs, as `opendataframework`'s `context.trace(call_id, root=True)` does. The
+tree starts at the call the run started from: it climbs each `parent`, and
+from a call with a `cause` to the call that published that notification. It
+stops below a service's `run()` or a repository's `stream()`, and at the
+highest call still in the logs. Each node is one call:
+
+```json
+{"call": "…", "parent": null, "cause": null, "key": "function.ingest-message",
+ "protocol": "FunctionProtocol", "method": "__call__", "state": "completed",
+ "started": "2026-11-02T21:04:11.120+00:00", "ended": "2026-11-02T21:04:11.131+00:00",
+ "elapsed_ms": 11.2, "error": null,
+ "logs": [{"ts": "…", "level": "INFO", "message": "…", "fields": {}}],
+ "notifications": [{"id": "…", "key": "function.ingest-message", "topic": "messages.received",
+   "level": "info", "summary": "…", "message": "…", "subject": "repository.messages", "record": 42,
+   "ts": "…", "triggered": [{"call": "…", "cause": "…", "key": "component.drafting", "…": "…"}]}],
+ "children": []}
+```
+
+`children` are the calls made inside it, and each notification's
+`triggered` the calls its subscribers made, both ordered by when they
+started. A call still running has `state` `running`. It answers `404` when
+the call isn't in the logs (not written yet, or rotated away), and `409` when
+they can't be read, as `?call=` does.

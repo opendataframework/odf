@@ -1,5 +1,122 @@
 # Release Notes
 
+## 0.6.0
+
+### Added
+
+- **UI**: `GET /api/{collection}/{name}/logs?call=<call_id>` returns one call's log records
+  from every component's file, however long ago (`opendataframework` 0.6.0's
+  `context.logs()`), or `409` when they can't be read (file logging off, or the `text`
+  format).
+- **UI**: `GET /api/events` sends each call's `cause`, the id of the notification a
+  reaction was made for, and `GET /api/notifications` each notification's `id`. A
+  notification that reaches a tab twice is shown once.
+- **UI**: **Show run**, on a notice or the header status of a call that just completed,
+  opens the whole run the call is part of as a tree, read from the logs by
+  `GET /api/trace/{call_id}` (`opendataframework` 0.6.0's `context.trace(root=True)`). It
+  starts at the call the run started from, across reactions too: the trace of a draft a
+  subscriber made starts at the call that took in the message it reacted to. Each call
+  shows its log lines, the calls it made and the notifications it published, and each
+  notification the calls its subscribers made. See [UI](ui.md#run-activity).
+- **UI**: a **Notifications** view, opened by the bell in the header: every notification
+  from every component, newest first, kept across restarts, with each notice's **Open**,
+  **Show logs** and **Show run**, filters by topic, publisher and level, and **Older** to
+  page back. It reads `GET /api/notifications/history` (`opendataframework` 0.6.0's
+  `context.notification_history()`), which returns the history a page at a time with the
+  same filters. Its rows, and the notifications on `GET /api/notifications`, carry a
+  `publisher`: the key normalised, as key lookups compare it. The trace view shows each
+  notification's summary under its topic. See [UI](ui.md#run-activity).
+- **Chat**: channels in the chat drawer. A repository declaring a `conversation()`
+  (`opendataframework` 0.6.0's `Conversation`) joins a channel, and the drawer lists each
+  channel's threads, with a dot on those holding something you haven't seen. A thread
+  shows messages on their sides and, from a repository with no `direction`, cards. A
+  card's actions are the functions and agents taking one of its records
+  (`Annotated[int, Record(Repo)]`). Each opens its form in the card, with the record's
+  argument given and the arguments named like its fields filled from it, to change before
+  it runs. A thread refreshes when a notification is about one of its repositories.
+  Asked inside a thread, the assistant gets the thread as the turn's context
+  (`ChatEngine.stream(messages, context)`), and the turn shows there as notes. Read
+  through `GET /api/channels`, `.../{channel}/threads` and `.../threads/{thread}`. See
+  [Chat](chat.md#channels).
+- **Chat**: conversations with the assistant are kept in `chat.json` (`[project]
+  chat-file`), each to its latest `[ui] chat-history` turns (default 200, `0` keeps them
+  in their browser tab as before), and listed under **Assistant** to reopen or delete.
+  A thread holds one of its own. `POST /api/chat` takes `{text, conversation?}` or
+  `{text, thread}` to keep a turn, and still `{messages}` for a caller that keeps its own.
+  A question whose turn failed stays in the conversation but isn't sent with the next.
+  See [Chat](chat.md#history).
+- **Chat**: **Expand** shows the chat full screen, in place of the topology, with the
+  list of channels and conversations beside the open one. Remembered per browser. See
+  [Chat](chat.md#full-screen).
+- **MCP**: `list_channels` and `read_thread`, the chat's channels and their threads as
+  tools. A card's actions are listed with the tool each is run by (`<key>.<verb>`) and
+  the record it takes, so another client can read a thread and act on its cards. See
+  [MCP](mcp.md#tools).
+- **Demo**: `demo/bakery`, a whole application built with `odf`, running with
+  `docker compose up`. A bakery's café POS, messenger, email and spreadsheets run as
+  simulated tools, and an `odf` project joins them through webhooks, a polled mailbox, a
+  watched drive and a scheduler. Agents react to what arrives and draft order changes,
+  price renegotiations and allergen notices for a person to confirm. Each restaurant's
+  messages, and what the bakery sends back, are one thread in the chat, with the draft
+  answering them as a card to confirm, edit first or reject. A restaurant writing again,
+  or a person asking in the thread, outdates the draft for a new one. Its topology is
+  laid out by area, with the bakery's own icons for every node, each agent a desk with
+  its role's tools (`[ui] icon-scripts`), on the built-in `ink` theme. Tours on its
+  world console play the order change, the butter spike and the sesame substitution end
+  to end, saying at each step what to look at and moving on when the bakery's
+  notifications say it got there. See [Demo](demo.md).
+- **UI**: the topology draws a dotted link from each `@Publisher` to each `@Subscriber` its
+  declared topics could reach (`opendataframework` 0.6.0's `context.publishers()` and
+  `context.subscribers()`), so who reacts to whom shows before anything is published. A
+  link lights up while a reaction to the publisher's notification runs, and the inspector
+  lists what a node publishes and reacts to. `GET /api/topology` carries the links as
+  `notifies`, every declared publisher as `publishers`, and each node's `publishes` and
+  `subscribes`. See [UI](ui.md#notification-links).
+- **MCP**: `recent_notifications` returns the same history, so chat can answer "what
+  happened overnight?". Addressing a component with `@` in chat scopes it to what that
+  component published. See [MCP](mcp.md#tools).
+- **Chat**: `[project.chat] context-length` sets the model's context window (Ollama's
+  `num_ctx`). A project with many tools needs more than Ollama's default, or the question
+  falls out of the window and the model answers something else. See
+  [Chat](chat.md#context-length).
+- **UI**: `[ui.views.<name>]` declares named views, picked in a header switcher or by
+  `?view=<name>`: each with a `label`, an optional `default = true`, and a `topology` table
+  taking `[ui.topology]`'s keys. Each view keeps its own node places in `layout.json`, and
+  the chat's `@` suggestions list what the view shows. See [UI](ui.md#views).
+- **UI**: the topology's type legend lists only the types shown, and the header counts only
+  the kinds it has, instead of all eight types and every count down to 0.
+- **Demo**: the bakery opens on a manager's view, its data, agents, routines and the actions
+  a manager takes, with the whole system's wiring a switch away. See [Demo](demo.md).
+- **Chat**: a tool name the model gets slightly wrong, such as `function_margins` for
+  `function.margins.call`, calls the tool it matches when only one does. Otherwise the model
+  is told the closest names, so it can try again.
+
+### Changed
+
+- **Chat**: a turn with tools starts with a short system prompt: answer only from what the
+  tools returned, in plain words or a short table, and start, stop, run, invoke or import
+  something only when asked. Without it, small local models filled answers with records
+  they never looked up. `[project.chat] system-prompt` replaces it, and `""` sends none. See
+  [Chat](chat.md#system-prompt).
+
+- **UI**: **Show logs** on a run's notice or the header status marks the run by its call
+  id: the call's own records and every line written while it ran (each line's `parent`), so
+  a run that overlapped another is told apart from it. It used to mark everything from the
+  call's start to its end. Once the run is no longer among the last lines, the view shows
+  that run's records alone, read back with `?call=`.
+
+- **Dependencies**: requires `opendataframework` 0.6.x. A component or function that
+  publishes through an injected `notifications: Notifications` must now declare its topics
+  with `@Publisher(...)` on top of its execution type (see `opendataframework` 0.6.0's
+  [Notifications](https://opendataframework.github.io/opendataframework/notifications/)).
+- **Examples**: in
+  [`26-notifications`](https://github.com/opendataframework/odf/tree/main/examples/26-notifications),
+  `take_order` and `Restock` declare what they publish with `@Publisher`, and `Kitchen` is a
+  `@Subscriber("kitchen.ticket")` that receives tickets through `on_notification()`.
+- **Docs**: the site wears the UI's `ink` theme, black and white with grey hairlines and
+  rounded panels, and its stacked-layers tile as the logo and favicon, in a light and a
+  dark variant. The live topology on the home page is drawn in the ink palette too.
+
 ## 0.5.0
 
 ### Added

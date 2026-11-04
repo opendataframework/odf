@@ -139,8 +139,13 @@ class Server:
                 ``Config`` node, and ``repositories``/``services``/``tasks``/
                 ``pipelines``/``components`` list the only components of that
                 kind to show (a kind without a list shows all of its
-                components). A notebook in a document view can be edited in
-                place, in an embedded Jupyter Notebook, when the ``notebook``
+                components). ``[ui.views.<name>]`` declares named views
+                instead, picked in the UI's header: each takes a ``label``,
+                ``default = true`` for the one shown first (else the first
+                declared), and a ``topology`` table with the keys
+                ``[ui.topology]`` takes (see ``odf.ui.views``). A notebook in
+                a document view can be edited in place, in an embedded
+                Jupyter Notebook, when the ``notebook``
                 extra is installed (``pip install odf[notebook]``);
                 ``[ui] notebooks = false`` turns that off. ``[ui] grid =
                 "flat"`` draws the topology as a flat, top-down schematic
@@ -175,7 +180,11 @@ class Server:
                 window with no ability to act on the project. Connection
                 parameters come from ``[project.chat]`` in config: ``model``
                 (default ``"gpt-oss:20b"``) and ``ollama-host`` (default
-                ``"http://localhost:11434"``).
+                ``"http://localhost:11434"``). Conversations with the
+                assistant are kept in ``[project] chat-file`` (default
+                ``"chat.json"``, see ``odf.ui.chat_history``), each to its
+                latest ``[ui] chat-history`` turns (default 200; ``0`` keeps
+                them in their browser tab only).
             app_module: Import name of the module/package that registers
                 components (``@Entity``/``@Repository``/``@Component``/...)
                 as a side effect of being imported — the same convention
@@ -192,7 +201,10 @@ class Server:
                 ``theme``/``[ui] theme`` names a UI theme that doesn't
                 exist or a theme directory missing a required file, if
                 ``[ui.topology]`` has an unknown key or a value of the wrong
-                type, if ``[ui] notebooks`` isn't a boolean, or
+                type, if a ``[ui.views]`` view is invalid or more than one is
+                the default, if ``[ui.topology]`` and ``[ui.views]`` are both
+                set, if ``[ui] notebooks`` isn't a boolean, if ``[ui]
+                chat-history`` isn't a whole number of at least 0, or
                 if ``[ui] grid`` isn't ``"iso"`` or ``"flat"``.
             ImportError: If ``ui=True``/``mcp=True``/``chat=True`` but the
                 corresponding extra is not installed, or if ``[ui] notebooks
@@ -239,6 +251,7 @@ class Server:
             self._mcp_server.start()
         if ui:
             from odf.ui import extensions, notebooks
+            from odf.ui import views as ui_views
             from odf.ui.server import UiServer
             from odf.ui.topology import TopologyView
 
@@ -252,6 +265,8 @@ class Server:
                     host=chat_cfg.get("ollama-host", "http://localhost:11434"),
                     mcp=self._mcp_server.mcp if self._mcp_server is not None else None,
                     debug=chat_cfg.get("debug", False),
+                    context_length=chat_cfg.get("context-length"),
+                    system_prompt=chat_cfg.get("system-prompt"),
                 )
             ui_cfg = self.config.get("ui", {})
             icon_scripts = extensions.icon_scripts() + [
@@ -267,6 +282,15 @@ class Server:
             edit_notebooks = ui_cfg.get("notebooks", notebooks.available())
             if not isinstance(edit_notebooks, bool):
                 raise ValueError(f"[ui] notebooks must be true or false, got {edit_notebooks!r}.")
+            chat_history = ui_cfg.get("chat-history", 200)
+            if (
+                isinstance(chat_history, bool)
+                or not isinstance(chat_history, int)
+                or chat_history < 0
+            ):
+                raise ValueError(
+                    f"[ui] chat-history must be a whole number of at least 0, got {chat_history!r}."
+                )
             grid = ui_cfg.get("grid", "iso")
             if grid not in ("iso", "flat"):
                 raise ValueError(f'[ui] grid must be "iso" or "flat", got {grid!r}.')
@@ -278,12 +302,15 @@ class Server:
             annotations_file = self.config.get("project", {}).get(
                 "annotations-file", "annotations.json"
             )
+            views, default_view = ui_views.from_config(ui_cfg)
             topology = TopologyView.from_config(ui_cfg.get("topology", {}))
-            for key, name in topology.unmatched(self.context):
-                warnings.warn(
-                    f"[ui.topology] {key} lists {name!r}, which matches no component.",
-                    stacklevel=2,
-                )
+            checked = [(f"[ui.views.{v.name}.topology]", v.topology) for v in views.values()]
+            for table, view in checked or [("[ui.topology]", topology)]:
+                for key, name in view.unmatched(self.context):
+                    warnings.warn(
+                        f"{table} {key} lists {name!r}, which matches no component.",
+                        stacklevel=2,
+                    )
             self._ui_server = UiServer(
                 self.context,
                 self._display_name(),
@@ -292,6 +319,8 @@ class Server:
                 layout_file=self.config.get("project", {}).get("layout-file", "layout.json"),
                 annotations_file=annotations_file if annotate else None,
                 chat_engine=chat_engine,
+                chat_file=self.config.get("project", {}).get("chat-file", "chat.json"),
+                chat_history=chat_history,
                 icon_scripts=icon_scripts,
                 colors=colors,
                 favicon=Path(favicon) if favicon else None,
@@ -301,6 +330,8 @@ class Server:
                 topology=topology,
                 notebooks=edit_notebooks,
                 grid=grid,
+                views=views,
+                default_view=default_view,
             )
             self._ui_server.start()
         self._running = True

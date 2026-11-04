@@ -6,13 +6,14 @@ from datetime import date
 
 from opendataframework import (
     ContentMetadata,
+    Conversation,
     DocumentView,
     LocationView,
     Repository,
-    Storage,
     TimeseriesView,
 )
 
+from app import layers
 from app.entities import (
     BakeSheetLine,
     CafeSale,
@@ -20,10 +21,15 @@ from app.entities import (
     DeliveryStop,
     Draft,
     Forecast,
+    Ingredient,
+    IngredientAllergen,
+    IngredientPrice,
+    Invoice,
     Leftover,
     Message,
     OrderChange,
     Product,
+    RecipeLine,
     Restaurant,
     StandingOrder,
 )
@@ -127,7 +133,7 @@ class _Table:
         return len(items)
 
 
-@Storage
+@layers.Production
 @Repository(Product)
 class Products(_Table):
     """The bakery's products, from the products sheet."""
@@ -135,7 +141,7 @@ class Products(_Table):
     table, entity = "products", Product
 
 
-@Storage
+@layers.Wholesale
 @Repository(Restaurant)
 class Restaurants(_Table):
     """The restaurants the bakery delivers to, on a map."""
@@ -152,7 +158,7 @@ class Restaurants(_Table):
         return LocationView(fields=("lat", "lon"))
 
 
-@Storage
+@layers.Wholesale
 @Repository(StandingOrder)
 class StandingOrders(_Table):
     """Each restaurant's usual order by weekday, from the standing orders sheet."""
@@ -164,7 +170,7 @@ class StandingOrders(_Table):
         return self._select("WHERE weekday = ?", (weekday,), order="restaurant, sku")
 
 
-@Storage
+@layers.Wholesale
 @Repository(Contract)
 class Contracts(_Table):
     """This quarter's agreed prices, from the contracts sheet."""
@@ -172,10 +178,15 @@ class Contracts(_Table):
     table, entity = "contracts", Contract
 
 
-@Storage
+@layers.Wholesale
 @Repository(Message)
 class Messages(_Table):
-    """Messages to the bakery, by chat and email, newest first, each opened as a document."""
+    """Messages to and from the bakery, by chat and email, newest first, each opened as a document.
+
+    In the chat, one thread per restaurant in the ``restaurants`` channel,
+    messenger and email together, with the drafts answering them (see
+    ``Drafts``).
+    """
 
     table, entity = "messages", Message
 
@@ -197,6 +208,22 @@ class Messages(_Table):
             )
             self.db.conn.commit()
 
+    def unanswered(self, restaurant: str, up_to: int) -> list[Message]:
+        """Return what a draft for ``restaurant``'s message ``up_to`` answers, oldest first.
+
+        That message, and the ones before it the restaurant's open draft
+        answers already (``drafted``), since a restaurant writing again
+        before its draft is confirmed is adding to the same request. A
+        message nobody drafted for isn't part of it: history caught up on
+        quietly, or one a rejected draft put back for a person.
+        """
+        return self._select(
+            "WHERE restaurant = ? AND direction = 'in' "
+            "AND (id = ? OR (status = 'drafted' AND id < ?))",
+            (restaurant, up_to, up_to),
+            order="received_at, id",
+        )
+
     def by_external_id(self, external_id: str) -> Message | None:
         """Return the message with this id in the tool it came from, if it's been taken in."""
         found = self._select("WHERE external_id = ?", (external_id,))
@@ -206,8 +233,19 @@ class Messages(_Table):
         """Open each message's text as a document."""
         return DocumentView(field="text")
 
+    def conversation(self) -> Conversation:
+        """Read each restaurant's messages as one thread, both sides, in the chat."""
+        return Conversation(
+            channel="restaurants",
+            thread="restaurant",
+            time="received_at",
+            text="text",
+            direction="direction",
+            sender="sender",
+        )
 
-@Storage
+
+@layers.Cafe
 @Repository(CafeSale)
 class CafeSales(_Table):
     """Every café order line from the POS, charted over time by product."""
@@ -264,7 +302,7 @@ class CafeSales(_Table):
         return TimeseriesView(field="sold_at", fields=("quantity", "revenue"), group="product")
 
 
-@Storage
+@layers.Wholesale
 @Repository(OrderChange)
 class OrderChanges(_Table):
     """Confirmed changes to what the restaurants take, on top of their standing orders."""
@@ -280,7 +318,7 @@ class OrderChanges(_Table):
         )
 
 
-@Storage
+@layers.Drafts
 @Repository(Draft)
 class Drafts(_Table):
     """What the agents prepared, newest first: the control room, each draft opened as a document."""
@@ -311,6 +349,24 @@ class Drafts(_Table):
         )
         return found[0] if found else None
 
+    def open_for_restaurant(self, kind: str, restaurant: str) -> Draft | None:
+        """Return the ``kind`` draft for ``restaurant`` still waiting on a person, if any."""
+        found = self._select(
+            "WHERE kind = ? AND restaurant = ? AND status IN (?, ?)",
+            (kind, restaurant, *self.OPEN),
+            order="id",
+        )
+        return found[0] if found else None
+
+    def open_titled(self, kind: str, title: str) -> Draft | None:
+        """Return the ``kind`` draft titled ``title`` still waiting on a person, if any."""
+        found = self._select(
+            "WHERE kind = ? AND title = ? AND status IN (?, ?)",
+            (kind, title, *self.OPEN),
+            order="id",
+        )
+        return found[0] if found else None
+
     def open_for(self, kind: str, day: str) -> Draft | None:
         """Return the ``kind`` draft for ``day`` still waiting on a person, if any."""
         found = self._select(
@@ -322,12 +378,23 @@ class Drafts(_Table):
         """Open each draft as the Markdown a person reads it in."""
         return DocumentView(field="body")
 
+    def conversation(self) -> Conversation:
+        """Show each draft for a restaurant as a card in its thread, with its actions.
+
+        Order changes and new prices are for one restaurant. An invoice's
+        reading, the specials and an allergen notice (for several) aren't for
+        any, so they stay in Drafts.
+        """
+        return Conversation(
+            channel="restaurants", thread="restaurant", time="created_at", text="body"
+        )
+
     def content_metadata(self, draft: Draft) -> ContentMetadata:
         """Declare each draft's body Markdown, so the UI renders it."""
         return ContentMetadata(filename=f"draft-{draft.id}.md", content_type="text/markdown")
 
 
-@Storage
+@layers.Cafe
 @Repository(Forecast)
 class Forecasts(_Table):
     """What the café expects to sell, per product per day."""
@@ -339,7 +406,7 @@ class Forecasts(_Table):
         return self._select(order="date DESC, sku")
 
 
-@Storage
+@layers.Production
 @Repository(BakeSheetLine)
 class BakeSheets(_Table):
     """What to bake each night, per product, for the restaurants and the café."""
@@ -359,7 +426,7 @@ class BakeSheets(_Table):
         return [row[0] for row in rows]
 
 
-@Storage
+@layers.Cafe
 @Repository(Leftover)
 class Leftovers(_Table):
     """What the café didn't sell each day, of what was baked for it."""
@@ -371,7 +438,7 @@ class Leftovers(_Table):
         return self._select(order="date DESC, sku")
 
 
-@Storage
+@layers.Production
 @Repository(DeliveryStop)
 class DeliveryRuns(_Table):
     """The morning delivery runs, the latest one on a map."""
@@ -385,3 +452,97 @@ class DeliveryRuns(_Table):
     def data_view(self) -> LocationView:
         """Show the run's stops on a map."""
         return LocationView(fields=("lat", "lon"))
+
+
+@layers.Purchasing
+@Repository(Ingredient)
+class Ingredients(_Table):
+    """What the bakery bakes with, who sells it, and what it cost on the sheet."""
+
+    table, entity = "ingredients", Ingredient
+
+
+@layers.Production
+@Repository(RecipeLine)
+class Recipes(_Table):
+    """What one of each wholesale product takes, from the recipes sheet."""
+
+    table, entity = "recipes", RecipeLine
+
+    def all(self) -> list[RecipeLine]:
+        """Return every recipe line, by product."""
+        return self._select(order="sku, id")
+
+
+@layers.Purchasing
+@Repository(Invoice)
+class Invoices(_Table):
+    """The suppliers' invoices, newest first, each opened as the PDF it came as."""
+
+    table, entity = "invoices", Invoice
+
+    def all(self) -> list[Invoice]:
+        """Return every invoice, newest first."""
+        return self._select(order="received_at DESC, id DESC")
+
+    def get(self, invoice_id: int) -> Invoice:
+        """Return the invoice ``invoice_id``.
+
+        Raises:
+            KeyError: If there's no such invoice.
+        """
+        found = self.where("id", invoice_id)
+        if not found:
+            raise KeyError(f"no invoice {invoice_id}")
+        return found[0]
+
+    def by_external_id(self, external_id: str) -> Invoice | None:
+        """Return the invoice from the email with this ``Message-ID``, if it's been taken in."""
+        found = self._select("WHERE external_id = ?", (external_id,))
+        return found[0] if found else None
+
+    def data_view(self) -> DocumentView:
+        """Open each invoice's PDF."""
+        return DocumentView(field="pdf")
+
+    def content_metadata(self, invoice: Invoice) -> ContentMetadata:
+        """Declare each invoice's content a PDF, under its attachment's name."""
+        return ContentMetadata(filename=invoice.filename, content_type="application/pdf")
+
+
+@layers.Purchasing
+@Repository(IngredientPrice)
+class IngredientPrices(_Table):
+    """Every price an invoice charged, charted over time by ingredient."""
+
+    table, entity = "ingredient_prices", IngredientPrice
+
+    def all(self) -> list[IngredientPrice]:
+        """Return every price, oldest first."""
+        return self._select(order="priced_at, id")
+
+    def latest(self) -> dict[str, float]:
+        """Return each invoiced ingredient's latest price: ``{code: unit_price}``."""
+        with self.db.lock:
+            rows = self.db.conn.execute(
+                "SELECT ingredient, unit_price FROM ingredient_prices AS p WHERE id = ("
+                " SELECT id FROM ingredient_prices WHERE ingredient = p.ingredient"
+                " ORDER BY priced_at DESC, id DESC LIMIT 1)"
+            ).fetchall()
+        return dict(rows)
+
+    def data_view(self) -> TimeseriesView:
+        """Chart each ingredient's price over time."""
+        return TimeseriesView(field="priced_at", fields=("unit_price",), group="name")
+
+
+@layers.Allergens
+@Repository(IngredientAllergen)
+class Allergens(_Table):
+    """What each ingredient contains or may contain: the sheet's, and what invoices declared."""
+
+    table, entity = "allergens", IngredientAllergen
+
+    def all(self) -> list[IngredientAllergen]:
+        """Return every allergen, by ingredient."""
+        return self._select(order="ingredient, allergen, id")

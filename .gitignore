@@ -235,8 +235,13 @@ examples/**/exports/*
 # Per-component log files: JSON Lines by default since opendataframework 0.5.0
 # (text-format .log files are covered by *.log above).
 **/logs/*.jsonl
+# The notification history, in its own folder since opendataframework 0.6.0.
+**/logs/history/*.jsonl
 
 # Demo state from running a demo outside Docker: databases and the tools' data.
 demo/**/data/
 demo/**/*.db
 demo/**/.env
+# What a demo's UI saves in its project directory, mounted from the host.
+demo/**/chat.json
+demo/**/annotations.json

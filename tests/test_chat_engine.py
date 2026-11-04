@@ -1,6 +1,8 @@
 import asyncio
 from types import SimpleNamespace
 
+import pytest
+
 from odf.chat import engine as engine_module
 from odf.chat.engine import ChatEngine
 
@@ -266,6 +268,32 @@ def test_addressing_forces_lifecycle_tool_key_to_addressed_key(monkeypatch):
     assert forced_call == ("start_component", {"key": "component.widget"})
 
 
+def test_addressing_forces_recent_notifications_key_to_addressed_key(monkeypatch):
+    tools = [
+        *_SCOPED_TOOLS,
+        SimpleNamespace(
+            name="recent_notifications",
+            description="What components announced",
+            inputSchema={"type": "object", "properties": {"key": {"type": "string"}}},
+        ),
+    ]
+    tool_call = make_tool_call("recent_notifications", {"level": "warning"})
+    client = FakeAsyncClient(
+        [
+            [make_chunk("", tool_calls=[tool_call])],
+            [make_chunk("done")],
+        ]
+    )
+    fake_mcp = FakeMcp(tools=tools, tool_result={"result": []})
+    chat_engine = build_engine(monkeypatch, client, mcp=fake_mcp)
+
+    collect(chat_engine, [{"role": "user", "content": "@component.widget any warnings?"}])
+
+    assert "recent_notifications" in {t["function"]["name"] for t in client.calls[0]["tools"]}
+    forced_call = next(c for c in fake_mcp.calls if c[0] == "recent_notifications")
+    assert forced_call == ("recent_notifications", {"level": "warning", "key": "component.widget"})
+
+
 def test_addressing_agent_keeps_its_invoke_tool_and_passes_arguments_through(monkeypatch):
     tools = [
         *_SCOPED_TOOLS,
@@ -447,3 +475,142 @@ def test_addressing_multiple_distinct_components_rejects_turn(monkeypatch):
         }
     ]
     assert client.calls == []
+
+
+_PROJECT_TOOLS = [
+    SimpleNamespace(name=n, description="", inputSchema={"type": "object"})
+    for n in ("function.margins.call", "function.what-if.call", "agent.order-desk.invoke")
+]
+
+
+@pytest.mark.parametrize(
+    "mangled", ["function_margins", "function.margins", "margins", "margins_call", "Margins"]
+)
+def test_a_tool_name_the_model_mangles_is_resolved_when_one_tool_matches(monkeypatch, mangled):
+    calls = [make_tool_call(mangled, {"restaurant": "Kiln"})]
+    client = FakeAsyncClient([[make_chunk("", tool_calls=calls)], [make_chunk("Done.")]])
+    fake_mcp = FakeMcp(tools=_PROJECT_TOOLS)
+    chat_engine = build_engine(monkeypatch, client, mcp=fake_mcp)
+
+    collect(chat_engine, [{"role": "user", "content": "margins for Kiln?"}])
+
+    assert fake_mcp.calls == [("function.margins.call", {"restaurant": "Kiln"})]
+
+
+def test_an_unknown_tool_name_tells_the_model_the_closest_ones(monkeypatch):
+    calls = [make_tool_call("function", {})]
+    client = FakeAsyncClient([[make_chunk("", tool_calls=calls)], [make_chunk("Sorry.")]])
+    fake_mcp = FakeMcp(tools=_PROJECT_TOOLS)
+    chat_engine = build_engine(monkeypatch, client, mcp=fake_mcp, debug=True)
+
+    events = collect(chat_engine, [{"role": "user", "content": "?"}])
+
+    [result] = [e["result"] for e in events if e["type"] == "tool_result"]
+    assert result == (
+        "error: there is no tool 'function'; did you mean "
+        "'function.margins.call' or 'function.what-if.call'?"
+    )
+    assert fake_mcp.calls == []
+    nothing = collect(build_engine(monkeypatch, FakeAsyncClient(
+        [[make_chunk("", tool_calls=[make_tool_call("bake", {})])], [make_chunk(".")]]
+    ), mcp=fake_mcp, debug=True), [{"role": "user", "content": "?"}])  # fmt: skip
+    assert [e["result"] for e in nothing if e["type"] == "tool_result"] == [
+        "error: there is no tool 'bake'"
+    ]
+
+
+def test_context_length_is_passed_to_ollama_as_num_ctx(monkeypatch):
+    seen = {}
+
+    class Client(FakeAsyncClient):
+        async def chat(self, model, messages, tools, stream, **kwargs):
+            seen.update(kwargs)
+            return await super().chat(model, messages, tools, stream)
+
+    client = Client([[make_chunk("Hi")]])
+    monkeypatch.setattr(engine_module, "AsyncClient", lambda host: client)
+
+    collect(
+        ChatEngine(model="m", host="h", context_length=32768), [{"role": "user", "content": "x"}]
+    )
+
+    assert seen == {"options": {"num_ctx": 32768}}
+    seen.clear()
+    collect(ChatEngine(model="m", host="h"), [{"role": "user", "content": "x"}])
+    assert seen == {}  # Ollama's own default
+
+
+def roles_sent(monkeypatch, messages, mcp=None, **engine_args) -> list[tuple[str, str]]:
+    client = FakeAsyncClient([[make_chunk("Hi")]])
+    monkeypatch.setattr(engine_module, "AsyncClient", lambda host: client)
+    collect(ChatEngine(model="m", host="h", mcp=mcp, **engine_args), messages)
+    return [(m["role"], m["content"]) for m in client.calls[0]["messages"]]
+
+
+def test_a_turn_with_tools_starts_with_the_system_prompt(monkeypatch):
+    question = [{"role": "user", "content": "what's waiting?"}]
+
+    assert roles_sent(monkeypatch, question, mcp=FakeMcp()) == [
+        ("system", engine_module.SYSTEM_PROMPT),
+        ("user", "what's waiting?"),
+    ]
+    assert roles_sent(monkeypatch, question, mcp=FakeMcp(), system_prompt="Be brief.")[0] == (
+        "system",
+        "Be brief.",
+    )
+    assert roles_sent(monkeypatch, question, mcp=FakeMcp(), system_prompt="")[0][0] == "user"
+
+
+def test_the_system_prompt_is_left_out_without_tools_or_with_the_conversations_own(monkeypatch):
+    question = [{"role": "user", "content": "hi"}]
+    own = [{"role": "system", "content": "Mine."}, *question]
+
+    assert roles_sent(monkeypatch, question) == [("user", "hi")]
+    assert roles_sent(monkeypatch, own, mcp=FakeMcp()) == [("system", "Mine."), ("user", "hi")]
+
+
+def test_a_turns_context_follows_the_system_prompt(monkeypatch):
+    client = FakeAsyncClient([[make_chunk("Hi")]])
+    monkeypatch.setattr(engine_module, "AsyncClient", lambda host: client)
+    chat_engine = ChatEngine(model="m", host="h", mcp=FakeMcp())
+
+    async def _collect():
+        question = [{"role": "user", "content": "make it 30"}]
+        return [event async for event in chat_engine.stream(question, "In Le Petit's thread.")]
+
+    asyncio.run(_collect())
+
+    assert [(m["role"], m["content"]) for m in client.calls[0]["messages"]] == [
+        ("system", engine_module.SYSTEM_PROMPT),
+        ("system", "In Le Petit's thread."),
+        ("user", "make it 30"),
+    ]
+
+
+def test_addressing_keeps_the_channel_tools_with_their_own_arguments(monkeypatch):
+    tools = [
+        *_SCOPED_TOOLS,
+        SimpleNamespace(
+            name="read_thread",
+            description="A thread's items",
+            inputSchema={
+                "type": "object",
+                "properties": {"channel": {"type": "string"}, "thread": {"type": "string"}},
+            },
+        ),
+    ]
+    tool_call = make_tool_call("read_thread", {"channel": "support", "thread": "ada"})
+    client = FakeAsyncClient(
+        [
+            [make_chunk("", tool_calls=[tool_call])],
+            [make_chunk("done")],
+        ]
+    )
+    fake_mcp = FakeMcp(tools=tools, tool_result={"result": []})
+    chat_engine = build_engine(monkeypatch, client, mcp=fake_mcp)
+
+    collect(chat_engine, [{"role": "user", "content": "@component.widget what did ada say?"}])
+
+    assert "read_thread" in {t["function"]["name"] for t in client.calls[0]["tools"]}
+    sent = next(c for c in fake_mcp.calls if c[0] == "read_thread")
+    assert sent == ("read_thread", {"channel": "support", "thread": "ada"})

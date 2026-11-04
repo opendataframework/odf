@@ -18,10 +18,11 @@ from email.utils import parseaddr, parsedate_to_datetime
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from typing import Annotated
 
-from opendataframework import Api, Config, Logger, Messaging, Service
+from opendataframework import Config, Logger, Service
 
+from app import layers
 from app.clients import Clock, Drive, Mail, Messenger, Pos
-from app.ingest import import_sheets, ingest_message, ingest_sale
+from app.ingest import ingest_invoice, ingest_message, ingest_sale, sync_sheets
 from app.pipelines import CloseCafe, NightRun, Onboard
 from app.repositories import BakeSheets, CafeSales
 from app.settings import setting
@@ -29,7 +30,7 @@ from app.storages import SQLite
 from app.tasks import ReconcilePos
 
 
-@Api
+@layers.Integrations
 @Service
 class WebhookReceiver:
     """Receives the POS's and the messenger's webhooks, on ``[service.webhook-receiver] port``.
@@ -130,12 +131,24 @@ class WebhookReceiver:
 
 
 def parse_email(raw: bytes) -> dict:
-    """Return an email's ``id``, ``from`` address, ``name``, ``subject``, ``text`` and ``sent``."""
+    """Return an email's ``id``, ``from`` address, ``name``, ``subject``, ``text`` and ``sent``.
+
+    Also ``pdf``: its first PDF attachment as ``(filename, content)``, or ``None``.
+    """
     mail = BytesParser(policy=policy.default).parsebytes(raw)
     name, address = parseaddr(str(mail.get("From", "")))
     body = mail.get_body(preferencelist=("plain",))
     date = mail.get("Date")
+    pdf = next(
+        (
+            (part.get_filename() or "invoice.pdf", part.get_content())
+            for part in mail.iter_attachments()
+            if part.get_content_type() == "application/pdf"
+        ),
+        None,
+    )
     return {
+        "pdf": pdf,
         "id": str(mail.get("Message-ID", "")).strip(),
         "from": address.lower(),
         "name": name or address,
@@ -145,16 +158,17 @@ def parse_email(raw: bytes) -> dict:
     }
 
 
-@Messaging
+@layers.Integrations
 @Service
 class Mailbox:
     """Checks the bakery's mailbox over POP3 every ``[service.mailbox] interval`` seconds.
 
     Messages stay on the server, as most mail clients leave them: the ones
-    already taken in are remembered by their POP3 ``UIDL``. The very first
-    check takes in the mailbox's history without announcing it. The
-    bakery's own replies, which the demo's mail server also holds, are
-    skipped.
+    already taken in are remembered by their POP3 ``UIDL``. An email with
+    a PDF attached is a supplier's invoice, handed to ``ingest_invoice``;
+    any other, to ``ingest_message``. The very first check takes in the
+    mailbox's history without announcing it. The bakery's own replies,
+    which the demo's mail server also holds, are skipped.
     """
 
     def __init__(
@@ -163,6 +177,7 @@ class Mailbox:
         sqlite: SQLite,
         mail: Mail,
         take_message: Annotated[Callable[..., int | None], ingest_message],
+        take_invoice: Annotated[Callable[..., int | None], ingest_invoice],
         logger: Logger,
     ) -> None:
         """Read the mailbox's address and login; leave the service stopped.
@@ -173,6 +188,7 @@ class Mailbox:
             sqlite: Where the ``UIDL``s taken in are remembered.
             mail: The bakery's own address, whose emails aren't taken in.
             take_message: ``ingest_message``.
+            take_invoice: ``ingest_invoice``.
             logger: The service's logger.
         """
         section = "service.mailbox"
@@ -182,6 +198,7 @@ class Mailbox:
         self.password = setting(config, section, "password", "MAIL_PASSWORD", "bakery")
         self.interval = float(setting(config, section, "interval", "MAIL_INTERVAL", 5))
         self.db, self.take_message, self.logger = sqlite, take_message, logger
+        self.take_invoice = take_invoice
         self.own_address = mail.address
         self._stopping = threading.Event()
 
@@ -212,6 +229,19 @@ class Mailbox:
                 mail = parse_email(b"\r\n".join(box.retr(int(number))[1]))
                 if mail["from"] == self.own_address:
                     self._remember(uidl)
+                    continue
+                if mail["pdf"] is not None:
+                    self.take_invoice(
+                        mail["id"] or uidl,
+                        mail["from"],
+                        mail["name"],
+                        mail["subject"],
+                        *mail["pdf"],
+                        mail["sent"],
+                        announce=not catching_up,
+                    )
+                    self._remember(uidl)
+                    new += 1
                     continue
                 self.take_message(
                     "email",
@@ -246,15 +276,32 @@ class Mailbox:
         self._stopping.set()
 
 
+@layers.Integrations
 @Service
 class SharedDrive:
-    """Watches the shared drive's sheets, and imports them again when one changes."""
+    """Watches the shared drive's sheets, and imports them again when one changes.
+
+    A sheet nothing has been imported from yet, such as one the demo added
+    after the bakery was onboarded, is imported quietly when it starts.
+    """
+
+    # The table each sheet is imported into.
+    TABLES = {
+        "products.csv": "products",
+        "restaurants.csv": "restaurants",
+        "standing_orders.csv": "standing_orders",
+        "contracts.csv": "contracts",
+        "ingredients.csv": "ingredients",
+        "recipes.csv": "recipes",
+        "allergens.csv": "allergens",
+    }
 
     def __init__(
         self,
         config: Config,
         drive: Drive,
-        import_all: Annotated[Callable[..., dict], import_sheets],
+        sqlite: SQLite,
+        sync: Annotated[Callable[..., dict], sync_sheets],
         logger: Logger,
     ) -> None:
         """Read how often to look; leave the service stopped.
@@ -262,13 +309,32 @@ class SharedDrive:
         Args:
             config: Project config; reads ``service.shared-drive.interval``.
             drive: The shared drive.
-            import_all: ``import_sheets``.
+            sqlite: To tell which sheets have been imported.
+            sync: ``sync_sheets``.
             logger: The service's logger.
         """
         self.interval = float(config.get("service").get("shared-drive").get("interval", 5))
-        self.drive, self.import_all, self.logger = drive, import_all, logger
+        self.drive, self.db, self.sync, self.logger = drive, sqlite, sync, logger
         self._versions: dict[str, float] = {}
         self._stopping = threading.Event()
+
+    def never_imported(self) -> list[str]:
+        """Return the sheets on the drive whose table is still empty."""
+        found = []
+        with self.db.lock:
+            for sheet in self.drive.versions():
+                table = self.TABLES.get(sheet)
+                query = f"SELECT 1 FROM {table} LIMIT 1"  # nosec B608: a name from TABLES
+                if table and self.db.conn.execute(query).fetchone() is None:
+                    found.append(sheet)
+        return found
+
+    def catch_up(self) -> None:
+        """Import the sheets quietly if one was never imported."""
+        missing = self.never_imported()
+        if missing:
+            self.logger.info(f"importing sheets never imported: {', '.join(missing)}")
+            self.sync(announce=False)
 
     def setup(self) -> None:
         """Note the sheets as they are now; only later changes are imported."""
@@ -276,13 +342,17 @@ class SharedDrive:
         self._stopping.clear()
 
     def run(self) -> None:
-        """Look every ``interval`` seconds until ``stop()``, importing when a sheet changed."""
+        """Catch up, then look every ``interval`` seconds until ``stop()``, importing changes."""
+        try:
+            self.catch_up()
+        except (OSError, KeyError, ValueError) as exc:
+            self.logger.warning(f"couldn't import the sheets: {exc!r}")
         while not self._stopping.wait(self.interval):
             versions = self.drive.versions()
             if versions != self._versions:
                 self._versions = versions
                 try:
-                    self.import_all()
+                    self.sync()
                 except (OSError, KeyError, ValueError) as exc:
                     self.logger.warning(f"couldn't import the sheets: {exc!r}")
 
@@ -291,6 +361,7 @@ class SharedDrive:
         self._stopping.set()
 
 
+@layers.Integrations
 @Service
 class Scheduler:
     """Runs what's due on the demo clock: onboarding once, then the day's runs.

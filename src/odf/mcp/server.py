@@ -10,6 +10,7 @@ repository data that was previously only reachable by clicking through the UI.
 """
 
 import inspect
+import json
 import threading
 from collections.abc import Callable
 from typing import Any
@@ -26,11 +27,12 @@ from opendataframework.component import McpToolsProtocol
 from opendataframework.context import Context
 from opendataframework.repository import ReadableProtocol
 
-from odf.ui import arguments, keys
+from odf.ui import arguments, conversations, keys
 from odf.ui.data import find_repository, list_records, parse_filters
 from odf.ui.topology import build_topology
 
 _MAX_QUERY_LIMIT = 500
+_MAX_THREAD_LIMIT = 500
 
 
 class McpServer:
@@ -162,11 +164,72 @@ class McpServer:
             key (e.g. "service.postgres")."""
             return self._context.tail_logs(self._context.key(self._lookup(key)), lines)
 
+        @mcp.tool()
+        def recent_notifications(
+            topic: str | None = None,
+            key: str | None = None,
+            level: str | None = None,
+            include_unsummarized: bool = False,
+            before: str | None = None,
+            limit: int = 20,
+        ) -> list[dict]:
+            """Return what the business's components have announced, newest
+            first: each notification's time (ts), publisher (key), topic,
+            level and summary, kept across restarts. Use it for "what
+            happened overnight?" or "any warnings today?". Filter by topic
+            (exact, or a prefix pattern like "drafts.*"), publisher key, or
+            level (info, success, warning, error). Only notifications with a
+            summary unless include_unsummarized. To read further back, pass
+            the last row's cursor as before. limit is 1 to 1000. Payloads
+            aren't kept, only summaries."""
+            return self._context.notification_history(
+                topic=topic or None,
+                key=key or None,
+                level=level or None,
+                summary_only=not include_unsummarized,
+                before=before or None,
+                limit=max(1, min(limit, 1000)),
+            )
+
+        @mcp.tool()
+        def list_channels() -> list[dict]:
+            """List the outside conversations the business has: each
+            channel (customers' messages by email or a messenger, say), the
+            repositories in it, and its threads, the one with the latest
+            item first. Each thread has its name ("thread"), the time of
+            its latest item (a Unix time), how many items it holds, and its
+            last item's text, kind ("message" or "card") and direction
+            ("in" or "out"). Read one with read_thread()."""
+            return _json_ready(
+                [
+                    {**channel, "threads": conversations.threads(self._context, channel["name"])}
+                    for channel in conversations.channels(self._context)
+                ]
+            )
+
+        @mcp.tool()
+        def read_thread(channel: str, thread: str, limit: int = 50) -> list[dict]:
+            """Return a thread's latest items, oldest first: the messages
+            that came in and went out ("direction" "in" or "out", with
+            their "sender"), and cards, records answering them such as a
+            draft reply. A card carries its record and its "actions": each
+            is run by the tool "<id>.<verb>", passing the action's "value"
+            as its "param" argument; arguments listed in "prefill" start as
+            the record's values. Only run an action the user asked for.
+            "channel" and "thread" are names from list_channels(). "limit"
+            is 1 to 500."""
+            items = conversations.thread(
+                self._context, channel, thread, limit=max(1, min(limit, _MAX_THREAD_LIMIT))
+            )
+            if items is None:
+                raise ValueError(f"No channel {channel!r}")
+            return _json_ready(items)
+
         # Component-exposed tools: everything that takes arguments gets a
         # tool named by its verb (an agent's "invoke", a function's "call";
         # see odf.ui.arguments), and every resolved instance implementing
-        # McpToolsProtocol contributes its own tools, in addition to the six
-        # fixed tools above. Both are prefixed by the component's key so they can't
+        # McpToolsProtocol contributes its own tools, in addition to the fixed
+        # tools above. Both are prefixed by the component's key so they can't
         # collide with the fixed tools or with another component's tools of
         # the same local name.
         registered_names: set[str] = set()
@@ -258,3 +321,8 @@ class McpServer:
             self._server.should_exit = True
         if self._thread is not None:
             self._thread.join(timeout=5)
+
+
+def _json_ready(value: object) -> object:
+    """Return ``value`` with anything JSON can't hold (a ``datetime`` in a record) as text."""
+    return json.loads(json.dumps(value, default=str))
