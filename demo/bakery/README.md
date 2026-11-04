@@ -382,7 +382,8 @@ rack, an invoice, the messenger, flour sacks...), loaded through
 `[ui] icon-scripts`, and uses odf's built-in ones where they fit (the till,
 the delivery truck, the mailbox). Services, agents, reactions and the
 other functions keep their type's icon. Each node's icon is saved in
-`layout.json`, beside its place.
+`layout.json`, beside its place. The UI wears odf's built-in `ink` theme
+(`[ui] theme` in `config.toml`).
 
 That's the whole system, and most of it isn't what a manager looks at. The
 UI opens on the **Bakery** view (`[ui.views.manager]` in `config.toml`):

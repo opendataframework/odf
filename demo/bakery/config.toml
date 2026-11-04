@@ -81,7 +81,9 @@ interval = 5
 
 # The bakery's own topology icons (an oven, a bread rack, an invoice...),
 # assigned to nodes in layout.json. The path is relative to where odf runs.
+# The UI wears the built-in ink theme.
 [ui]
+theme = "ink"
 icon-scripts = ["icons/bakery.js"]
 
 # Two views of the bakery, picked in the UI's header. The manager's, shown
