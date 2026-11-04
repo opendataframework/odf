@@ -3260,12 +3260,19 @@ function setChatFull(on) {
   else layoutChat();
 }
 
+const CHAT_EXPAND_ICONS = {
+  expand: '<svg viewBox="0 0 16 16"><path d="M9.5 2.5h4v4M13.5 2.5 9 7M6.5 13.5h-4v-4M2.5 13.5 7 9"/></svg>',
+  collapse: '<svg viewBox="0 0 16 16"><path d="M13.5 2.5 9 7M9 3.5V7h3.5M2.5 13.5 7 9M7 12.5V9H3.5"/></svg>',
+};
+
 function updateChatExpand() {
   const btn = document.getElementById('chat-expand');
   const full = mapMode === 'chat';
-  btn.textContent = full ? 'Collapse' : 'Expand';
-  btn.title = full ? 'Back to the drawer' : 'Show the chat full screen';
+  btn.innerHTML = full ? CHAT_EXPAND_ICONS.collapse : CHAT_EXPAND_ICONS.expand;
+  btn.title = full ? 'Collapse: back to the drawer' : 'Expand: show the chat full screen';
+  btn.setAttribute('aria-label', full ? 'Collapse' : 'Expand');
   btn.setAttribute('aria-pressed', String(full));
+  btn.classList.toggle('active', full);
 }
 
 document.getElementById('chat-expand').addEventListener('click', () => {

@@ -234,8 +234,8 @@ chat-file`), next to `layout.json`, so they're reopened after a reload or from
 another browser:
 
 - under **Assistant**, **New conversation** starts one, and each kept one is
-  listed by its first question, the one changed last first. **Delete**, in an
-  open conversation, removes it;
+  listed by its first question, the one changed last first. **Delete** (the
+  bin in the header), in an open conversation, removes it;
 - each thread holds one conversation of its own, its notes, shown between
   the thread's messages and cards.
 
@@ -261,15 +261,16 @@ everyone using the UI: a thread's notes are the team's notes.
 
 ## Full screen
 
-**Expand**, in the drawer's header, shows the chat full screen in place of
-the topology, as big as the Notifications view. With channels or kept
-conversations, the list stays on the left beside the open one, the current
-one marked, so moving between threads takes one click instead of **Back**.
-**Collapse** returns to the topology with the drawer still open. Leaving the
-view the way any view is left (Esc outside the input, the Notifications or
-Activity button, a component picked in the sidebar) does the same, and
-**Close** closes the chat. Whether the chat opens full screen is remembered
-in your browser.
+**Expand** (the outward arrows in the drawer's header) shows the chat full
+screen in place of the topology, as big as the Notifications view. With
+channels or kept conversations, the list stays on the left beside the open
+one, the current one marked, so moving between threads takes one click
+instead of **Back** (the arrow left of the title). **Collapse** (the same
+button, arrows inward) returns to the topology with the drawer still open.
+Leaving the view the way any view is left (Esc outside the input, the
+Notifications or Activity button, a component picked in the sidebar) does the
+same, and **Close** (×) closes the chat. Whether the chat opens full screen
+is remembered in your browser.
 
 ## Prerequisites
 
