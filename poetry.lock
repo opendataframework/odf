@@ -2674,11 +2674,6 @@ files = [
     {file = "opendataframework-0.6.0.tar.gz", hash = "sha256:d53631e63c79c2d85a68b4fe177e8ee7d62384773215eb106d11ca3c9f3c5c61"},
 ]
 
-[package.source]
-type = "legacy"
-url = "http://localhost:8080/simple"
-reference = "local-pypi"
-
 [[package]]
 name = "packaging"
 version = "26.3"
@@ -4701,4 +4696,4 @@ ui = ["fastapi", "uvicorn"]
 [metadata]
 lock-version = "2.1"
 python-versions = ">=3.14"
-content-hash = "3d39172d3524d50284b05bd9b98663faf3b419281b4e237659d85bfd76e9de33"
+content-hash = "cab4a035489468a3c929c7821f4da6bd096bfc7df9bb5ba6f2c41ef7251994b0"
