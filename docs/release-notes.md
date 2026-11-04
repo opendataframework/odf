@@ -61,7 +61,7 @@
   answering them as a card to confirm, edit first or reject. A restaurant writing again,
   or a person asking in the thread, outdates the draft for a new one. Its topology is
   laid out by area, with the bakery's own icons for every node, each agent a desk with
-  its role's tools (`[ui] icon-scripts`). Tours on its
+  its role's tools (`[ui] icon-scripts`), on the built-in `ink` theme. Tours on its
   world console play the order change, the butter spike and the sesame substitution end
   to end, saying at each step what to look at and moving on when the bakery's
   notifications say it got there. See [Demo](demo.md).
