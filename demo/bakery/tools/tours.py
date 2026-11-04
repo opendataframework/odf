@@ -62,7 +62,9 @@ class Tour:
 def pick(payload: object, path: str) -> list:
     """Return the values at ``path`` in ``payload``, each once, in order.
 
-    ``path`` is dotted field names, with ``*`` for every item of a list.
+    ``path`` is dotted field names, with ``*`` for every item of a list. A
+    list at the end of the path gives its items: ``"restaurants"`` of
+    ``{"restaurants": ["Kiln", "Fig"]}`` is both names.
     """
     found = [payload]
     for part in path.split("."):
@@ -73,7 +75,8 @@ def pick(payload: object, path: str) -> list:
             elif isinstance(value, dict) and part in value:
                 nxt.append(value[part])
         found = nxt
-    return list(dict.fromkeys(v for v in found if v is not None and not isinstance(v, dict)))
+    flat = [item for v in found for item in (v if isinstance(v, list) else [v])]
+    return list(dict.fromkeys(v for v in flat if v is not None and not isinstance(v, (dict, list))))
 
 
 def matches(step: Step, notification: dict, captured: dict[str, list]) -> bool:

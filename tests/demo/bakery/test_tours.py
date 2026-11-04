@@ -30,6 +30,24 @@ def test_pick_follows_lists_and_keeps_each_value_once():
     assert tours.pick(payload, "contracts.*.restaurant") == ["Kiln", "Fig"]
     assert tours.pick({"draft": 3}, "draft") == [3]
     assert tours.pick({"draft": 3}, "missing") == []
+    # allergens.changed names its restaurants as a list
+    assert tours.pick({"restaurants": ["Kiln", "Fig", "Kiln"]}, "restaurants") == ["Kiln", "Fig"]
+
+
+def test_a_notification_the_guide_fails_on_is_shown_and_it_keeps_following(guide, monkeypatch):
+    def fail(gen, item):
+        raise TypeError("boom")
+
+    def stream(url):
+        yield _note("allergens.changed")
+        assert "boom" in guide.error  # still following after it
+        guide.stop()
+        yield _note("drafts.created")
+
+    monkeypatch.setattr(guide, "notify", fail)
+    monkeypatch.setattr(world, "notification_stream", stream)
+    guide.start("sesame-substitution")
+    guide.follow(guide.generation)
 
 
 def test_a_step_matches_its_topic_and_fields_including_captured_values():
@@ -91,6 +109,34 @@ def test_guide_plays_the_order_change_and_puts_the_clock_back(guide):
 
     assert guide.state()["done"]
     assert not world.clock.state()[3]
+
+
+def test_guide_takes_a_reaction_that_reaches_the_stream_before_its_cause(guide):
+    # Labelling reacts on a worker of its own, so its allergens.changed may
+    # reach the stream before the ingredients.changed it reacted to.
+    guide.start("sesame-substitution")
+    gen = guide.generation
+    guide.notify(gen, _note("invoices.received", supplier="Millers Ltd"))
+    guide.notify(gen, _note("allergens.changed", "7 labels", restaurants=["Kiln"]))
+    guide.notify(gen, _note("drafts.created", "8 notices", draft=4, kind="allergen-notice"))
+
+    assert guide.index == 1
+    guide.notify(gen, _note("ingredients.changed", "Flour", supplier="Millers Ltd"))
+
+    assert guide.index == 4  # waiting for the confirmation
+    assert guide.seen[2:4] == [["7 labels"], ["8 notices"]]
+    assert guide.captured["drafts"] == [4]
+
+
+def test_next_takes_what_already_arrived_for_the_steps_after(guide):
+    guide.start("butter-spike")
+    gen = guide.generation
+    guide.notify(gen, _note("prices.changed", "Butter up", supplier="Vale Dairy"))
+
+    guide.next()  # the invoice's notice never came
+
+    assert guide.index == 2
+    assert guide.seen[1] == ["Butter up"]
 
 
 def test_guide_waits_for_a_draft_per_restaurant_below_cost(guide):

@@ -669,6 +669,8 @@ class Guide:
         self.index = 0
         self.captured: dict[str, list] = {}
         self.seen: list[list[str]] = []
+        # Every notification since the tour started that no step has taken yet.
+        self.unused: deque[dict] = deque(maxlen=500)
         self.step_since = 0.0
         self.error: str | None = None
         self.paused_before: bool | None = None
@@ -713,7 +715,11 @@ class Guide:
                     if self.generation != gen:
                         return
                     if item is not None:
-                        self.notify(gen, item)
+                        try:
+                            self.notify(gen, item)
+                        except Exception as exc:  # noqa: BLE001 - shown, not lost with the thread
+                            with self.lock:
+                                self.error = f"Couldn't follow {item.get('topic')!r}: {exc!r}"
                         continue
                     with self.lock:
                         self.error = None
@@ -729,20 +735,44 @@ class Guide:
                 time.sleep(2)
 
     def notify(self, gen: int, notification: dict) -> None:
-        """Take one of the bakery's notifications: it may complete the current step."""
+        """Take one of the bakery's notifications: it may complete the current step, or a later one.
+
+        The stream doesn't promise the order things happened in: a reaction
+        on a worker of its own can publish before the notification it reacted
+        to reaches the stream. So a notification no step takes yet is kept,
+        and each step that becomes current first looks through those.
+        """
         with self.lock:
             if gen != self.generation or self.name is None or self._done():
                 return
+            self.unused.append(notification)
+            completed = self._catch_up()
+        for what in completed:
+            _log(f"Tour: {what}")
+
+    def _catch_up(self) -> list[str]:
+        """Complete, in order, each step the kept notifications complete. Called holding the lock.
+
+        Returns:
+            What completed each step, as the feed says it.
+        """
+        completed = []
+        while not self._done():
             step = TOURS[self.name].steps[self.index]
-            if not matches(step, notification, self.captured):
-                return
-            capture(step, notification, self.captured)
-            self.seen[self.index].append(notification.get("summary") or notification["topic"])
-            if len(self.seen[self.index]) < needed(step, self.captured):
-                return
-            what = "; ".join(self.seen[self.index])
+            for notification in list(self.unused):
+                if len(self.seen[self.index]) >= needed(step, self.captured):
+                    break
+                if matches(step, notification, self.captured):
+                    self.unused.remove(notification)
+                    capture(step, notification, self.captured)
+                    self.seen[self.index].append(
+                        notification.get("summary") or notification["topic"]
+                    )
+            if step.topic is None or len(self.seen[self.index]) < needed(step, self.captured):
+                break
+            completed.append("; ".join(self.seen[self.index]))
             self._advance()
-        _log(f"Tour: {what}")
+        return completed
 
     def _done(self) -> bool:
         """Return whether every step is done. Called holding the lock."""
@@ -758,8 +788,12 @@ class Guide:
     def next(self) -> None:
         """Move on to the next step, without waiting for its notification."""
         with self.lock:
-            if self.name is not None and not self._done():
-                self._advance()
+            if self.name is None or self._done():
+                return
+            self._advance()
+            completed = self._catch_up()
+        for what in completed:
+            _log(f"Tour: {what}")
 
     def stop(self) -> None:
         """Stop the tour, done or not."""
