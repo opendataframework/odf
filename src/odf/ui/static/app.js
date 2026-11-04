@@ -1892,6 +1892,7 @@ document.getElementById('inspector-popup-close').addEventListener('click', desel
 // open. `name` is 'activity', 'chat' or null (close both); the header button
 // of the open drawer is marked active.
 function setDrawer(name) {
+  if (mapMode === 'chat' && name !== 'chat') backToTopology();
   for (const key of ['activity', 'chat']) {
     const open = key === name;
     const btn = document.getElementById(`${key}-toggle`);
@@ -1904,7 +1905,9 @@ function setDrawer(name) {
 for (const key of ['activity', 'chat']) {
   document.getElementById(`${key}-toggle`).addEventListener('click', () => {
     const open = document.getElementById(`${key}-drawer`).classList.contains('open');
-    setDrawer(open ? null : key);
+    if (open) setDrawer(null);
+    else if (key === 'chat' && chatFull()) setChatFull(true);
+    else setDrawer(key);
   });
   document.getElementById(`${key}-drawer-close`).addEventListener('click', () => setDrawer(null));
 }
@@ -2840,8 +2843,7 @@ async function loadConversations() {
     console.error('Failed to load conversations', err);
     chatConversations = [];
   }
-  if (chatView.kind === 'nav') renderChatNav();
-  document.getElementById('chat-back').hidden = chatView.kind === 'nav' || !chatHasNav();
+  layoutChat();
 }
 
 // Reopens a kept assistant conversation into #chat-messages; `null` starts
@@ -2917,7 +2919,7 @@ async function refreshThreads() {
   chatThreads = {};
   chatChannels.forEach((channel, i) => { chatThreads[channel.name] = fetched[i]; });
   seedChatSeen();
-  if (chatView.kind === 'nav') renderChatNav();
+  if (chatNavShown()) renderChatNav();
   updateChatUnread();
 }
 
@@ -2972,23 +2974,49 @@ function chatEl(tag, className, text) {
   return el;
 }
 
+// Full screen, the list stays beside the conversation, so the list on its own
+// becomes the first place to talk in it.
+function firstChatView() {
+  if (chatEnabled) return { kind: 'assistant', id: null };
+  for (const channel of chatChannels) {
+    const t = (chatThreads[channel.name] || [])[0];
+    if (t) return { kind: 'thread', channel: channel.name, thread: t.thread };
+  }
+  return { kind: 'nav' };
+}
+
+function chatNavShown() {
+  return chatView.kind === 'nav' || mapMode === 'chat';
+}
+
+// What drawer or full screen changes, leaving the open conversation as it is
+// (an answer still streaming into it included).
+function layoutChat() {
+  const full = mapMode === 'chat';
+  const nav = chatView.kind === 'nav';
+  const split = full && chatHasNav();
+  document.getElementById('chat-drawer').classList.toggle('split', split);
+  document.getElementById('chat-nav').hidden = !(nav || split);
+  document.getElementById('chat-back').hidden = nav || full || !chatHasNav();
+  if (chatNavShown()) renderChatNav();
+}
+
 function showChatView(view) {
+  if (mapMode === 'chat' && view.kind === 'nav') view = firstChatView();
   chatView = view;
   const nav = view.kind === 'nav';
   const thread = view.kind === 'thread';
   const assistant = view.kind === 'assistant';
-  document.getElementById('chat-nav').hidden = !nav;
+  layoutChat();
   document.getElementById('chat-thread').hidden = !thread;
   document.getElementById('chat-messages').hidden = !assistant;
   document.getElementById('chat-footer').hidden = !((assistant || thread) && chatEnabled);
-  document.getElementById('chat-back').hidden = nav || !chatHasNav();
   document.getElementById('chat-delete').hidden = !(assistant && chatKept && view.id);
   document.getElementById('chat-input').placeholder = thread
     ? 'Ask about this thread, or @ a component…' : 'Ask, or @ a component…';
   document.getElementById('chat-title').textContent = thread ? view.thread
     : assistant && chatKept ? (view.id ? 'Conversation' : 'New conversation')
     : assistant && chatHasNav() ? 'Assistant' : 'Chat';
-  if (nav) renderChatNav();
   if (assistant && chatKept) loadConversation(view.id);
   if (thread) {
     document.getElementById('chat-thread').replaceChildren();
@@ -2996,8 +3024,9 @@ function showChatView(view) {
   }
 }
 
-function chatNavItem(name, preview, { unread = false, time = null, onClick }) {
-  const item = chatEl('button', 'chat-nav-item' + (unread ? ' unread' : ''));
+function chatNavItem(name, preview, { unread = false, current = false, time = null, onClick }) {
+  const item = chatEl('button', 'chat-nav-item' + (unread ? ' unread' : '') + (current ? ' current' : ''));
+  if (current) item.setAttribute('aria-current', 'true');
   const top = chatEl('div', 'chat-nav-top');
   top.appendChild(chatEl('span', 'chat-nav-name', name));
   if (time !== null) top.appendChild(chatEl('span', 'chat-nav-time', chatTime(time)));
@@ -3012,11 +3041,14 @@ function renderChatNav() {
   nav.replaceChildren();
   if (chatEnabled) {
     nav.appendChild(chatEl('div', 'chat-nav-channel', 'Assistant'));
+    const assistant = chatView.kind === 'assistant';
     nav.appendChild(chatNavItem(chatKept ? 'New conversation' : 'Assistant', 'Ask, or @ a component', {
+      current: assistant && !chatView.id,
       onClick: () => showChatView({ kind: 'assistant', id: null }),
     }));
     for (const conversation of chatConversations) {
       nav.appendChild(chatNavItem(conversation.title || 'Untitled', '', {
+        current: assistant && chatView.id === conversation.id,
         time: conversation.updated,
         onClick: () => showChatView({ kind: 'assistant', id: conversation.id }),
       }));
@@ -3030,6 +3062,7 @@ function renderChatNav() {
     for (const t of threads) {
       nav.appendChild(chatNavItem(t.thread, t.last ? t.last.text : '', {
         unread: threadUnread(channel.name, t, seen),
+        current: chatView.kind === 'thread' && chatView.channel === channel.name && chatView.thread === t.thread,
         time: t.time,
         onClick: () => showChatView({ kind: 'thread', channel: channel.name, thread: t.thread }),
       }));
@@ -3063,6 +3096,7 @@ async function loadThread() {
   renderThread(box, items, render);
   if (items.length) markThreadSeen(channel, thread, items[items.length - 1].time);
   updateChatUnread();
+  if (mapMode === 'chat') renderChatNav(); // its unread dot, now seen
 }
 
 // A card being acted on keeps its element (and the form in it) across a
@@ -3194,6 +3228,51 @@ function onChannelNotification(n) {
 }
 
 document.getElementById('chat-back').addEventListener('click', () => showChatView({ kind: 'nav' }));
+
+// ── Full-screen chat ─────────────────────────────────────────────────────
+// Expand turns the drawer into a view of the map panel, as big as the
+// Notifications view, with the list of conversations beside the open one.
+// It's the 'chat' map mode, so leaving it as any view is left (Esc, another
+// view, a sidebar click) shrinks the chat back to its drawer, still open.
+// Whether the chat opens full screen is this viewer's own, kept in
+// localStorage; only Expand and Collapse change it.
+
+const CHAT_FULL_KEY = 'odf-ui-chat-full';
+
+function chatFull() {
+  try { return localStorage.getItem(CHAT_FULL_KEY) === '1'; } catch { return false; }
+}
+
+function rememberChatFull(on) {
+  try { localStorage.setItem(CHAT_FULL_KEY, on ? '1' : '0'); } catch {}
+}
+
+// Collapsing is leaving the view: setMapMode() lays the drawer out again.
+function setChatFull(on) {
+  if (!on) {
+    backToTopology();
+    return;
+  }
+  setDrawer('chat');
+  setMapMode('chat');
+  document.getElementById('map-panel-title').textContent = 'chat';
+  if (chatView.kind === 'nav') showChatView(chatView);
+  else layoutChat();
+}
+
+function updateChatExpand() {
+  const btn = document.getElementById('chat-expand');
+  const full = mapMode === 'chat';
+  btn.textContent = full ? 'Collapse' : 'Expand';
+  btn.title = full ? 'Back to the drawer' : 'Show the chat full screen';
+  btn.setAttribute('aria-pressed', String(full));
+}
+
+document.getElementById('chat-expand').addEventListener('click', () => {
+  const on = mapMode !== 'chat';
+  rememberChatFull(on);
+  setChatFull(on);
+});
 
 function appendChatMessage(role, text, list = document.getElementById('chat-messages')) {
   const div = document.createElement('div');
@@ -3447,7 +3526,7 @@ function renderStats(data) {
 // selection follows the active mode (see selectFromSidebar above), so this
 // is the single place that knows how to enter/leave each mode.
 
-let mapMode = 'topology'; // 'topology' | 'data' | 'stream' | 'media' | 'image' | 'document' | 'timeseries' | 'logs' | 'geo' | 'details' | 'chart' | 'trace'
+let mapMode = 'topology'; // 'topology' | 'data' | 'stream' | 'media' | 'image' | 'document' | 'timeseries' | 'logs' | 'geo' | 'details' | 'chart' | 'trace' | 'notifications' | 'chat'
 let audioStreamActive = false; // guards the streaming-audio poll-and-chain loop, see playAudioStream()
 
 function setMapMode(mode) {
@@ -3485,8 +3564,11 @@ function setMapMode(mode) {
   if (replayMode && mode !== mapMode) teardownReplay();
   if (mode === 'topology') activeRepoId = null;
   if (mode !== 'topology') closeStylePicker(); // its anchor (the inspector popup) is hidden outside topology
+  const leftChat = mapMode === 'chat' && mode !== 'chat';
   mapMode = mode;
   document.getElementById('map').className = 'panel mode-' + mode;
+  updateChatExpand();
+  if (leftChat) layoutChat();
   const notesBtn = document.getElementById('notifications-toggle');
   notesBtn.classList.toggle('active', mode === 'notifications');
   notesBtn.setAttribute('aria-pressed', String(mode === 'notifications'));
@@ -4041,6 +4123,8 @@ window.addEventListener('keydown', e => {
     return;
   }
   if (e.key !== 'Escape') return;
+  // Esc while typing in the chat (a question, a card's form) isn't leaving it.
+  if (e.defaultPrevented || (mapMode === 'chat' && e.target.closest('#chat-drawer input, #chat-drawer textarea, #chat-drawer select'))) return;
   if (mapMode !== 'topology') backToTopology();
   else if (selectId) deselectNode();
 });

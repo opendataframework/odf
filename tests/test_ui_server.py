@@ -2511,6 +2511,22 @@ def test_ui_has_the_notifications_view():
     assert "onNotification(n);\n    if (mapMode === 'notifications') onNotesLive(n);" in script
 
 
+def test_ui_chat_expands_to_full_screen():
+    html = (themes.STATIC_DIR / "index.html").read_text()
+    script = (themes.STATIC_DIR / "app.js").read_text()
+
+    assert 'id="chat-expand"' in html
+    assert "function setChatFull(on)" in script
+    assert "'odf-ui-chat-full'" in script
+    # Collapsing, or leaving the view any other way, keeps the open
+    # conversation (an answer streaming into it included).
+    assert "if (leftChat) layoutChat();" in script
+    for name in themes.list_themes():
+        css = (themes.STATIC_DIR / "themes" / name / "theme.css").read_text()
+        assert "#map.mode-chat #chat-drawer{" in css, name
+        assert "#map.mode-chat #chat-drawer.split{" in css, name
+
+
 def test_ui_draws_notification_links_and_lights_them_for_reactions():
     script = (themes.STATIC_DIR / "app.js").read_text()
 

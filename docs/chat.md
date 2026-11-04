@@ -259,6 +259,18 @@ chat-history = 200
 odf doesn't know who is asking yet, so a kept conversation is shared by
 everyone using the UI: a thread's notes are the team's notes.
 
+## Full screen
+
+**Expand**, in the drawer's header, shows the chat full screen in place of
+the topology, as big as the Notifications view. With channels or kept
+conversations, the list stays on the left beside the open one, the current
+one marked, so moving between threads takes one click instead of **Back**.
+**Collapse** returns to the topology with the drawer still open. Leaving the
+view the way any view is left (Esc outside the input, the Notifications or
+Activity button, a component picked in the sidebar) does the same, and
+**Close** closes the chat. Whether the chat opens full screen is remembered
+in your browser.
+
 ## Prerequisites
 
 1. Install and run [Ollama](https://ollama.com) locally: `ollama serve`.

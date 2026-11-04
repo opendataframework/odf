@@ -45,6 +45,9 @@
   `{text, thread}` to keep a turn, and still `{messages}` for a caller that keeps its own.
   A question whose turn failed stays in the conversation but isn't sent with the next.
   See [Chat](chat.md#history).
+- **Chat**: **Expand** shows the chat full screen, in place of the topology, with the
+  list of channels and conversations beside the open one. Remembered per browser. See
+  [Chat](chat.md#full-screen).
 - **MCP**: `list_channels` and `read_thread`, the chat's channels and their threads as
   tools. A card's actions are listed with the tool each is run by (`<key>.<verb>`) and
   the record it takes, so another client can read a thread and act on its cards. See

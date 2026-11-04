@@ -333,6 +333,23 @@ canvas{display:block;cursor:grab}
 .chat-nav-channel:first-child{margin-top:0}
 .chat-nav-item{display:block;width:100%;text-align:left;background:transparent;border:1px solid transparent;border-radius:8px;padding:7px 10px;color:var(--text);font:inherit;cursor:pointer}
 .chat-nav-item:hover{background:var(--hover-bg);border-color:var(--border)}
+.chat-nav-item.current{background:var(--hover-bg);border-color:var(--border-strong)}
+/* Full-screen chat (#map.mode-chat): the drawer over the whole map, with the
+   list of conversations beside the open one when there is a list. */
+#chat-expand{margin-right:6px}
+#map.mode-chat #chat-drawer{left:0;width:auto;max-width:none;border-left:0;box-shadow:none;transition:none}
+#map.mode-chat #chat-drawer.split{display:grid;grid-template-columns:minmax(220px,280px) minmax(0,1fr);grid-template-rows:auto minmax(0,1fr) auto}
+#map.mode-chat #chat-drawer.split>.activity-drawer-hdr{grid-column:1/-1}
+#map.mode-chat #chat-drawer.split #chat-nav{grid-column:1;grid-row:2/4;border-right:1px solid var(--border)}
+#map.mode-chat #chat-drawer.split #chat-thread,#map.mode-chat #chat-drawer.split #chat-messages{grid-column:2;grid-row:2}
+#map.mode-chat #chat-drawer.split #chat-footer{grid-column:2;grid-row:3}
+#map.mode-chat .chat-msg,#map.mode-chat .chat-card{max-width:min(92%,760px)}
+@media (max-width:640px){
+  #map.mode-chat #chat-drawer.split{grid-template-columns:minmax(0,1fr);grid-template-rows:auto minmax(0,30%) minmax(0,1fr) auto}
+  #map.mode-chat #chat-drawer.split #chat-nav{grid-column:1;grid-row:2;border-right:0;border-bottom:1px solid var(--border)}
+  #map.mode-chat #chat-drawer.split #chat-thread,#map.mode-chat #chat-drawer.split #chat-messages{grid-column:1;grid-row:3}
+  #map.mode-chat #chat-drawer.split #chat-footer{grid-column:1;grid-row:4}
+}
 .chat-nav-top{display:flex;justify-content:space-between;align-items:baseline;gap:8px}
 .chat-nav-name{font-weight:600;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .chat-nav-item.unread .chat-nav-name::before{content:'';display:inline-block;width:6px;height:6px;border-radius:50%;background:var(--title-accent);margin-right:6px;vertical-align:middle}
