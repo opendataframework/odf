@@ -40,3 +40,15 @@ def test_every_bakery_icon_is_used():
 
 def test_bakery_icons_do_not_shadow_built_ins():
     assert BAKERY_ICONS & BUILT_INS == set()
+
+
+def test_every_node_wears_a_bakery_icon():
+    nodes = {key: entry for key, entry in LAYOUT.items() if not key.startswith("_")}
+
+    assert {key for key, entry in nodes.items() if entry.get("icon") not in BAKERY_ICONS} == set()
+
+
+def test_each_agent_has_its_own_icon():
+    agents = [entry["icon"] for key, entry in LAYOUT.items() if key.startswith("agent.")]
+
+    assert len(agents) == len(set(agents))

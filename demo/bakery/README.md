@@ -376,12 +376,15 @@ the agent and the reaction; and the drafts on the right, where every agent's
 work ends up. Each band is also a `Layer` (`app/layers.py`), so the
 sidebar groups the nodes the same way, and each area has its own color.
 Only `SQLite`, the database every area shares, stays in the built-in
-`Storage`. The nodes standing for something in the bakery have an icon to
-match: the bakery draws its own in `icons/bakery.js` (an oven, a bread
-rack, an invoice, the messenger, flour sacks...), loaded through
-`[ui] icon-scripts`, and uses odf's built-in ones where they fit (the till,
-the delivery truck, the mailbox). Services, agents, reactions and the
-other functions keep their type's icon. Each node's icon is saved in
+`Storage`. Every node has an icon drawn for the bakery, in
+`icons/bakery.js`, loaded through `[ui] icon-scripts`: each agent is a
+clerk at a desk with their role's tools (the order desk in a headset, the
+invoice clerk with a ledger and a stamp, the allergen officer with a
+magnifier over a label...), the papers a manager deals with stand on
+their desks (drafts, contracts, invoices, the week's orders), the café is
+its till, display case and shutter, and the bakehouse its oven, racks and
+flour sacks. The wiring (hatches the tools' items come in through, the
+post, the clock) is drawn in the same style. Each node's icon is saved in
 `layout.json`, beside its place. The UI wears odf's built-in `ink` theme
 (`[ui] theme` in `config.toml`).
 
@@ -496,7 +499,7 @@ bakery/
 ├── Dockerfile            # the bakery: odf from this repository's source, plus app/
 ├── config.toml           # the bakery's odf config: the tools' addresses, ports, intervals, the UI's views
 ├── layout.json           # the topology's layout: the integrations, then one band per area, each node's icon, and the manager view's own places
-├── icons/bakery.js       # the bakery's own topology icons: oven, bread rack, invoice, messenger, ...
+├── icons/bakery.js       # the bakery's own topology icons: a desk per agent, drafts, oven, till, ...
 ├── app/                  # the bakery's odf project
 │   ├── layers.py         # one Layer per area: integrations, wholesale, cafe, production, ...
 │   ├── clients.py        # Clock, Pos, Messenger, Drive, Weather, Mail: one per tool
