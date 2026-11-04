@@ -23,8 +23,11 @@ docker compose up --build
 ```
 
 Then open the bakery's UI at <http://localhost:4747>, the world console
-(the demo clock and scenarios) at <http://localhost:8000>, and the tools
-next to it. The
+(the demo clock, scenarios and tours) at <http://localhost:8000>, and the
+tools next to it. A tour plays one of the bakery's flows end to end, from a
+restaurant's message or a supplier's invoice to the draft a person confirms,
+saying at each step what to look at, and moves on as the bakery's
+notifications arrive. The
 [README](https://github.com/opendataframework/odf/tree/main/demo/bakery#readme)
 explains why it's built this way, what to try, and the questions to ask
 in chat.

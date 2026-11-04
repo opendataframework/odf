@@ -145,13 +145,21 @@ ODF_INDEX_URL=http://host.docker.internal:8080/simple/ docker compose up --build
 | Open | For |
 |---|---|
 | http://localhost:4747 | The bakery's `odf` UI |
-| http://localhost:8000 | The world console: the demo clock and scenarios |
+| http://localhost:8000 | The world console: the demo clock, scenarios and tours |
 | http://localhost:8001 | The café POS's till |
 | http://localhost:8002 | The messenger, where you can write as a restaurant |
 | http://localhost:8025 | The bakery's mailbox (Mailpit) |
 
 Things to try:
 
+- **Take a tour** from the world console. Each one plays a whole flow: a
+  restaurant's message becoming a draft you confirm, the butter spike through
+  margins to new prices, or the sesame substitution through labels to a notice
+  for every restaurant. A tour starts the flow, says at each step what to look
+  at and where, and moves on when the bakery's notifications say it got there.
+  At the end, confirm the draft from its card, or let **Do it for me** confirm
+  it. The clock stops while a tour plays, so nothing else interrupts it. The
+  bullets below are the same flows, and more, by hand.
 - **Write as a restaurant.** In the messenger, pick a restaurant and send
   "2 extra baguettes tomorrow please". A notice appears in the `odf` UI within
   a second or two. **Open** goes to the Messages, and **Show logs** shows the

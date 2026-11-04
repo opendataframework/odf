@@ -18,14 +18,21 @@ bakery's tools. It's the simulation's stage manager:
   seed and the date, offline. Rain keeps café customers away.
 - **Scenarios.** Buttons on the console: a party order, a café rush, a
   missed webhook, a rainy week, a butter price spike, and so on.
+- **Tours.** A scenario played end to end (``tools/tours.py``): the world
+  follows the bakery's notifications through each step, says what to look
+  at, and can confirm the draft at the end for the presenter.
 """
 
 import csv
+import html
+import json
 import random
 import smtplib
 import threading
 import time
+import urllib.request
 from collections import deque
+from collections.abc import Callable, Iterator
 from contextlib import asynccontextmanager
 from datetime import date, datetime, timedelta
 from email.message import EmailMessage
@@ -53,6 +60,7 @@ from tools.data import (
     write_sheets,
 )
 from tools.invoices import delivery, invoice_pdf, total
+from tools.tours import ORDER_MESSAGE, ORDER_RESTAURANT, TOURS, capture, matches, needed, say
 
 SEED = int(env("SEED", "7"))
 SPEED = float(env("SPEED", "60"))
@@ -64,6 +72,8 @@ MESSENGER_TOKEN = env("MESSENGER_TOKEN", "messenger-dev-token")
 MAIL_HOST = env("MAIL_HOST", "mailpit")
 MAIL_PORT = int(env("MAIL_PORT", "1025"))
 SHARED_DRIVE = Path(env("SHARED_DRIVE", "shared-drive"))
+# The bakery's odf UI, as the world reaches it: tours follow its notifications.
+BAKERY_URL = env("BAKERY_URL", "http://bakery:4747")
 LINKS = {
     "Bakery (odf)": env("ODF_PUBLIC_URL", "http://localhost:4747"),
     "POS": env("POS_PUBLIC_URL", "http://localhost:8001"),
@@ -600,6 +610,228 @@ def run_scenario(name: str) -> None:
         raise KeyError(name)
 
 
+# What each tour acts out once the world follows the bakery's notifications.
+TOUR_STARTS: dict[str, Callable[[], None]] = {
+    "order-change": lambda: message(ORDER_RESTAURANT, ORDER_MESSAGE),
+    "butter-spike": lambda: run_scenario("butter-spike"),
+    "sesame-substitution": lambda: run_scenario("sesame-substitution"),
+}
+# Real seconds a step waits before the console asks whether the bakery is up.
+SLOW_STEP = 60
+
+
+def notification_stream(url: str, timeout: float = 30) -> Iterator[dict | None]:
+    """Yield ``None`` once subscribed to an odf UI's notification stream, then each notification.
+
+    Reads its server-sent events: ``data:`` lines, one JSON item each. The UI
+    writes ``: connected`` once it has subscribed this client, so nothing
+    published after the ``None`` is missed, and pings every 15 seconds, so
+    ``timeout`` only trips on a stream that's gone quiet.
+
+    Raises:
+        OSError: If the stream can't be opened, or breaks.
+    """
+    with urllib.request.urlopen(url, timeout=timeout) as response:
+        for raw in response:
+            line = raw.decode().rstrip("\r\n")
+            if line.startswith(": connected"):
+                yield None
+            elif line.startswith("data: "):
+                item = json.loads(line.removeprefix("data: "))
+                if item.get("type") == "notification":
+                    yield item
+
+
+class Guide:
+    """Plays one tour at a time: acts out its start, then follows the bakery through its steps.
+
+    The clock is paused while a tour plays, so the café and the restaurants
+    don't add notices of their own, and is put back as it was when the tour
+    ends or stops.
+
+    Args:
+        spawn: Runs ``follow(generation)`` in the background; a thread by
+            default.
+    """
+
+    def __init__(self, spawn: Callable[[int], None] | None = None) -> None:
+        """See class docstring for args."""
+        self.lock = threading.Lock()
+        self.generation = 0
+        self.spawn = spawn or (
+            lambda gen: threading.Thread(target=self.follow, args=(gen,), daemon=True).start()
+        )
+        self._clear()
+
+    def _clear(self) -> None:
+        """Forget the tour."""
+        self.name: str | None = None
+        self.index = 0
+        self.captured: dict[str, list] = {}
+        self.seen: list[list[str]] = []
+        self.step_since = 0.0
+        self.error: str | None = None
+        self.paused_before: bool | None = None
+
+    def _end(self) -> None:
+        """Stop following the bakery, and put the clock back as it was. Called holding the lock."""
+        self.generation += 1
+        if self.paused_before is not None:
+            clock.update(paused=self.paused_before)
+            self.paused_before = None
+
+    def start(self, name: str) -> None:
+        """Play tour ``name``, instead of any playing.
+
+        Raises:
+            KeyError: If there's no tour ``name``.
+        """
+        tour = TOURS[name]
+        with self.lock:
+            self._end()
+            self._clear()
+            self.name = name
+            self.captured = {k: [v] for k, v in tour.given.items()}
+            self.seen = [[] for _ in tour.steps]
+            self.step_since = time.time()
+            self.paused_before = clock.state()[3]
+            clock.update(paused=True)
+            gen = self.generation
+        _log(f"Tour: {tour.title}")
+        self.spawn(gen)
+
+    def follow(self, gen: int) -> None:
+        """Follow the bakery's notifications for tour ``gen``, acting out its start once subscribed.
+
+        Reconnects every two seconds while the bakery can't be reached, and
+        acts out the start only the first time it's subscribed.
+        """
+        started = False
+        while self.generation == gen:
+            try:
+                for item in notification_stream(f"{BAKERY_URL}/api/notifications"):
+                    if self.generation != gen:
+                        return
+                    if item is not None:
+                        self.notify(gen, item)
+                        continue
+                    with self.lock:
+                        self.error = None
+                        name = self.name
+                    if not started and name is not None:
+                        started = True
+                        TOUR_STARTS[name]()
+            except (OSError, ValueError) as exc:
+                with self.lock:
+                    if self.generation == gen:
+                        self.error = f"Can't follow the bakery at {BAKERY_URL}: {exc}"
+            if self.generation == gen:
+                time.sleep(2)
+
+    def notify(self, gen: int, notification: dict) -> None:
+        """Take one of the bakery's notifications: it may complete the current step."""
+        with self.lock:
+            if gen != self.generation or self.name is None or self._done():
+                return
+            step = TOURS[self.name].steps[self.index]
+            if not matches(step, notification, self.captured):
+                return
+            capture(step, notification, self.captured)
+            self.seen[self.index].append(notification.get("summary") or notification["topic"])
+            if len(self.seen[self.index]) < needed(step, self.captured):
+                return
+            what = "; ".join(self.seen[self.index])
+            self._advance()
+        _log(f"Tour: {what}")
+
+    def _done(self) -> bool:
+        """Return whether every step is done. Called holding the lock."""
+        return self.name is not None and self.index >= len(TOURS[self.name].steps)
+
+    def _advance(self) -> None:
+        """Move on to the next step, ending the tour after the last. Called holding the lock."""
+        self.index += 1
+        self.step_since = time.time()
+        if self._done():
+            self._end()
+
+    def next(self) -> None:
+        """Move on to the next step, without waiting for its notification."""
+        with self.lock:
+            if self.name is not None and not self._done():
+                self._advance()
+
+    def stop(self) -> None:
+        """Stop the tour, done or not."""
+        with self.lock:
+            self._end()
+            self._clear()
+
+    def act(self) -> list:
+        """Confirm the drafts the current step waits for, as a person would from their cards.
+
+        Returns:
+            The ids of the drafts confirmed.
+        """
+        with self.lock:
+            if self.name is None or self._done():
+                return []
+            step = TOURS[self.name].steps[self.index]
+            if step.confirms is None:
+                return []
+            confirmed = self.captured.get("confirmed", [])
+            ids = [i for i in self.captured.get(step.confirms, []) if i not in confirmed]
+        done = []
+        for draft_id in ids:
+            try:
+                http_json(
+                    "POST",
+                    f"{BAKERY_URL}/api/functions/confirm-draft/call",
+                    {"draft_id": draft_id},
+                    timeout=60,
+                )
+                done.append(draft_id)
+            except OSError as exc:
+                with self.lock:
+                    self.error = f"Couldn't confirm draft {draft_id}: {exc}"
+        return done
+
+    def state(self) -> dict:
+        """Return the tour for the console: its steps, each done, current or later."""
+        with self.lock:
+            if self.name is None:
+                return {"tour": None}
+            tour = TOURS[self.name]
+            steps = []
+            for i, step in enumerate(tour.steps):
+                status = "done" if i < self.index else "current" if i == self.index else "later"
+                current = status == "current"
+                steps.append(
+                    {
+                        "say": say(step, self.captured),
+                        "look": step.look,
+                        "url": LINKS.get(step.look or ""),
+                        "status": status,
+                        "seen": self.seen[i],
+                        "waits": current and step.topic is not None,
+                        "slow": current
+                        and step.topic is not None
+                        and time.time() - self.step_since > SLOW_STEP,
+                        "acts": current and step.confirms is not None,
+                    }
+                )
+            return {
+                "tour": self.name,
+                "title": tour.title,
+                "done": self._done(),
+                "error": self.error,
+                "steps": steps,
+            }
+
+
+guide = Guide()
+
+
 def _actors() -> None:
     """Seed the history once, then act out each simulated minute as the clock moves.
 
@@ -631,6 +863,7 @@ async def lifespan(_: FastAPI):
     clock.resume()
     threading.Thread(target=_actors, daemon=True).start()
     yield
+    guide.stop()  # a tour's paused clock isn't left paused for the next start
     clock.hold()
 
 
@@ -703,6 +936,41 @@ def scenario(name: str) -> dict:
     return {"scenario": name}
 
 
+@app.get("/tour")
+def get_tour() -> dict:
+    """Return the tour playing, if any, with each of its steps."""
+    return guide.state()
+
+
+@app.post("/tour/next")
+def tour_next() -> dict:
+    """Move the tour on to its next step."""
+    guide.next()
+    return guide.state()
+
+
+@app.post("/tour/act")
+def tour_act() -> dict:
+    """Confirm the drafts the tour's current step waits for."""
+    return {"confirmed": guide.act()}
+
+
+@app.post("/tour/stop")
+def tour_stop() -> dict:
+    """Stop the tour."""
+    guide.stop()
+    return guide.state()
+
+
+@app.post("/tour/{name}")
+def tour_start(name: str) -> dict:
+    """Play a tour, instead of any playing."""
+    if name not in TOURS:
+        raise HTTPException(status_code=404, detail=f"no tour {name!r}")
+    guide.start(name)
+    return guide.state()
+
+
 @app.get("/feed")
 def get_feed() -> dict:
     """Return the console's feed, newest first."""
@@ -717,6 +985,10 @@ def console() -> str:
         f"<button data-scenario='{key}' title='{title}'>{title}</button>"
         for key, title in SCENARIOS.items()
     )
+    tours = "".join(
+        f'<button data-tour="{key}">{html.escape(tour.title)}</button>'
+        for key, tour in TOURS.items()
+    )
     body = f"""
 <section class=panel><h2>Clock</h2>
 <div class=row><strong id=now style="font-size:22px">…</strong>
@@ -727,6 +999,10 @@ def console() -> str:
 <option value=60>60× (a day in 24 min)</option><option value=300>300×</option></select></label>
 <button data-advance=60>+1 hour</button><button data-to="07:00">To 07:00</button>
 <button data-to="17:00">To 17:00</button></div></section>
+<section class=panel><h2>Tours</h2>
+<p class=muted style="margin:0 0 8px">A flow played end to end: each step says what to look at,
+and the tour moves on when the bakery gets there. The clock stops while it plays.</p>
+<div class=row>{tours}</div><div id=tour></div></section>
 <section class=panel><h2>Scenarios</h2><div class=row>{scenarios}</div></section>
 <section class=panel><h2>Tools</h2><p>{links}</p></section>
 <section class=panel><h2>What's happening</h2><table id=feed></table></section>
@@ -750,7 +1026,52 @@ async function refresh() {{
   document.getElementById('feed').innerHTML = f.feed.map(e =>
     `<tr><td class=muted style="white-space:nowrap">${{esc(e.at)}}</td>
      <td>${{esc(e.text)}}</td></tr>`).join('');
+  renderTour(await (await fetch('/tour')).json());
 }}
+const md = s => esc(s).replace(/\\*\\*(.+?)\\*\\*/g, '<strong>$1</strong>')
+  .replace(/`(.+?)`/g, '<code>$1</code>');
+function tourStep(s) {{
+  const mark = s.status === 'done' ? '✓ ' : '';
+  const style = s.status === 'current'
+    ? 'border-left:3px solid var(--accent);padding-left:8px'
+    : s.status === 'later' ? 'opacity:.5' : '';
+  const seen = s.seen.length
+    ? `<div class=muted>${{s.seen.map(esc).join('<br>')}}</div>` : '';
+  const look = s.status === 'current' && s.url
+    ? ` <a href="${{esc(s.url)}}" target=_blank>Open ${{esc(s.look)}}</a>` : '';
+  const waits = s.waits
+    ? `<div class=muted>${{s.slow ? 'Nothing yet after a minute. Is the bakery up? '
+      + '<strong>Next</strong> skips this step.' : 'Waiting for the bakery…'}}</div>` : '';
+  return `<li style="${{style}}">${{mark}}${{md(s.say)}}${{look}}${{seen}}${{waits}}</li>`;
+}}
+let tourHtml = '';
+function renderTour(t) {{
+  let html = '';
+  if (t.tour) {{
+    const acts = t.steps.some(s => s.acts);
+    html = `<h3 style="margin:12px 0 6px;font-size:14px">${{esc(t.title)}}`
+      + `${{t.done ? ' <span class=muted>(done)</span>' : ''}}</h3>`
+      + `<ol style="margin:0 0 8px;padding-left:20px;display:grid;gap:8px">`
+      + t.steps.map(tourStep).join('') + '</ol>'
+      + (t.error ? `<p style="color:#c0392b;margin:0 0 8px">${{esc(t.error)}}</p>` : '')
+      + '<div class=row>'
+      + (t.done ? '' : '<button data-tour-do=next>Next</button>')
+      + (acts ? '<button class=primary data-tour-do=act>Do it for me</button>' : '')
+      + `<button data-tour-do=stop>${{t.done ? 'Close' : 'Stop'}}</button></div>`;
+  }}
+  if (html !== tourHtml) {{
+    tourHtml = html;
+    document.getElementById('tour').innerHTML = html;
+  }}
+}}
+document.getElementById('tour').onclick = async e => {{
+  const b = e.target.closest('[data-tour-do]');
+  if (!b) return;
+  b.disabled = true; await post('/tour/' + b.dataset.tourDo); refresh();
+}};
+document.querySelectorAll('[data-tour]').forEach(b => b.onclick = async () => {{
+  b.disabled = true; await post('/tour/' + b.dataset.tour); b.disabled = false; refresh();
+}});
 document.getElementById('pause').onclick = async () => {{
   await post('/clock', {{paused: !paused}}); refresh();
 }};

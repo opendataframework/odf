@@ -60,8 +60,10 @@
   messages, and what the bakery sends back, are one thread in the chat, with the draft
   answering them as a card to confirm, edit first or reject. A restaurant writing again,
   or a person asking in the thread, outdates the draft for a new one. Its topology is
-  laid out by area, with the bakery's own icons (`[ui] icon-scripts`). See
-  [Demo](demo.md).
+  laid out by area, with the bakery's own icons (`[ui] icon-scripts`). Tours on its
+  world console play the order change, the butter spike and the sesame substitution end
+  to end, saying at each step what to look at and moving on when the bakery's
+  notifications say it got there. See [Demo](demo.md).
 - **UI**: the topology draws a dotted link from each `@Publisher` to each `@Subscriber` its
   declared topics could reach (`opendataframework` 0.6.0's `context.publishers()` and
   `context.subscribers()`), so who reacts to whom shows before anything is published. A

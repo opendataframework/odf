@@ -25,6 +25,8 @@ services:
       SEED: ${SEED:-7}
       SPEED: ${SPEED:-60}
       SHARED_DRIVE: /shared-drive
+      # Tours follow the bakery's notifications here; reached only once one plays.
+      BAKERY_URL: http://bakery:4747
     volumes:
       - world-data:/data
       - shared-drive:/shared-drive
